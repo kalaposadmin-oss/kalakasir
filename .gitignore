@@ -1,0 +1,27 @@
+# Root
+*.log
+.DS_Store
+Thumbs.db
+.env
+.env.*
+.vscode/
+.idea/
+
+# Dependencies
+/vendor/
+/node_modules/
+
+# Laravel app subtree
+/app/vendor/
+/app/node_modules/
+/app/public/build/
+/app/public/hot
+/app/public/storage
+/app/storage/*.key
+/app/storage/pail
+/app/.phpunit.cache/
+/app/.phpunit.result.cache
+/app/.fleet/
+/app/.idea/
+/app/.vscode/
+/app/.zed/
