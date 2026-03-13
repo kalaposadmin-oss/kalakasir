@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Api;
 use App\Exceptions\InsufficientStockException;
 use App\Exceptions\LockPeriodException;
 use App\Exceptions\InvalidTransactionDateException;
+use App\Exceptions\AutoConsumeValidationException;
 use App\Http\Controllers\Controller;
 use App\Exceptions\ShiftValidationException;
 use App\Services\AnomalyService;
 use App\Services\CheckoutService;
+use App\Models\Shift;
 use App\Support\TenantContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -26,6 +28,7 @@ class CheckoutController extends Controller
             'idempotency_key' => ['required', 'string', 'max:255'],
             'branch_id' => ['required', 'uuid'],
             'shift_id' => ['required', 'uuid'],
+            'register_id' => ['required', 'uuid'],
             'customer_id' => ['nullable', 'uuid'],
             'transaction_date' => ['nullable', 'date'],
             'subtotal' => ['required', 'numeric', 'min:0'],
@@ -34,6 +37,7 @@ class CheckoutController extends Controller
             'total' => ['required', 'numeric', 'min:0'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['required', 'uuid'],
+            'items.*.product_variant_id' => ['nullable', 'uuid'],
             'items.*.location_id' => ['required', 'uuid'],
             'items.*.qty' => ['required', 'numeric', 'min:0.01'],
             'items.*.price' => ['required', 'numeric', 'min:0'],
@@ -42,6 +46,7 @@ class CheckoutController extends Controller
             'payments.*.account_id' => ['required', 'uuid'],
             'payments.*.method' => ['required', 'string', 'max:50'],
             'payments.*.amount' => ['required', 'numeric', 'min:0.01'],
+            'payments.*.payment_method_id' => ['nullable', 'uuid'],
         ]);
 
         try {
@@ -88,6 +93,12 @@ class CheckoutController extends Controller
                 'message' => $exception->getMessage(),
                 'details' => [],
             ], 422);
+        } catch (AutoConsumeValidationException $exception) {
+            return response()->json([
+                'code' => $exception->errorCode(),
+                'message' => $exception->getMessage(),
+                'details' => $exception->details(),
+            ], $exception->status());
         } catch (InvalidArgumentException $exception) {
             return response()->json([
                 'code' => 'INVALID_TOTAL',
@@ -116,7 +127,7 @@ class CheckoutController extends Controller
         return DB::table('shifts')
             ->where('tenant_id', $tenantId)
             ->where('id', (string) ($validated['shift_id'] ?? ''))
-            ->where('status', 'open')
+            ->where('status', Shift::STATUS_OPEN)
             ->value('user_id');
     }
 }

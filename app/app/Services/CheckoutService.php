@@ -16,6 +16,7 @@ use App\Models\Shift;
 use App\Models\StockLedger;
 use App\Services\LockPeriodService;
 use App\Services\InventoryValuationService;
+use App\Services\AutoConsumeOnSellService;
 use App\Support\TenantContext;
 use App\Events\SaleCompleted;
 use App\Services\AnomalyService;
@@ -64,10 +65,12 @@ class CheckoutService
                 $ledgerRows = [];
                 $cogsTotal = 0.0;
                 $valuationService = app(InventoryValuationService::class);
+                $autoConsumeService = app(AutoConsumeOnSellService::class);
 
                 foreach ($payload['items'] as $item) {
                     $productId = $item['product_id'];
                     $locationId = $item['location_id'];
+                    $productVariantId = $this->resolveVariantId($tenantId, $productId, Arr::get($item, 'product_variant_id'));
                     $qty = (float) $item['qty'];
                     $price = (float) $item['price'];
                     $discount = (float) Arr::get($item, 'discount', 0);
@@ -82,9 +85,12 @@ class CheckoutService
                     $hppSnapshot = (float) $product->hpp_average;
 
                     if ($product->track_stock) {
-                        $affected = DB::update(
-                            'UPDATE inventory_balances SET qty_on_hand = qty_on_hand - ? WHERE tenant_id = ? AND product_id = ? AND location_id = ? AND qty_on_hand >= ?',
-                            [$qty, $tenantId, $productId, $locationId, $qty]
+                        $affected = $this->decrementInventory(
+                            tenantId: $tenantId,
+                            productId: $productId,
+                            productVariantId: $productVariantId,
+                            locationId: $locationId,
+                            qty: $qty
                         );
 
                         if ($affected === 0) {
@@ -106,6 +112,11 @@ class CheckoutService
                             ->where('tenant_id', $tenantId)
                             ->where('product_id', $productId)
                             ->where('location_id', $locationId)
+                            ->when($productVariantId, function ($query) use ($productVariantId) {
+                                $query->where('product_variant_id', $productVariantId);
+                            }, function ($query) {
+                                $query->whereNull('product_variant_id');
+                            })
                             ->value('qty_on_hand');
 
                         $valuationResult = $valuationService->issue(
@@ -125,6 +136,7 @@ class CheckoutService
                             'id' => (string) Str::uuid(),
                             'tenant_id' => $tenantId,
                             'product_id' => $productId,
+                            'product_variant_id' => $productVariantId,
                             'location_id' => $locationId,
                             'reference_type' => 'sale',
                             'reference_id' => $saleId,
@@ -137,11 +149,23 @@ class CheckoutService
                         ];
                     }
 
+                    $autoConsumeService->consumeForSaleItem(
+                        tenantId: $tenantId,
+                        saleId: $saleId,
+                        saleItemId: $saleItemId,
+                        soldProduct: $product,
+                        soldQty: $qty,
+                        locationId: $locationId,
+                        userId: $userId,
+                        at: $now
+                    );
+
                     $items[] = [
                         'id' => $saleItemId,
                         'tenant_id' => $tenantId,
                         'sale_id' => $saleId,
                         'product_id' => $productId,
+                        'product_variant_id' => $productVariantId,
                         'qty' => $qty,
                         'price' => $price,
                         'discount' => $discount,
@@ -156,12 +180,13 @@ class CheckoutService
                     'tenant_id' => $tenantId,
                     'branch_id' => $payload['branch_id'],
                     'shift_id' => $payload['shift_id'],
+                    'register_id' => $payload['register_id'],
                     'customer_id' => Arr::get($payload, 'customer_id'),
                     'subtotal' => (float) $payload['subtotal'],
                     'discount' => (float) $payload['discount'],
                     'tax' => (float) $payload['tax'],
                     'total' => (float) $payload['total'],
-                    'status' => 'completed',
+                    'status' => Sale::STATUS_COMPLETED,
                     'idempotency_key' => $payload['idempotency_key'],
                     'created_by' => $userId,
                     'voided_by' => null,
@@ -179,6 +204,7 @@ class CheckoutService
                 foreach ($payload['payments'] as $payment) {
                     $amount = (float) $payment['amount'];
                     $method = $payment['method'];
+                    $paymentMethodId = $this->resolvePaymentMethodId($tenantId, Arr::get($payment, 'payment_method_id'), $method);
 
                     if ($method === 'cash') {
                         $cashTotal += $amount;
@@ -193,6 +219,7 @@ class CheckoutService
                         'account_id' => $payment['account_id'],
                         'method' => $method,
                         'amount' => $amount,
+                        'payment_method_id' => $paymentMethodId,
                     ];
                 }
 
@@ -210,12 +237,16 @@ class CheckoutService
                     transactionDate: $transactionDate
                 );
 
+                $requestId = app()->bound('request') ? (string) request()->header('X-Request-Id') : null;
+                $requestId = $requestId !== '' ? $requestId : null;
+
                 event(new SaleCompleted(
                     saleId: $saleId,
                     tenantId: $tenantId,
                     total: (float) $payload['total'],
                     actorId: $userId,
-                    occurredAt: $now->toIso8601String()
+                    occurredAt: $now->toIso8601String(),
+                    requestId: $requestId
                 ));
 
                 return [
@@ -407,5 +438,70 @@ class CheckoutService
         }
 
         JournalItem::query()->insert($journalItems);
+    }
+
+    private function resolveVariantId(string $tenantId, string $productId, ?string $variantId): ?string
+    {
+        if ($variantId) {
+            $exists = DB::table('product_variants')
+                ->where('tenant_id', $tenantId)
+                ->where('id', $variantId)
+                ->where('product_id', $productId)
+                ->exists();
+
+            if (! $exists) {
+                throw new InvalidArgumentException('Varian produk tidak valid.');
+            }
+
+            return $variantId;
+        }
+
+        return DB::table('product_variants')
+            ->where('tenant_id', $tenantId)
+            ->where('product_id', $productId)
+            ->orderBy('created_at')
+            ->value('id');
+    }
+
+    private function decrementInventory(
+        string $tenantId,
+        string $productId,
+        ?string $productVariantId,
+        string $locationId,
+        float $qty
+    ): int {
+        if ($productVariantId) {
+            return DB::update(
+                'UPDATE inventory_balances SET qty_on_hand = qty_on_hand - ? WHERE tenant_id = ? AND product_id = ? AND product_variant_id = ? AND location_id = ? AND qty_on_hand >= ?',
+                [$qty, $tenantId, $productId, $productVariantId, $locationId, $qty]
+            );
+        }
+
+        return DB::update(
+            'UPDATE inventory_balances SET qty_on_hand = qty_on_hand - ? WHERE tenant_id = ? AND product_id = ? AND location_id = ? AND product_variant_id IS NULL AND qty_on_hand >= ?',
+            [$qty, $tenantId, $productId, $locationId, $qty]
+        );
+    }
+
+    private function resolvePaymentMethodId(string $tenantId, ?string $paymentMethodId, string $method): ?string
+    {
+        if ($paymentMethodId) {
+            $exists = DB::table('payment_methods')
+                ->where('tenant_id', $tenantId)
+                ->where('id', $paymentMethodId)
+                ->exists();
+
+            if (! $exists) {
+                throw new InvalidArgumentException('Metode pembayaran tidak valid.');
+            }
+
+            return $paymentMethodId;
+        }
+
+        return DB::table('payment_methods')
+            ->where('tenant_id', $tenantId)
+            ->where('method_type', $method)
+            ->orderBy('created_at')
+            ->value('id');
     }
 }
