@@ -89,4 +89,4 @@ jobs:
           php artisan key:generate
 
       - name: Run write flow tests
-        run: php artisan test --filter='WriteFlowLockPeriodApiEnforcementTest|WriteFlowTransactionDateHappyPathTest|CheckoutTransactionDateValidationTest|PurchaseReceiveTransactionDateValidationTest|StockTransferTransactionDateValidationTest|StockAdjustmentTransactionDateValidationTest|PurchaseReturnConsistencyTest'
+        run: php artisan test --filter='WriteFlowLockPeriodApiEnforcementTest|WriteFlowTransactionDateHappyPathTest|CheckoutTransactionDateValidationTest|PurchaseReceiveTransactionDateValidationTest|StockTransferTransactionDateValidationTest|StockAdjustmentTransactionDateValidationTest|PurchaseReturnConsistencyTest|ProductionBatchQuickFlowTest'
