@@ -180,7 +180,35 @@ class ProductionBatchQuickFlowTest extends TestCase
 
         $this->postJson('/api/v1/production-batches/'.$batchId.'/post', [], $this->tenantHeaders($tenant->id))
             ->assertStatus(422)
-            ->assertJsonPath('code', 'PRODUCTION_BATCH_POST_FAILED');
+            ->assertJsonPath('code', 'VALIDATION_ERROR')
+            ->assertJsonPath('details.batch.0', 'Batch already posted.');
+    }
+
+    public function test_post_batch_fails_when_batch_has_no_items(): void
+    {
+        [$tenant] = $this->bootApiActor('admin', 'admin+production-empty-items@example.test');
+
+        $fixture = $this->seedFixture($tenant);
+        $batchId = (string) Str::uuid();
+
+        DB::table('production_batches')->insert([
+            'id' => $batchId,
+            'tenant_id' => $tenant->id,
+            'location_id' => $fixture['location_id'],
+            'reference_no' => 'PB-EMPTY-001',
+            'status' => 'draft',
+            'notes' => null,
+            'created_by' => null,
+            'posted_by' => null,
+            'created_at' => now('UTC'),
+            'posted_at' => null,
+            'transaction_date' => now('UTC')->toDateString(),
+        ]);
+
+        $this->postJson('/api/v1/production-batches/'.$batchId.'/post', [], $this->tenantHeaders($tenant->id))
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'VALIDATION_ERROR')
+            ->assertJsonPath('details.batch.0', 'Batch must contain at least one input and one output item.');
     }
 
     private function seedFixture(Tenant $tenant, float $rawMaterialQty = 10): array

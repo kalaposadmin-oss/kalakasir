@@ -17,8 +17,11 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use RuntimeException;
+use Throwable;
 
 class ProductionBatchService
 {
@@ -45,51 +48,76 @@ class ProductionBatchService
         $transactionDate = (new TransactionDateService())
             ->resolve(Arr::get($payload, 'transaction_date'));
 
-        return DB::transaction(function () use ($payload, $tenantId, $userId, $now, $transactionDate): string {
-            $batchId = (string) Str::uuid();
+        try {
+            return DB::transaction(function () use ($payload, $tenantId, $userId, $now, $transactionDate): string {
+                $batchId = (string) Str::uuid();
 
-            ProductionBatch::query()->create([
-                'id' => $batchId,
+                ProductionBatch::query()->create([
+                    'id' => $batchId,
+                    'tenant_id' => $tenantId,
+                    'location_id' => $payload['location_id'],
+                    'reference_no' => Arr::get($payload, 'reference_no'),
+                    'status' => ProductionBatch::STATUS_DRAFT,
+                    'notes' => Arr::get($payload, 'notes'),
+                    'created_by' => $userId,
+                    'created_at' => $now,
+                    'transaction_date' => $transactionDate->toDateString(),
+                ]);
+
+                $rows = [];
+
+                foreach ($payload['inputs'] as $line) {
+                    $rows[] = [
+                        'id' => (string) Str::uuid(),
+                        'tenant_id' => $tenantId,
+                        'production_batch_id' => $batchId,
+                        'line_type' => 'input',
+                        'product_id' => $line['product_id'],
+                        'qty' => (float) $line['qty'],
+                        'unit_cost_snapshot' => 0,
+                    ];
+                }
+
+                foreach ($payload['outputs'] as $line) {
+                    $rows[] = [
+                        'id' => (string) Str::uuid(),
+                        'tenant_id' => $tenantId,
+                        'production_batch_id' => $batchId,
+                        'line_type' => 'output',
+                        'product_id' => $line['product_id'],
+                        'qty' => (float) $line['qty'],
+                        'unit_cost_snapshot' => 0,
+                    ];
+                }
+
+                ProductionBatchItem::query()->insert($rows);
+
+                Log::info('production.batch.created', [
+                    'batch_id' => $batchId,
+                    'tenant_id' => $tenantId,
+                    'location_id' => $payload['location_id'],
+                    'total_input_cost' => 0.0,
+                    'output_qty' => (float) collect($payload['outputs'])->sum(fn ($line) => (float) Arr::get($line, 'qty', 0)),
+                    'unit_cost_result' => 0.0,
+                ]);
+
+                return $batchId;
+            });
+        } catch (Throwable $exception) {
+            Log::warning('production.batch.failed', [
+                'stage' => 'create',
+                'batch_id' => null,
                 'tenant_id' => $tenantId,
-                'location_id' => $payload['location_id'],
-                'reference_no' => Arr::get($payload, 'reference_no'),
-                'status' => ProductionBatch::STATUS_DRAFT,
-                'notes' => Arr::get($payload, 'notes'),
-                'created_by' => $userId,
-                'created_at' => $now,
-                'transaction_date' => $transactionDate->toDateString(),
+                'location_id' => Arr::get($payload, 'location_id'),
+                'total_input_cost' => 0.0,
+                'output_qty' => (float) collect(Arr::get($payload, 'outputs', []))->sum(fn ($line) => (float) Arr::get($line, 'qty', 0)),
+                'unit_cost_result' => 0.0,
+                'error' => $exception->getMessage(),
+                'exception' => class_basename($exception),
             ]);
 
-            $rows = [];
-
-            foreach ($payload['inputs'] as $line) {
-                $rows[] = [
-                    'id' => (string) Str::uuid(),
-                    'tenant_id' => $tenantId,
-                    'production_batch_id' => $batchId,
-                    'line_type' => 'input',
-                    'product_id' => $line['product_id'],
-                    'qty' => (float) $line['qty'],
-                    'unit_cost_snapshot' => 0,
-                ];
-            }
-
-            foreach ($payload['outputs'] as $line) {
-                $rows[] = [
-                    'id' => (string) Str::uuid(),
-                    'tenant_id' => $tenantId,
-                    'production_batch_id' => $batchId,
-                    'line_type' => 'output',
-                    'product_id' => $line['product_id'],
-                    'qty' => (float) $line['qty'],
-                    'unit_cost_snapshot' => 0,
-                ];
-            }
-
-            ProductionBatchItem::query()->insert($rows);
-
-            return $batchId;
-        });
+            throw $exception;
+        }
     }
 
     public function post(string $batchId, ?string $userId, array $context = []): void
@@ -101,179 +129,214 @@ class ProductionBatchService
 
         $now = CarbonImmutable::now('UTC');
 
-        app(DatabaseTransactionService::class)->run(function () use ($batchId, $tenantId, $userId, $now, $context): void {
-            $valuationService = app(InventoryValuationService::class);
+        $observabilityContext = [
+            'batch_id' => $batchId,
+            'tenant_id' => $tenantId,
+            'location_id' => null,
+            'total_input_cost' => 0.0,
+            'output_qty' => 0.0,
+            'unit_cost_result' => 0.0,
+        ];
 
-            $batch = ProductionBatch::query()
-                ->where('tenant_id', $tenantId)
-                ->where('id', $batchId)
-                ->lockForUpdate()
-                ->firstOrFail();
+        try {
+            app(DatabaseTransactionService::class)->run(function () use ($batchId, $tenantId, $userId, $now, $context, &$observabilityContext): void {
+                $valuationService = app(InventoryValuationService::class);
 
-            if ($batch->status !== ProductionBatch::STATUS_DRAFT) {
-                throw new RuntimeException('Batch produksi sudah diposting.');
-            }
+                $batch = ProductionBatch::query()
+                    ->where('tenant_id', $tenantId)
+                    ->where('id', $batchId)
+                    ->lockForUpdate()
+                    ->firstOrFail();
 
-            $transactionDate = (new TransactionDateService())
-                ->resolve(Arr::get($context, 'transaction_date', $batch->transaction_date));
-            (new LockPeriodService())->ensureNotLocked($transactionDate, $tenantId);
+                $observabilityContext['location_id'] = $batch->location_id;
 
-            $items = ProductionBatchItem::query()
-                ->where('tenant_id', $tenantId)
-                ->where('production_batch_id', $batch->id)
-                ->get();
-
-            $inputs = $items->where('line_type', 'input')->values();
-            $outputs = $items->where('line_type', 'output')->values();
-
-            if ($inputs->isEmpty() || $outputs->isEmpty()) {
-                throw new RuntimeException('Batch produksi harus memiliki input dan output.');
-            }
-
-            $ledgerRows = [];
-            $totalInputCost = 0.0;
-
-            foreach ($inputs as $item) {
-                $qty = (float) $item->qty;
-
-                $affected = DB::update(
-                    'UPDATE inventory_balances SET qty_on_hand = qty_on_hand - ? WHERE tenant_id = ? AND product_id = ? AND location_id = ? AND qty_on_hand >= ?',
-                    [$qty, $tenantId, $item->product_id, $batch->location_id, $qty]
-                );
-
-                if ($affected === 0) {
-                    app(AnomalyService::class)->raise(
-                        tenantId: $tenantId,
-                        severity: 'high',
-                        type: 'negative_stock_attempt',
-                        payload: [
-                            'source' => 'production_batch_post',
-                            'batch_id' => $batch->id,
-                            'product_id' => $item->product_id,
-                            'location_id' => $batch->location_id,
-                            'requested_qty' => $qty,
-                        ],
-                        referenceId: $batch->id
-                    );
-
-                    throw new RuntimeException('Stok bahan baku tidak mencukupi.');
+                if ($batch->status === ProductionBatch::STATUS_POSTED) {
+                    throw ValidationException::withMessages([
+                        'batch' => 'Batch already posted.',
+                    ]);
                 }
 
-                $valuation = $valuationService->issue(
-                    tenantId: $tenantId,
-                    productId: $item->product_id,
-                    locationId: $batch->location_id,
-                    qty: $qty,
-                    referenceType: 'production_input',
-                    referenceId: $batch->id,
-                    referenceItemId: $item->id,
-                    at: $now
-                );
+                if ($batch->status !== ProductionBatch::STATUS_DRAFT) {
+                    throw new RuntimeException('Status batch tidak valid untuk proses posting.');
+                }
 
-                $unitCost = (float) $valuation['unit_cost'];
-                $item->update([
-                    'unit_cost_snapshot' => $unitCost,
+                $transactionDate = (new TransactionDateService())
+                    ->resolve(Arr::get($context, 'transaction_date', $batch->transaction_date));
+                (new LockPeriodService())->ensureNotLocked($transactionDate, $tenantId);
+
+                $items = ProductionBatchItem::query()
+                    ->where('tenant_id', $tenantId)
+                    ->where('production_batch_id', $batch->id)
+                    ->get();
+
+                $inputs = $items->where('line_type', 'input')->values();
+                $outputs = $items->where('line_type', 'output')->values();
+
+                if ($inputs->isEmpty() || $outputs->isEmpty()) {
+                    throw ValidationException::withMessages([
+                        'batch' => 'Batch must contain at least one input and one output item.',
+                    ]);
+                }
+
+                $ledgerRows = [];
+                $totalInputCost = 0.0;
+
+                foreach ($inputs as $item) {
+                    $qty = (float) $item->qty;
+
+                    $affected = DB::update(
+                        'UPDATE inventory_balances SET qty_on_hand = qty_on_hand - ? WHERE tenant_id = ? AND product_id = ? AND location_id = ? AND qty_on_hand >= ?',
+                        [$qty, $tenantId, $item->product_id, $batch->location_id, $qty]
+                    );
+
+                    if ($affected === 0) {
+                        app(AnomalyService::class)->raise(
+                            tenantId: $tenantId,
+                            severity: 'high',
+                            type: 'negative_stock_attempt',
+                            payload: [
+                                'source' => 'production_batch_post',
+                                'batch_id' => $batch->id,
+                                'product_id' => $item->product_id,
+                                'location_id' => $batch->location_id,
+                                'requested_qty' => $qty,
+                            ],
+                            referenceId: $batch->id
+                        );
+
+                        throw new RuntimeException('Stok bahan baku tidak mencukupi.');
+                    }
+
+                    $valuation = $valuationService->issue(
+                        tenantId: $tenantId,
+                        productId: $item->product_id,
+                        locationId: $batch->location_id,
+                        qty: $qty,
+                        referenceType: 'production_input',
+                        referenceId: $batch->id,
+                        referenceItemId: $item->id,
+                        at: $now
+                    );
+
+                    $unitCost = (float) $valuation['unit_cost'];
+                    $item->update([
+                        'unit_cost_snapshot' => $unitCost,
+                    ]);
+
+                    $totalInputCost += ((float) $valuation['total_cost']);
+
+                    $balanceAfter = (float) InventoryBalance::query()
+                        ->where('tenant_id', $tenantId)
+                        ->where('product_id', $item->product_id)
+                        ->where('location_id', $batch->location_id)
+                        ->value('qty_on_hand');
+
+                    $ledgerRows[] = [
+                        'id' => (string) Str::uuid(),
+                        'tenant_id' => $tenantId,
+                        'product_id' => $item->product_id,
+                        'location_id' => $batch->location_id,
+                        'reference_type' => 'production_input',
+                        'reference_id' => $batch->id,
+                        'reference_item_id' => $item->id,
+                        'qty_in' => 0,
+                        'qty_out' => $qty,
+                        'balance_after' => $balanceAfter,
+                        'unit_cost' => $unitCost,
+                        'total_cost' => ((float) $valuation['total_cost']),
+                        'created_at' => $now,
+                        'created_by' => $userId,
+                    ];
+                }
+
+                $totalOutputQty = (float) $outputs->sum(function ($item) {
+                    return (float) $item->qty;
+                });
+
+                $observabilityContext['total_input_cost'] = $totalInputCost;
+                $observabilityContext['output_qty'] = $totalOutputQty;
+
+                if ($totalOutputQty <= 0) {
+                    throw new RuntimeException('Total qty output harus lebih dari 0.');
+                }
+
+                $outputUnitCost = $totalInputCost > 0 ? ($totalInputCost / $totalOutputQty) : 0.0;
+                $observabilityContext['unit_cost_result'] = $outputUnitCost;
+
+                foreach ($outputs as $item) {
+                    $qty = (float) $item->qty;
+
+                    DB::table('inventory_balances')->insertOrIgnore([
+                        'tenant_id' => $tenantId,
+                        'product_id' => $item->product_id,
+                        'location_id' => $batch->location_id,
+                        'qty_on_hand' => 0,
+                    ]);
+
+                    DB::update(
+                        'UPDATE inventory_balances SET qty_on_hand = qty_on_hand + ? WHERE tenant_id = ? AND product_id = ? AND location_id = ?',
+                        [$qty, $tenantId, $item->product_id, $batch->location_id]
+                    );
+
+                    $valuationService->receive(
+                        tenantId: $tenantId,
+                        productId: $item->product_id,
+                        locationId: $batch->location_id,
+                        qty: $qty,
+                        unitCost: $outputUnitCost,
+                        sourceType: 'production_output',
+                        sourceId: $batch->id,
+                        at: $now
+                    );
+
+                    $item->update([
+                        'unit_cost_snapshot' => $outputUnitCost,
+                    ]);
+
+                    $balanceAfter = (float) InventoryBalance::query()
+                        ->where('tenant_id', $tenantId)
+                        ->where('product_id', $item->product_id)
+                        ->where('location_id', $batch->location_id)
+                        ->value('qty_on_hand');
+
+                    $ledgerRows[] = [
+                        'id' => (string) Str::uuid(),
+                        'tenant_id' => $tenantId,
+                        'product_id' => $item->product_id,
+                        'location_id' => $batch->location_id,
+                        'reference_type' => 'production_output',
+                        'reference_id' => $batch->id,
+                        'reference_item_id' => $item->id,
+                        'qty_in' => $qty,
+                        'qty_out' => 0,
+                        'balance_after' => $balanceAfter,
+                        'unit_cost' => $outputUnitCost,
+                        'total_cost' => ($outputUnitCost * $qty),
+                        'created_at' => $now,
+                        'created_by' => $userId,
+                    ];
+                }
+
+                StockLedger::query()->insert($ledgerRows);
+
+                $batch->update([
+                    'status' => ProductionBatch::STATUS_POSTED,
+                    'posted_at' => $now,
+                    'posted_by' => $userId,
+                    'transaction_date' => $transactionDate->toDateString(),
                 ]);
 
-                $totalInputCost += ((float) $valuation['total_cost']);
-
-                $balanceAfter = (float) InventoryBalance::query()
-                    ->where('tenant_id', $tenantId)
-                    ->where('product_id', $item->product_id)
-                    ->where('location_id', $batch->location_id)
-                    ->value('qty_on_hand');
-
-                $ledgerRows[] = [
-                    'id' => (string) Str::uuid(),
-                    'tenant_id' => $tenantId,
-                    'product_id' => $item->product_id,
-                    'location_id' => $batch->location_id,
-                    'reference_type' => 'production_input',
-                    'reference_id' => $batch->id,
-                    'reference_item_id' => $item->id,
-                    'qty_in' => 0,
-                    'qty_out' => $qty,
-                    'balance_after' => $balanceAfter,
-                    'unit_cost' => $unitCost,
-                    'total_cost' => ((float) $valuation['total_cost']),
-                    'created_at' => $now,
-                    'created_by' => $userId,
-                ];
-            }
-
-            $totalOutputQty = (float) $outputs->sum(function ($item) {
-                return (float) $item->qty;
+                Log::info('production.batch.posted', $observabilityContext);
             });
+        } catch (Throwable $exception) {
+            Log::warning('production.batch.failed', array_merge($observabilityContext, [
+                'stage' => 'post',
+                'error' => $exception->getMessage(),
+                'exception' => class_basename($exception),
+            ]));
 
-            if ($totalOutputQty <= 0) {
-                throw new RuntimeException('Total qty output harus lebih dari 0.');
-            }
-
-            $outputUnitCost = $totalInputCost > 0 ? ($totalInputCost / $totalOutputQty) : 0.0;
-
-            foreach ($outputs as $item) {
-                $qty = (float) $item->qty;
-
-                DB::table('inventory_balances')->insertOrIgnore([
-                    'tenant_id' => $tenantId,
-                    'product_id' => $item->product_id,
-                    'location_id' => $batch->location_id,
-                    'qty_on_hand' => 0,
-                ]);
-
-                DB::update(
-                    'UPDATE inventory_balances SET qty_on_hand = qty_on_hand + ? WHERE tenant_id = ? AND product_id = ? AND location_id = ?',
-                    [$qty, $tenantId, $item->product_id, $batch->location_id]
-                );
-
-                $valuationService->receive(
-                    tenantId: $tenantId,
-                    productId: $item->product_id,
-                    locationId: $batch->location_id,
-                    qty: $qty,
-                    unitCost: $outputUnitCost,
-                    sourceType: 'production_output',
-                    sourceId: $batch->id,
-                    at: $now
-                );
-
-                $item->update([
-                    'unit_cost_snapshot' => $outputUnitCost,
-                ]);
-
-                $balanceAfter = (float) InventoryBalance::query()
-                    ->where('tenant_id', $tenantId)
-                    ->where('product_id', $item->product_id)
-                    ->where('location_id', $batch->location_id)
-                    ->value('qty_on_hand');
-
-                $ledgerRows[] = [
-                    'id' => (string) Str::uuid(),
-                    'tenant_id' => $tenantId,
-                    'product_id' => $item->product_id,
-                    'location_id' => $batch->location_id,
-                    'reference_type' => 'production_output',
-                    'reference_id' => $batch->id,
-                    'reference_item_id' => $item->id,
-                    'qty_in' => $qty,
-                    'qty_out' => 0,
-                    'balance_after' => $balanceAfter,
-                    'unit_cost' => $outputUnitCost,
-                    'total_cost' => ($outputUnitCost * $qty),
-                    'created_at' => $now,
-                    'created_by' => $userId,
-                ];
-            }
-
-            StockLedger::query()->insert($ledgerRows);
-
-            $batch->update([
-                'status' => ProductionBatch::STATUS_POSTED,
-                'posted_at' => $now,
-                'posted_by' => $userId,
-                'transaction_date' => $transactionDate->toDateString(),
-            ]);
-        });
+            throw $exception;
+        }
     }
 
     private function ensureRequiredLinesPresent(array $payload): void

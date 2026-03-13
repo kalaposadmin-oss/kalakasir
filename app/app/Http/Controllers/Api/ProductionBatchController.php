@@ -11,6 +11,7 @@ use App\Services\ProductionBatchService;
 use App\Support\ApiResponse;
 use App\Support\TenantContext;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
 use RuntimeException;
 
@@ -185,6 +186,12 @@ class ProductionBatchController extends Controller
                 'code' => 'INVALID_TRANSACTION_DATE',
                 'message' => $exception->getMessage(),
                 'details' => [],
+            ], 422);
+        } catch (ValidationException $exception) {
+            return response()->json([
+                'code' => 'VALIDATION_ERROR',
+                'message' => 'Data tidak valid.',
+                'details' => $exception->errors(),
             ], 422);
         } catch (RuntimeException $exception) {
             return response()->json([
