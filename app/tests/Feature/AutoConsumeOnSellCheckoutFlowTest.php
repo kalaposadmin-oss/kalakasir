@@ -2,7 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Models\Product;
 use App\Models\Tenant;
+use App\Services\AutoConsumeOnSellService;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -38,6 +41,11 @@ class AutoConsumeOnSellCheckoutFlowTest extends TestCase
             'product_id' => $ctx['raw_material_id'],
             'qty_on_hand' => 10.00,
         ]);
+
+        $this->assertDatabaseHas('valuation_audit_logs', [
+            'tenant_id' => $tenant->id,
+            'action' => 'auto_consume.skipped',
+        ]);
     }
 
     public function test_flag_on_with_valid_recipe_consumes_raw_material(): void
@@ -65,6 +73,15 @@ class AutoConsumeOnSellCheckoutFlowTest extends TestCase
             'product_id' => $ctx['raw_material_id'],
             'qty_on_hand' => 8.00,
         ]);
+
+        $this->assertDatabaseHas('valuation_audit_logs', [
+            'tenant_id' => $tenant->id,
+            'action' => 'auto_consume.started',
+        ]);
+        $this->assertDatabaseHas('valuation_audit_logs', [
+            'tenant_id' => $tenant->id,
+            'action' => 'auto_consume.succeeded',
+        ]);
     }
 
     public function test_retry_with_same_idempotency_key_does_not_double_consume(): void
@@ -86,6 +103,14 @@ class AutoConsumeOnSellCheckoutFlowTest extends TestCase
             ->where('tenant_id', $tenant->id)
             ->where('reference_type', 'sale_recipe_input')
             ->where('reference_id', $saleId)
+            ->count());
+
+        $this->assertSame(1, DB::table('stock_ledger')
+            ->where('tenant_id', $tenant->id)
+            ->where('reference_type', 'sale_recipe_input')
+            ->where('reference_id', $saleId)
+            ->where('reference_item_id', DB::table('sale_items')->where('sale_id', $saleId)->value('id'))
+            ->where('product_id', $ctx['raw_material_id'])
             ->count());
 
         $this->assertDatabaseHas('inventory_balances', [
@@ -111,7 +136,8 @@ class AutoConsumeOnSellCheckoutFlowTest extends TestCase
         $response = $this->postJson('/api/v1/checkout', $ctx['payload'], $this->tenantHeaders($tenant->id));
 
         $response->assertStatus(422)
-            ->assertJsonPath('code', 'AUTO_CONSUME_INSUFFICIENT_RAW_MATERIAL');
+            ->assertJsonPath('code', 'AUTO_CONSUME_INSUFFICIENT_RAW_MATERIAL')
+            ->assertJsonPath('message', 'Stok bahan baku tidak mencukupi untuk auto-consume.');
 
         $this->assertDatabaseMissing('sales', [
             'tenant_id' => $tenant->id,
@@ -141,6 +167,22 @@ class AutoConsumeOnSellCheckoutFlowTest extends TestCase
             'product_id' => $ctx['raw_material_id'],
             'qty_on_hand' => -1.00,
         ]);
+
+        $saleId = (string) $response->json('sale_id');
+
+        $this->assertDatabaseHas('stock_ledger', [
+            'tenant_id' => $tenant->id,
+            'reference_type' => 'sale_recipe_input',
+            'reference_id' => $saleId,
+            'product_id' => $ctx['raw_material_id'],
+            'qty_out' => 2.00,
+        ]);
+
+        $this->assertSame(1, DB::table('valuation_audit_logs')
+            ->where('tenant_id', $tenant->id)
+            ->where('action', 'auto_consume.succeeded')
+            ->where('meta_json', 'like', '%"policy_negative_stock":true%')
+            ->count());
     }
 
     public function test_product_without_active_recipe_is_no_op_for_auto_consume(): void
@@ -181,7 +223,213 @@ class AutoConsumeOnSellCheckoutFlowTest extends TestCase
         $response = $this->postJson('/api/v1/checkout', $ctx['payload'], $this->tenantHeaders($tenant->id));
 
         $response->assertStatus(422)
+            ->assertJsonPath('code', 'AUTO_CONSUME_RECIPE_INVALID')
+            ->assertJsonPath('message', 'Recipe auto-consume tidak valid.');
+    }
+
+    public function test_two_finished_goods_in_single_checkout_consume_both_recipes(): void
+    {
+        [$tenant, $user] = $this->bootApiActor('admin', 'admin+auto-consume-two-items@example.test');
+
+        $ctx = $this->prepareRecipeCheckoutContext($tenant, $user->id, rawMaterialStock: 10, autoConsumeEnabled: true);
+
+        $rawMaterialSecondId = $this->createProductWithStock(
+            tenantId: $tenant->id,
+            userId: $user->id,
+            skuPrefix: 'RM2',
+            name: 'Bahan Auto Consume B',
+            productMode: 'add_on',
+            itemType: 'raw_material',
+            stockQty: 20,
+            locationId: $ctx['fixture']['location_id'],
+            price: 1700
+        );
+
+        $finishedGoodSecondId = $this->createProductWithStock(
+            tenantId: $tenant->id,
+            userId: $user->id,
+            skuPrefix: 'FG2',
+            name: 'Produk Jadi B',
+            productMode: 'bom',
+            itemType: 'finished_good',
+            stockQty: 100,
+            locationId: $ctx['fixture']['location_id'],
+            price: 8000,
+            bomItems: [
+                ['product_id' => $rawMaterialSecondId, 'name' => 'Bahan Auto Consume B', 'qty' => 3, 'unit' => 'gram'],
+            ]
+        );
+
+        $ctx['payload']['items'] = [
+            [
+                'product_id' => $ctx['fixture']['product_id'],
+                'location_id' => $ctx['fixture']['location_id'],
+                'qty' => 1,
+                'price' => 10000,
+                'discount' => 0,
+            ],
+            [
+                'product_id' => $finishedGoodSecondId,
+                'location_id' => $ctx['fixture']['location_id'],
+                'qty' => 1,
+                'price' => 8000,
+                'discount' => 0,
+            ],
+        ];
+        $ctx['payload']['subtotal'] = 18000;
+        $ctx['payload']['total'] = 18000;
+        $ctx['payload']['payments'][0]['amount'] = 18000;
+
+        $response = $this->postJson('/api/v1/checkout', $ctx['payload'], $this->tenantHeaders($tenant->id));
+
+        $response->assertCreated();
+        $saleId = (string) $response->json('sale_id');
+
+        $this->assertSame(2, DB::table('stock_ledger')
+            ->where('tenant_id', $tenant->id)
+            ->where('reference_type', 'sale_recipe_input')
+            ->where('reference_id', $saleId)
+            ->count());
+
+        $this->assertDatabaseHas('stock_ledger', [
+            'tenant_id' => $tenant->id,
+            'reference_type' => 'sale_recipe_input',
+            'reference_id' => $saleId,
+            'product_id' => $ctx['raw_material_id'],
+            'qty_out' => 2.00,
+        ]);
+        $this->assertDatabaseHas('stock_ledger', [
+            'tenant_id' => $tenant->id,
+            'reference_type' => 'sale_recipe_input',
+            'reference_id' => $saleId,
+            'product_id' => $rawMaterialSecondId,
+            'qty_out' => 3.00,
+        ]);
+    }
+
+    public function test_mixed_auto_consume_and_regular_item_in_one_checkout(): void
+    {
+        [$tenant, $user] = $this->bootApiActor('admin', 'admin+auto-consume-mixed-items@example.test');
+
+        $ctx = $this->prepareRecipeCheckoutContext($tenant, $user->id, rawMaterialStock: 10, autoConsumeEnabled: true);
+
+        $retailProductId = $this->createProductWithStock(
+            tenantId: $tenant->id,
+            userId: $user->id,
+            skuPrefix: 'RT1',
+            name: 'Produk Retail Biasa',
+            productMode: 'default',
+            itemType: 'default',
+            stockQty: 40,
+            locationId: $ctx['fixture']['location_id'],
+            price: 7000
+        );
+
+        $ctx['payload']['items'][] = [
+            'product_id' => $retailProductId,
+            'location_id' => $ctx['fixture']['location_id'],
+            'qty' => 1,
+            'price' => 7000,
+            'discount' => 0,
+        ];
+        $ctx['payload']['subtotal'] = 17000;
+        $ctx['payload']['total'] = 17000;
+        $ctx['payload']['payments'][0]['amount'] = 17000;
+
+        $response = $this->postJson('/api/v1/checkout', $ctx['payload'], $this->tenantHeaders($tenant->id));
+
+        $response->assertCreated();
+        $saleId = (string) $response->json('sale_id');
+
+        $this->assertSame(1, DB::table('stock_ledger')
+            ->where('tenant_id', $tenant->id)
+            ->where('reference_type', 'sale_recipe_input')
+            ->where('reference_id', $saleId)
+            ->count());
+    }
+
+    public function test_recipe_exists_but_output_not_finished_good_fails(): void
+    {
+        [$tenant, $user] = $this->bootApiActor('admin', 'admin+auto-consume-output-type-invalid@example.test');
+
+        $ctx = $this->prepareRecipeCheckoutContext(
+            $tenant,
+            $user->id,
+            rawMaterialStock: 10,
+            autoConsumeEnabled: true,
+            soldProductItemType: 'raw_material'
+        );
+
+        $response = $this->postJson('/api/v1/checkout', $ctx['payload'], $this->tenantHeaders($tenant->id));
+
+        $response->assertStatus(422)
             ->assertJsonPath('code', 'AUTO_CONSUME_RECIPE_INVALID');
+    }
+
+    public function test_partially_consumed_reference_retry_stays_non_duplicate(): void
+    {
+        [$tenant, $user] = $this->bootApiActor('admin', 'admin+auto-consume-partial-retry@example.test');
+
+        $ctx = $this->prepareRecipeCheckoutContext($tenant, $user->id, rawMaterialStock: 10, autoConsumeEnabled: true);
+        $saleId = (string) Str::uuid();
+        $saleItemId = (string) Str::uuid();
+        $now = CarbonImmutable::now('UTC');
+
+        DB::table('inventory_balances')
+            ->where('tenant_id', $tenant->id)
+            ->where('product_id', $ctx['raw_material_id'])
+            ->where('location_id', $ctx['fixture']['location_id'])
+            ->whereNull('product_variant_id')
+            ->update(['qty_on_hand' => 9]);
+
+        DB::table('stock_ledger')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $tenant->id,
+            'product_id' => $ctx['raw_material_id'],
+            'product_variant_id' => null,
+            'location_id' => $ctx['fixture']['location_id'],
+            'reference_type' => 'sale_recipe_input',
+            'reference_id' => $saleId,
+            'reference_item_id' => $saleItemId,
+            'qty_in' => 0,
+            'qty_out' => 1,
+            'balance_after' => 9,
+            'unit_cost' => 1500,
+            'total_cost' => 1500,
+            'created_at' => $now,
+            'created_by' => $user->id,
+        ]);
+
+        $soldProduct = Product::withoutGlobalScopes()
+            ->where('tenant_id', $tenant->id)
+            ->where('id', $ctx['fixture']['product_id'])
+            ->firstOrFail();
+
+        app(AutoConsumeOnSellService::class)->consumeForSaleItem(
+            tenantId: $tenant->id,
+            saleId: $saleId,
+            saleItemId: $saleItemId,
+            soldProduct: $soldProduct,
+            soldQty: 1,
+            locationId: $ctx['fixture']['location_id'],
+            userId: $user->id,
+            at: $now
+        );
+
+        $this->assertSame(1, DB::table('stock_ledger')
+            ->where('tenant_id', $tenant->id)
+            ->where('reference_type', 'sale_recipe_input')
+            ->where('reference_id', $saleId)
+            ->where('reference_item_id', $saleItemId)
+            ->where('product_id', $ctx['raw_material_id'])
+            ->count());
+
+        $this->assertDatabaseHas('inventory_balances', [
+            'tenant_id' => $tenant->id,
+            'location_id' => $ctx['fixture']['location_id'],
+            'product_id' => $ctx['raw_material_id'],
+            'qty_on_hand' => 9.00,
+        ]);
     }
 
     /**
@@ -194,7 +442,8 @@ class AutoConsumeOnSellCheckoutFlowTest extends TestCase
         bool $autoConsumeEnabled,
         bool $allowNegativeRawMaterialStock = false,
         bool $invalidRecipeInputType = false,
-        bool $withRecipe = true
+        bool $withRecipe = true,
+        string $soldProductItemType = 'finished_good'
     ): array {
         $fixture = $this->seedCheckoutFixture($tenant->id, $userId);
 
@@ -255,7 +504,7 @@ class AutoConsumeOnSellCheckoutFlowTest extends TestCase
             ->where('id', $fixture['product_id'])
             ->update([
                 'product_mode' => $withRecipe ? 'bom' : 'default',
-                'item_type' => 'finished_good',
+                'item_type' => $soldProductItemType,
                 'bom_items' => $withRecipe ? json_encode([
                     [
                         'product_id' => $rawMaterialId,
@@ -274,5 +523,66 @@ class AutoConsumeOnSellCheckoutFlowTest extends TestCase
             'payload' => $payload,
             'raw_material_id' => $rawMaterialId,
         ];
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $bomItems
+     */
+    private function createProductWithStock(
+        string $tenantId,
+        string $userId,
+        string $skuPrefix,
+        string $name,
+        string $productMode,
+        string $itemType,
+        float $stockQty,
+        string $locationId,
+        float $price,
+        array $bomItems = []
+    ): string {
+        $productId = (string) Str::uuid();
+
+        DB::table('products')->insert([
+            'id' => $productId,
+            'tenant_id' => $tenantId,
+            'sku' => $skuPrefix.'-'.Str::upper(Str::random(6)),
+            'name' => $name,
+            'price' => $price,
+            'hpp_average' => $price,
+            'image_url' => null,
+            'is_active' => true,
+            'track_stock' => true,
+            'product_mode' => $productMode,
+            'item_type' => $itemType,
+            'variants' => json_encode([]),
+            'bom_items' => json_encode($bomItems),
+            'bundle_items' => json_encode([]),
+            'created_by' => $userId,
+            'updated_by' => $userId,
+            'created_at' => now('UTC'),
+            'updated_at' => now('UTC'),
+            'deleted_at' => null,
+        ]);
+
+        DB::table('inventory_balances')->insert([
+            'tenant_id' => $tenantId,
+            'product_id' => $productId,
+            'product_variant_id' => null,
+            'location_id' => $locationId,
+            'qty_on_hand' => $stockQty,
+        ]);
+
+        DB::table('inventory_cost_states')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $tenantId,
+            'product_id' => $productId,
+            'location_id' => $locationId,
+            'qty_on_hand' => $stockQty,
+            'average_cost' => $price,
+            'last_cost' => $price,
+            'updated_at' => now('UTC'),
+        ]);
+
+        return $productId;
     }
 }
