@@ -19,6 +19,7 @@ use App\Http\Controllers\Api\LoyaltyController;
 use App\Http\Controllers\Api\ObservabilityController;
 use App\Http\Controllers\Api\PurchaseController;
 use App\Http\Controllers\Api\ProductController;
+use App\Http\Controllers\Api\ProductionBatchController;
 use App\Http\Controllers\Api\PurchaseReturnController;
 use App\Http\Controllers\Api\SaleDetailController;
 use App\Http\Controllers\Api\SalesHistoryController;
@@ -66,6 +67,8 @@ Route::prefix('v1')
         Route::get('purchases/{purchase}', [PurchaseController::class, 'show']);
         Route::get('products', [ProductController::class, 'index']);
         Route::get('products/{product}', [ProductController::class, 'show']);
+        Route::get('production-batches', [ProductionBatchController::class, 'index']);
+        Route::get('production-batches/{batch}', [ProductionBatchController::class, 'show']);
         Route::get('sales/{sale}', SaleDetailController::class);
         Route::get('sales-history', [SalesHistoryController::class, 'index']);
         Route::get('shifts/opening', [ShiftController::class, 'openingData']);
@@ -99,6 +102,8 @@ Route::prefix('v1')
         Route::post('purchases/{purchase}/close', [PurchaseController::class, 'close'])->middleware('role:admin');
         Route::post('purchase-returns', [PurchaseReturnController::class, 'store'])->middleware('role:admin');
         Route::post('products', [ProductController::class, 'store'])->middleware('role:admin');
+        Route::post('production-batches', [ProductionBatchController::class, 'store'])->middleware('role:admin,owner');
+        Route::post('production-batches/{batch}/post', [ProductionBatchController::class, 'post'])->middleware('role:admin,owner');
         Route::post('users', [UserManagementController::class, 'store'])->middleware('role:admin');
         Route::post('shifts/open', [ShiftController::class, 'open'])->middleware('role:cashier,supervisor,admin');
         Route::post('shifts/close', [ShiftController::class, 'close'])->middleware('role:cashier,supervisor,admin');
