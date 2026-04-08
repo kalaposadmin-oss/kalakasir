@@ -1,720 +1,292 @@
 <?php
 
-use App\Models\AccountMapping;
-use App\Models\ChartOfAccount;
-use App\Models\Product;
-use App\Models\Tenant;
-use App\Models\User;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
+use App\Http\Controllers\Web\BackofficePageController;
+use App\Http\Controllers\Web\PortalAuthController;
+use App\Http\Controllers\Web\LegacyWebRedirectController;
+use App\Http\Controllers\Web\MenuController;
+use App\Http\Controllers\Web\OnboardingController;
+use App\Http\Controllers\Web\PlatformDashboardController;
+use App\Http\Controllers\Web\PosPageController;
+use App\Http\Controllers\Web\PortalSessionController;
+use App\Http\Controllers\Web\TenantViewController;
 use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Facades\DB;
 
-Route::get('/', function () {
-    $tenantId = Schema::hasTable('tenants')
-        ? Tenant::query()->value('id')
-        : null;
+Route::get('/', [OnboardingController::class, 'rootRedirect']);
 
-    if ($tenantId && Schema::hasTable('users')) {
-        $hasUsers = DB::table('users')
-            ->where('tenant_id', $tenantId)
-            ->exists();
+Route::get('/register', [OnboardingController::class, 'registerRedirect']);
 
-        if (! $hasUsers) {
-            return redirect('/register/step-1');
-        }
-    }
+Route::get('/register/step-1', [OnboardingController::class, 'showStepOne']);
 
-    return view('welcome', [
-        'tenantId' => $tenantId,
-    ]);
+Route::post('/register/step-1', [OnboardingController::class, 'storeStepOne']);
+
+Route::get('/register/step-2', [OnboardingController::class, 'showStepTwo']);
+
+Route::post('/register/step-2', [OnboardingController::class, 'storeStepTwo']);
+
+Route::get('/register/step-3', [OnboardingController::class, 'showStepThree']);
+
+Route::post('/register/step-3', [OnboardingController::class, 'storeStepThree']);
+
+Route::get('/register/step-4', [OnboardingController::class, 'showStepFour']);
+
+Route::post('/register/step-4', [OnboardingController::class, 'storeStepFour']);
+
+Route::get('/menu', [MenuController::class, 'index']);
+
+Route::get('/menu/{section}', [MenuController::class, 'section']);
+
+Route::get('/inventory', [LegacyWebRedirectController::class, 'to'])->defaults('target', '/backoffice/inventory');
+
+Route::get('/stock-card', [LegacyWebRedirectController::class, 'entityOrFallback'])
+    ->defaults('queryKey', 'product_id')
+    ->defaults('detailPrefix', '/backoffice/inventory/products/')
+    ->defaults('detailSuffix', '/stock-card')
+    ->defaults('fallbackTarget', '/backoffice/reports/inventory/stock-card');
+
+Route::get('/settings/chart-of-accounts', [LegacyWebRedirectController::class, 'to'])->defaults('target', '/backoffice/settings/chart-of-accounts');
+
+Route::get('/settings/chart-of-accounts/{account}', [LegacyWebRedirectController::class, 'to'])
+    ->defaults('target', '/backoffice/settings/chart-of-accounts/{account}');
+
+Route::get('/settings/bank-accounts/{account}', [LegacyWebRedirectController::class, 'to'])
+    ->defaults('target', '/backoffice/settings/bank-accounts/{account}');
+
+Route::get('/stock-adjustment', [LegacyWebRedirectController::class, 'to'])->defaults('target', '/backoffice/inventory/stock-adjustment');
+
+Route::get('/analytics', [LegacyWebRedirectController::class, 'to'])->defaults('target', '/backoffice/dashboard');
+
+Route::get('/products/new', [LegacyWebRedirectController::class, 'to'])->defaults('target', '/backoffice/products/new');
+
+Route::get('/products/{product}/edit', [LegacyWebRedirectController::class, 'to'])
+    ->defaults('target', '/backoffice/products/{product}/edit');
+
+Route::get('/categories', [LegacyWebRedirectController::class, 'to'])->defaults('target', '/backoffice/categories');
+
+Route::get('/categories/new', [LegacyWebRedirectController::class, 'to'])->defaults('target', '/backoffice/categories/new');
+
+Route::get('/categories/{category}/edit', [LegacyWebRedirectController::class, 'to'])
+    ->defaults('target', '/backoffice/categories/{category}/edit');
+
+Route::get('/customers', [LegacyWebRedirectController::class, 'to'])->defaults('target', '/backoffice/customers');
+
+Route::get('/suppliers', [LegacyWebRedirectController::class, 'to'])->defaults('target', '/backoffice/suppliers');
+
+Route::get('/receiving', [LegacyWebRedirectController::class, 'entityOrFallback'])
+    ->defaults('queryKey', 'purchase_id')
+    ->defaults('detailPrefix', '/backoffice/receiving/')
+    ->defaults('fallbackTarget', '/backoffice/receiving');
+
+Route::get('/branches', [LegacyWebRedirectController::class, 'to'])->defaults('target', '/backoffice/branches');
+
+Route::get('/products', [LegacyWebRedirectController::class, 'to'])->defaults('target', '/backoffice/products');
+
+Route::get('/products/detail', [LegacyWebRedirectController::class, 'entityOrFallback'])
+    ->defaults('queryKey', 'product_id')
+    ->defaults('detailPrefix', '/backoffice/products/')
+    ->defaults('fallbackTarget', '/backoffice/products/detail');
+
+Route::get('/sales-history', [LegacyWebRedirectController::class, 'salesHistory']);
+
+Route::get('/kasir', [LegacyWebRedirectController::class, 'to'])->defaults('target', '/pos/checkout');
+
+Route::get('/payment-method', [LegacyWebRedirectController::class, 'to'])->defaults('target', '/pos/payment-method');
+
+Route::get('/sales-void-refund', [LegacyWebRedirectController::class, 'salesVoidRefund']);
+
+Route::get('/shift/open', [LegacyWebRedirectController::class, 'to'])->defaults('target', '/pos/shifts/open');
+
+Route::get('/branches/edit', [LegacyWebRedirectController::class, 'entityOrFallback'])
+    ->defaults('queryKey', 'branch_id')
+    ->defaults('detailPrefix', '/backoffice/branches/')
+    ->defaults('detailSuffix', '/edit')
+    ->defaults('fallbackTarget', '/backoffice/branches/edit');
+
+Route::get('/purchases/new', [LegacyWebRedirectController::class, 'to'])->defaults('target', '/backoffice/purchases/new');
+
+Route::get('/receiving/action', [LegacyWebRedirectController::class, 'entityOrFallback'])
+    ->defaults('queryKey', 'purchase_id')
+    ->defaults('detailPrefix', '/backoffice/receiving/')
+    ->defaults('detailSuffix', '/action')
+    ->defaults('fallbackTarget', '/backoffice/receiving/action');
+
+Route::get('/shift/close', [LegacyWebRedirectController::class, 'to'])->defaults('target', '/pos/shifts/close');
+
+Route::get('/shift/close-summary', [LegacyWebRedirectController::class, 'entityOrFallback'])
+    ->defaults('queryKey', 'shift_id')
+    ->defaults('detailPrefix', '/pos/shifts/')
+    ->defaults('detailSuffix', '/summary')
+    ->defaults('fallbackTarget', '/pos/shifts/summary');
+
+Route::get('/purchases/detail', [LegacyWebRedirectController::class, 'entityOrFallback'])
+    ->defaults('queryKey', 'purchase_id')
+    ->defaults('detailPrefix', '/backoffice/purchases/')
+    ->defaults('fallbackTarget', '/backoffice/purchases/detail');
+
+Route::get('/purchase-returns', [LegacyWebRedirectController::class, 'to'])->defaults('target', '/backoffice/purchases/returns');
+
+Route::get('/stock-alerts', [LegacyWebRedirectController::class, 'to'])->defaults('target', '/backoffice/reports/inventory/stock-alerts');
+
+Route::get('/users', [LegacyWebRedirectController::class, 'to'])->defaults('target', '/backoffice/users');
+
+Route::get('/settings/tax-promo', [LegacyWebRedirectController::class, 'to'])->defaults('target', '/backoffice/settings/tax-promo');
+
+Route::get('/settings/inventory-valuation', [LegacyWebRedirectController::class, 'to'])->defaults('target', '/backoffice/settings/inventory-valuation');
+
+Route::get('/settings/inventory-valuation-audit', [LegacyWebRedirectController::class, 'to'])->defaults('target', '/backoffice/settings/inventory-valuation-audit');
+
+Route::get('/settings/observability', [LegacyWebRedirectController::class, 'to'])->defaults('target', '/backoffice/settings/observability');
+
+Route::get('/finance-summary', [LegacyWebRedirectController::class, 'to'])->defaults('target', '/backoffice/finance/summary');
+
+Route::get('/lock-periods', [LegacyWebRedirectController::class, 'to'])->defaults('target', '/backoffice/finance/lock-periods');
+
+Route::get('/stock-transfers', [LegacyWebRedirectController::class, 'to'])->defaults('target', '/backoffice/inventory/stock-transfers');
+
+Route::get('/production-batches', [LegacyWebRedirectController::class, 'to'])->defaults('target', '/backoffice/inventory/production-batches');
+
+Route::get('/production-batches/{batch}', [LegacyWebRedirectController::class, 'to'])
+    ->defaults('target', '/backoffice/inventory/production-batches/{batch}');
+
+Route::get('/loyalty', [LegacyWebRedirectController::class, 'to'])->defaults('target', '/backoffice/loyalty');
+
+Route::get('/login', [PortalAuthController::class, 'showGeneric']);
+Route::post('/login', [PortalAuthController::class, 'loginGeneric']);
+
+Route::middleware('canonical_portal_host:pos')->group(function () {
+Route::get('/pos/login', [PortalAuthController::class, 'showPos']);
+Route::post('/pos/login', [PortalAuthController::class, 'loginPos']);
 });
 
-Route::get('/register', function () {
-    return redirect('/register/step-1');
+Route::middleware('canonical_portal_host:backoffice')->group(function () {
+Route::get('/backoffice/login', [PortalAuthController::class, 'showBackoffice']);
+Route::post('/backoffice/login', [PortalAuthController::class, 'loginBackoffice']);
 });
 
-Route::get('/register/step-1', function (Request $request) {
-    if ($request->session()->has('onboarding.completed')) {
-        return redirect('/');
-    }
+Route::get('/logout', [PortalSessionController::class, 'logout']);
 
-    $tenantId = Schema::hasTable('tenants') ? Tenant::query()->value('id') : null;
+Route::post('/logout', [PortalSessionController::class, 'logout']);
 
-    return view('onboarding-register-user', [
-        'tenantId' => $tenantId,
-        'showMenu' => false,
-    ]);
+Route::get('/portal/switch/{portal}', [PortalSessionController::class, 'switch'])->middleware('auth');
+
+Route::get('/sales-detail', [LegacyWebRedirectController::class, 'salesDetail']);
+
+Route::get('/receipt-preview', [LegacyWebRedirectController::class, 'receiptPreview']);
+
+Route::middleware(['canonical_portal_host:pos', 'web_access:pos,cashier|staff|warehouse|supervisor|admin|owner|superadmin,dash.overview'])->group(function () {
+    Route::redirect('/pos', '/pos/dashboard');
+    Route::get('/pos/dashboard', [TenantViewController::class, 'show'])
+        ->defaults('view', 'pos-dashboard')
+        ->defaults('data', ['showMenu' => true]);
+    Route::get('/pos/checkout', [PosPageController::class, 'checkout']);
+    Route::get('/pos/sales/{sale}', [PosPageController::class, 'saleDetail']);
+    Route::get('/pos/sales/{sale}/void-refund', [PosPageController::class, 'saleVoidRefund']);
+    Route::get('/pos/sales/{sale}/receipt', [PosPageController::class, 'saleReceipt']);
+    Route::get('/pos/history', [TenantViewController::class, 'show'])
+        ->defaults('view', 'sales-history')
+        ->defaults('data', ['showMenu' => true, 'historyContext' => 'pos']);
+    Route::get('/pos/void-refund', [TenantViewController::class, 'show'])
+        ->defaults('view', 'void-refund')
+        ->defaults('data', ['showMenu' => true]);
+    Route::get('/pos/payment-method', [PosPageController::class, 'paymentMethod']);
+    Route::get('/pos/receipt-preview', [PosPageController::class, 'receiptPreview']);
+    Route::get('/pos/shifts/open', [TenantViewController::class, 'show'])
+        ->defaults('view', 'shift-open')
+        ->defaults('data', ['showMenu' => true]);
+    Route::get('/pos/shifts/close', [TenantViewController::class, 'show'])
+        ->defaults('view', 'shift-close')
+        ->defaults('data', ['showMenu' => true]);
+    Route::get('/pos/shifts/summary', [PosPageController::class, 'shiftSummaryIndex']);
+    Route::get('/pos/shifts/{shift}/summary', [PosPageController::class, 'shiftSummaryDetail']);
+  });
+
+Route::middleware(['canonical_portal_host:backoffice', 'web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview'])->group(function () {
+    Route::redirect('/backoffice', '/backoffice/dashboard');
+    Route::get('/backoffice/dashboard', [TenantViewController::class, 'show'])
+        ->defaults('view', 'backoffice-dashboard')
+        ->defaults('data', ['showMenu' => true]);
+    Route::get('/backoffice/sales/{sale}', [BackofficePageController::class, 'saleDetail'])->middleware('web_access:backoffice,supervisor|admin|owner|superadmin,reports.summary');
+    Route::get('/backoffice/reports', [TenantViewController::class, 'show'])->defaults('view', 'backoffice-reports')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,supervisor|admin|owner|superadmin,reports.summary');
+    Route::get('/backoffice/reports/overview', [TenantViewController::class, 'show'])->defaults('view', 'backoffice-reports')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,supervisor|admin|owner|superadmin,reports.summary');
+    Route::get('/backoffice/reports/inventory', [TenantViewController::class, 'show'])->defaults('view', 'reports-inventory')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,reports.inventory_view');
+    Route::get('/backoffice/settings/subscription', [TenantViewController::class, 'show'])->defaults('view', 'subscription-current')->defaults('data', ['showMenu' => true]);
+    Route::get('/backoffice/settings/subscription/history', [TenantViewController::class, 'show'])->defaults('view', 'subscription-history')->defaults('data', ['showMenu' => true]);
+    Route::get('/backoffice/settings/subscription/invoices', [TenantViewController::class, 'show'])->defaults('view', 'subscription-invoices')->defaults('data', ['showMenu' => true]);
+    Route::get('/backoffice/settings/subscription/change', [TenantViewController::class, 'show'])->defaults('view', 'subscription-change')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,admin|owner|superadmin,dash.overview');
+    Route::get('/backoffice/settings/subscription/features', [TenantViewController::class, 'show'])->defaults('view', 'subscription-features')->defaults('data', ['showMenu' => true]);
+    Route::get('/backoffice/settings/integrations', [TenantViewController::class, 'show'])->defaults('view', 'settings-integrations')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,settings.integrations');
+    Route::get('/backoffice/settings/preferences', [TenantViewController::class, 'show'])->defaults('view', 'settings-preferences')->defaults('data', ['showMenu' => true]);
+    Route::get('/backoffice/help/center', [TenantViewController::class, 'show'])->defaults('view', 'help-center')->defaults('data', ['showMenu' => true]);
+    Route::get('/backoffice/help/about', [TenantViewController::class, 'show'])->defaults('view', 'help-about')->defaults('data', ['showMenu' => true]);
+    Route::get('/backoffice/help/support', [TenantViewController::class, 'show'])->defaults('view', 'help-support')->defaults('data', ['showMenu' => true]);
+    Route::get('/backoffice/marketing/online-store', [TenantViewController::class, 'show'])->defaults('view', 'marketing-online-store')->defaults('data', ['showMenu' => true]);
+    Route::get('/backoffice/marketing/referral', [TenantViewController::class, 'show'])->defaults('view', 'marketing-referral')->defaults('data', ['showMenu' => true]);
+    Route::get('/backoffice/products', [TenantViewController::class, 'show'])->defaults('view', 'products')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview');
+    Route::get('/backoffice/products/new', [TenantViewController::class, 'show'])->defaults('view', 'product-create')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,admin|owner|superadmin,dash.overview');
+    Route::get('/backoffice/products/detail', [TenantViewController::class, 'show'])->defaults('view', 'product-detail')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview');
+    Route::get('/backoffice/products/{product}', [BackofficePageController::class, 'productDetail'])->middleware('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview');
+    Route::get('/backoffice/products/{product}/edit', [TenantViewController::class, 'showWithRouteParam'])
+        ->defaults('view', 'product-edit')
+        ->defaults('routeParam', 'product')
+        ->defaults('viewDataKey', 'productId')
+        ->defaults('data', ['showMenu' => true])
+        ->middleware('web_access:backoffice,admin|owner|superadmin,dash.overview');
+    Route::get('/backoffice/categories', [TenantViewController::class, 'show'])->defaults('view', 'categories')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview');
+    Route::get('/backoffice/categories/new', [TenantViewController::class, 'show'])->defaults('view', 'category-create')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,admin|owner|superadmin,dash.overview');
+    Route::get('/backoffice/categories/{category}/edit', [TenantViewController::class, 'showWithRouteParam'])
+        ->defaults('view', 'category-edit')
+        ->defaults('routeParam', 'category')
+        ->defaults('viewDataKey', 'categoryId')
+        ->defaults('data', ['showMenu' => true])
+        ->middleware('web_access:backoffice,admin|owner|superadmin,dash.overview');
+    Route::get('/backoffice/inventory', [TenantViewController::class, 'show'])->defaults('view', 'inventory')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview');
+    Route::get('/backoffice/materials', [TenantViewController::class, 'show'])->defaults('view', 'materials')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,admin|owner|superadmin,dash.overview');
+    Route::get('/backoffice/customers', [TenantViewController::class, 'show'])->defaults('view', 'customers')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview');
+    Route::get('/backoffice/suppliers', [TenantViewController::class, 'show'])->defaults('view', 'suppliers')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview');
+    Route::get('/backoffice/branches', [TenantViewController::class, 'show'])->defaults('view', 'branches')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview');
+    Route::get('/backoffice/branches/edit', [TenantViewController::class, 'show'])
+        ->defaults('view', 'branch-edit')
+        ->defaults('data', ['showMenu' => true, 'currentPath' => '/backoffice/branches/edit', 'backUrl' => '/backoffice/branches', 'branchId' => null])
+        ->middleware('web_access:backoffice,admin|owner|superadmin,dash.overview');
+    Route::get('/backoffice/branches/{branch}/edit', [BackofficePageController::class, 'branchEdit'])->middleware('web_access:backoffice,admin|owner|superadmin,dash.overview');
+    Route::get('/backoffice/purchases/new', [TenantViewController::class, 'show'])->defaults('view', 'purchase-create')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,admin|owner|superadmin,dash.overview');
+    Route::get('/backoffice/purchases/detail', [TenantViewController::class, 'show'])->defaults('view', 'purchase-detail')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview');
+    Route::get('/backoffice/purchases/returns', [TenantViewController::class, 'show'])->defaults('view', 'purchase-return')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,admin|owner|superadmin,dash.overview');
+    Route::get('/backoffice/purchases/{purchase}', [BackofficePageController::class, 'purchaseDetail'])->middleware('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview');
+    Route::get('/backoffice/receiving', [BackofficePageController::class, 'receivingIndex'])->middleware('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview');
+    Route::get('/backoffice/receiving/action', [BackofficePageController::class, 'receivingActionRedirect'])
+        ->middleware('web_access:backoffice,admin|owner|superadmin,dash.overview');
+    Route::get('/backoffice/receiving/{purchase}', [BackofficePageController::class, 'receivingDetail'])->middleware('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview');
+    Route::get('/backoffice/receiving/{purchase}/action', [BackofficePageController::class, 'receivingAction'])->middleware('web_access:backoffice,admin|owner|superadmin,dash.overview');
+    Route::get('/backoffice/reports/sales', [TenantViewController::class, 'show'])->defaults('view', 'sales-history')->defaults('data', ['showMenu' => true, 'historyContext' => 'backoffice'])->middleware('web_access:backoffice,supervisor|admin|owner|superadmin,reports.summary');
+    Route::get('/backoffice/reports/inventory/stock-card', [TenantViewController::class, 'show'])->defaults('view', 'stock-card')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,reports.inventory_stock_card');
+    Route::get('/backoffice/inventory/products/{product}/stock-card', [BackofficePageController::class, 'stockCardDetail'])->middleware('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,reports.inventory_stock_card');
+    Route::get('/backoffice/reports/inventory/stock-alerts', [TenantViewController::class, 'show'])->defaults('view', 'stock-alerts')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,reports.inventory_view');
+    Route::get('/backoffice/inventory/stock-adjustment', [TenantViewController::class, 'show'])->defaults('view', 'stock-adjustment')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview');
+    Route::get('/backoffice/inventory/stock-transfers', [TenantViewController::class, 'show'])->defaults('view', 'stock-transfers')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview');
+    Route::get('/backoffice/inventory/production-batches', [TenantViewController::class, 'show'])->defaults('view', 'production-batches')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview');
+    Route::get('/backoffice/inventory/production-batches/{batch}', [BackofficePageController::class, 'productionBatchDetail'])->middleware('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview');
+    Route::get('/backoffice/users', [TenantViewController::class, 'show'])->defaults('view', 'users')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,admin|owner|superadmin,dash.overview');
+    Route::get('/backoffice/loyalty', [TenantViewController::class, 'show'])->defaults('view', 'loyalty')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview');
+    Route::get('/backoffice/settings/tax-promo', [TenantViewController::class, 'show'])->defaults('view', 'tax-promo')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview');
+    Route::get('/backoffice/settings/inventory-valuation', [TenantViewController::class, 'show'])->defaults('view', 'inventory-valuation-settings')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,admin|owner|superadmin,settings.inventory_valuation');
+    Route::get('/backoffice/settings/inventory-valuation-audit', [TenantViewController::class, 'show'])->defaults('view', 'inventory-valuation-audit')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,admin|owner|superadmin,settings.inventory_valuation');
+    Route::get('/backoffice/settings/refund-legacy-audit', [TenantViewController::class, 'show'])->defaults('view', 'refund-legacy-audit')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,admin|owner|superadmin,dash.overview');
+    Route::get('/backoffice/settings/observability', [TenantViewController::class, 'show'])->defaults('view', 'observability')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,admin|owner|superadmin,settings.observability');
+    Route::get('/backoffice/settings/chart-of-accounts', [TenantViewController::class, 'show'])->defaults('view', 'chart-of-accounts')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,admin|owner|superadmin,dash.overview');
+    Route::get('/backoffice/settings/chart-of-accounts/{account}', [TenantViewController::class, 'showWithRouteParam'])
+        ->defaults('view', 'chart-of-accounts-detail')
+        ->defaults('routeParam', 'account')
+        ->defaults('viewDataKey', 'accountId')
+        ->defaults('data', ['showMenu' => true])
+        ->middleware('web_access:backoffice,admin|owner|superadmin,dash.overview');
+    Route::get('/backoffice/settings/bank-accounts/{account}', [TenantViewController::class, 'showWithRouteParam'])
+        ->defaults('view', 'bank-account-detail')
+        ->defaults('routeParam', 'account')
+        ->defaults('viewDataKey', 'accountId')
+        ->defaults('data', ['showMenu' => true])
+        ->middleware('web_access:backoffice,admin|owner|superadmin,dash.overview');
+    Route::get('/backoffice/finance/summary', [TenantViewController::class, 'show'])->defaults('view', 'finance-summary')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview');
+    Route::get('/backoffice/finance/lock-periods', [TenantViewController::class, 'show'])->defaults('view', 'lock-periods')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview');
 });
 
-Route::post('/register/step-1', function (Request $request) {
-    $validated = $request->validate([
-        'name' => ['required', 'string', 'max:120'],
-        'email' => ['required', 'email', 'max:190'],
-        'phone' => ['nullable', 'string', 'max:30'],
-        'password' => ['required', 'string', 'min:8', 'confirmed'],
-        'accept_terms' => ['accepted'],
-    ]);
-
-    $request->session()->put('onboarding.step1', [
-        'name' => $validated['name'],
-        'email' => strtolower($validated['email']),
-        'phone' => $validated['phone'] ?? null,
-        'password' => $validated['password'],
-    ]);
-
-    return redirect('/register/step-2');
-});
-
-Route::get('/register/step-2', function (Request $request) {
-    if (! $request->session()->has('onboarding.step1')) {
-        return redirect('/register/step-1');
-    }
-
-    $tenantId = Schema::hasTable('tenants') ? Tenant::query()->value('id') : null;
-
-    return view('onboarding-company-profile', [
-        'tenantId' => $tenantId,
-        'showMenu' => false,
-    ]);
-});
-
-Route::post('/register/step-2', function (Request $request) {
-    if (! $request->session()->has('onboarding.step1')) {
-        return redirect('/register/step-1');
-    }
-
-    $validated = $request->validate([
-        'store_name' => ['required', 'string', 'max:190'],
-        'operational_address' => ['nullable', 'string', 'max:500'],
-        'business_category' => ['nullable', 'in:fnb,retail,service,other'],
-        'timezone' => ['nullable', 'string', 'max:64'],
-    ]);
-
-    $tenant = Tenant::query()->first();
-    $timezone = $validated['timezone'] ?? 'Asia/Jakarta';
-
-    if ($tenant) {
-        $tenant->name = $validated['store_name'];
-        $tenant->timezone = $timezone;
-        $tenant->save();
-    } else {
-        $tenant = Tenant::query()->create([
-            'name' => $validated['store_name'],
-            'timezone' => $timezone,
-            'inventory_valuation_method' => 'average',
-        ]);
-    }
-
-    $userData = $request->session()->get('onboarding.step1');
-
-    $owner = User::query()
-        ->where('tenant_id', $tenant->id)
-        ->where('email', $userData['email'])
-        ->first();
-
-    if (! $owner) {
-        $owner = User::query()->create([
-            'tenant_id' => $tenant->id,
-            'name' => $userData['name'],
-            'email' => $userData['email'],
-            'password' => Hash::make($userData['password']),
-            'failed_login_attempts' => 0,
-        ]);
-    }
-
-    $request->session()->put('onboarding.step2', [
-        'tenant_id' => $tenant->id,
-        'user_id' => $owner->id,
-        'store_name' => $validated['store_name'],
-        'operational_address' => $validated['operational_address'] ?? null,
-        'business_category' => $validated['business_category'] ?? null,
-    ]);
-
-    return redirect('/register/step-3');
-});
-
-Route::get('/register/step-3', function (Request $request) {
-    if (! $request->session()->has('onboarding.step2')) {
-        return redirect('/register/step-2');
-    }
-
-    $tenantId = Schema::hasTable('tenants') ? Tenant::query()->value('id') : null;
-
-    return view('onboarding-inventory-method', [
-        'tenantId' => $tenantId,
-        'showMenu' => false,
-    ]);
-});
-
-Route::post('/register/step-3', function (Request $request) {
-    if (! $request->session()->has('onboarding.step2')) {
-        return redirect('/register/step-2');
-    }
-
-    $validated = $request->validate([
-        'valuation_method' => ['required', 'in:fifo,average'],
-    ]);
-
-    $step2 = $request->session()->get('onboarding.step2');
-
-    Tenant::query()
-        ->where('id', $step2['tenant_id'])
-        ->update(['inventory_valuation_method' => $validated['valuation_method']]);
-
-    $request->session()->put('onboarding.step3', [
-        'valuation_method' => $validated['valuation_method'],
-    ]);
-
-    return redirect('/register/step-4');
-});
-
-Route::get('/register/step-4', function (Request $request) {
-    if (! $request->session()->has('onboarding.step3')) {
-        return redirect('/register/step-3');
-    }
-
-    $tenantId = Schema::hasTable('tenants') ? Tenant::query()->value('id') : null;
-
-    return view('onboarding-product-first', [
-        'tenantId' => $tenantId,
-        'showMenu' => false,
-    ]);
-});
-
-Route::post('/register/step-4', function (Request $request) {
-    if (! $request->session()->has('onboarding.step3')) {
-        return redirect('/register/step-3');
-    }
-
-    $step2 = $request->session()->get('onboarding.step2');
-    $skipProduct = $request->boolean('skip_product');
-
-    if (! $skipProduct) {
-        $validated = $request->validate([
-            'name' => ['required', 'string', 'max:190'],
-            'sku' => ['nullable', 'string', 'max:100'],
-            'category' => ['nullable', 'string', 'max:100'],
-            'hpp_average' => ['required', 'numeric', 'min:0'],
-            'price' => ['required', 'numeric', 'min:0'],
-            'initial_stock' => ['required', 'numeric', 'min:0'],
-        ]);
-
-        $sku = trim((string) ($validated['sku'] ?? ''));
-        if ($sku === '') {
-            $sku = 'SKU-'.strtoupper(substr(md5($validated['name'].microtime(true)), 0, 8));
-        }
-
-        Product::query()->create([
-            'tenant_id' => $step2['tenant_id'],
-            'name' => $validated['name'],
-            'sku' => $sku,
-            'price' => $validated['price'],
-            'hpp_average' => $validated['hpp_average'],
-            'min_stock' => 0,
-            'track_stock' => true,
-            'is_active' => true,
-            'created_by' => $step2['user_id'] ?? null,
-            'updated_by' => $step2['user_id'] ?? null,
-        ]);
-    }
-
-    $request->session()->put('onboarding.completed', true);
-    $request->session()->forget([
-        'onboarding.step1',
-        'onboarding.step2',
-        'onboarding.step3',
-    ]);
-
-    return redirect('/');
-});
-
-Route::get('/menu', function () {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('menu', [
-        'tenantId' => $tenantId,
-    ]);
-});
-
-Route::get('/menu/{section}', function (string $section) {
-    $tenantId = Tenant::query()->value('id');
-    $sections = [
-        'management' => [
-            'title' => 'Manajemen',
-            'items' => [
-                ['label' => 'Barang atau Jasa', 'icon' => 'inventory_2', 'href' => '/products'],
-                ['label' => 'Kategori Barang', 'icon' => 'grid_view', 'href' => '/categories'],
-                ['label' => 'Manajemen Stok', 'icon' => 'conveyor_belt', 'href' => '/inventory'],
-                ['label' => 'Pembelian Barang', 'icon' => 'shopping_cart', 'href' => '/purchases/new'],
-                ['label' => 'Pelanggan dan Supplier', 'icon' => 'groups', 'href' => '/customers'],
-                ['label' => 'Hutang dan Piutang', 'icon' => 'receipt_long', 'href' => '/lock-periods'],
-                ['label' => 'Diskon, Pajak, dan Biaya', 'icon' => 'percent', 'href' => '/settings/tax-promo'],
-                ['label' => 'Stok Opname', 'icon' => 'edit_note', 'href' => '/stock-adjustment'],
-                ['label' => 'Marketing', 'icon' => 'stars', 'href' => '/loyalty'],
-            ],
-        ],
-        'sales' => [
-            'title' => 'Transaksi Penjualan',
-            'items' => [
-                ['label' => 'Kasir POS', 'icon' => 'point_of_sale', 'href' => '/kasir'],
-                ['label' => 'Riwayat Penjualan', 'icon' => 'history', 'href' => '/sales-history'],
-                ['label' => 'Void Transaksi', 'icon' => 'assignment_return', 'href' => '/sales-void-refund'],
-            ],
-        ],
-        'purchases' => [
-            'title' => 'Pembelian ke Supplier',
-            'items' => [
-                ['label' => 'Daftar Pembelian', 'icon' => 'receipt_long', 'href' => '/purchases/detail'],
-                ['label' => 'Buat Pembelian Baru', 'icon' => 'add_circle', 'href' => '/purchases/new'],
-                ['label' => 'Detail Pembelian', 'icon' => 'description', 'href' => '/purchases/detail'],
-                ['label' => 'Penerimaan Barang', 'icon' => 'inventory_2', 'href' => '/receiving'],
-                ['label' => 'Retur Pembelian', 'icon' => 'assignment_return', 'href' => '/purchase-returns'],
-            ],
-        ],
-        'finance' => [
-            'title' => 'Keuangan',
-            'items' => [
-                ['label' => 'Keuangan', 'icon' => 'account_balance_wallet', 'href' => '/finance-summary'],
-                ['label' => 'Riwayat Transaksi Kas/Bank', 'icon' => 'history', 'href' => '/lock-periods'],
-            ],
-        ],
-        'shift' => [
-            'title' => 'Shift',
-            'items' => [
-                ['label' => 'Buka Shift', 'icon' => 'update', 'href' => '/shift/open'],
-                ['label' => 'Tutup Shift', 'icon' => 'lock_clock', 'href' => '/shift/close'],
-                ['label' => 'Riwayat Shift', 'icon' => 'history', 'href' => '/shift/close-summary'],
-            ],
-        ],
-        'reports' => [
-            'title' => 'Laporan',
-            'items' => [
-                ['label' => 'Ringkasan Penjualan', 'icon' => 'bar_chart', 'href' => '/analytics'],
-                ['label' => 'Laporan Laba Rugi', 'icon' => 'trending_up', 'href' => '/finance-summary'],
-                ['label' => 'Laporan Arus Kas', 'icon' => 'savings', 'href' => '/finance-summary'],
-                ['label' => 'Laporan Penjualan', 'icon' => 'list_alt', 'href' => '/sales-history'],
-                ['label' => 'Laporan Pembelian', 'icon' => 'shopping_cart', 'href' => '/purchases/detail'],
-                ['label' => 'Laporan Persediaan', 'icon' => 'inventory_2', 'href' => '/stock-card'],
-                ['label' => 'Laporan Pembayaran', 'icon' => 'payments', 'href' => '/finance-summary'],
-            ],
-        ],
-        'settings' => [
-            'title' => 'Pengaturan',
-            'items' => [
-                ['label' => 'Toko', 'icon' => 'store', 'href' => '/branches'],
-                ['label' => 'Bagan Akun (COA)', 'icon' => 'account_balance', 'href' => '/settings/chart-of-accounts'],
-                ['label' => 'Database / Sinkronisasi', 'icon' => 'database', 'href' => '/menu'],
-                ['label' => 'Printer & Struk', 'icon' => 'print', 'href' => '/menu'],
-                ['label' => 'Manajemen Staff', 'icon' => 'person', 'href' => '/users'],
-                ['label' => 'E-Wallet', 'icon' => 'account_balance_wallet', 'href' => '/menu'],
-                ['label' => 'Notifikasi', 'icon' => 'notifications', 'href' => '/menu'],
-                ['label' => 'Pembayaran / Langganan', 'icon' => 'payments', 'href' => '/menu'],
-                ['label' => 'Pengaturan Transaksi', 'icon' => 'tune', 'href' => '/settings/tax-promo'],
-                ['label' => 'Valuation Persediaan', 'icon' => 'inventory', 'href' => '/settings/inventory-valuation'],
-                ['label' => 'Audit Valuation', 'icon' => 'history', 'href' => '/settings/inventory-valuation-audit'],
-                ['label' => 'Observability', 'icon' => 'monitoring', 'href' => '/settings/observability'],
-            ],
-        ],
-        'other' => [
-            'title' => 'Lainnya',
-            'items' => [
-                ['label' => 'Referral', 'icon' => 'group', 'href' => '/menu'],
-                ['label' => 'Toko Online Saya', 'icon' => 'storefront', 'href' => '/menu'],
-                ['label' => 'Pusat Bantuan', 'icon' => 'support_agent', 'href' => '/menu'],
-            ],
-        ],
-    ];
-
-    if (!array_key_exists($section, $sections)) {
-        abort(404);
-    }
-
-    return view('menu-section', [
-        'tenantId' => $tenantId,
-        'title' => $sections[$section]['title'],
-        'items' => $sections[$section]['items'],
-    ]);
-});
-
-Route::get('/inventory', function () {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('inventory', [
-        'tenantId' => $tenantId,
-    ]);
-});
-
-Route::get('/stock-card', function () {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('stock-card', [
-        'tenantId' => $tenantId,
-    ]);
-});
-
-Route::get('/settings/chart-of-accounts', function () {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('chart-of-accounts', [
-        'tenantId' => $tenantId,
-    ]);
-});
-
-Route::get('/settings/chart-of-accounts/{account}', function (string $account) {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('chart-of-accounts-detail', [
-        'tenantId' => $tenantId,
-        'accountId' => $account,
-    ]);
-});
-
-Route::get('/settings/bank-accounts/{account}', function (string $account) {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('bank-account-detail', [
-        'tenantId' => $tenantId,
-        'accountId' => $account,
-    ]);
-});
-
-Route::get('/stock-adjustment', function () {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('stock-adjustment', [
-        'tenantId' => $tenantId,
-    ]);
-});
-
-Route::get('/analytics', function () {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('analytics', [
-        'tenantId' => $tenantId,
-    ]);
-});
-
-Route::get('/products/new', function () {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('product-create', [
-        'tenantId' => $tenantId,
-    ]);
-});
-
-Route::get('/products/{product}/edit', function (string $product) {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('product-edit', [
-        'tenantId' => $tenantId,
-        'productId' => $product,
-    ]);
-});
-
-Route::get('/categories', function () {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('categories', [
-        'tenantId' => $tenantId,
-    ]);
-});
-
-Route::get('/categories/new', function () {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('category-create', [
-        'tenantId' => $tenantId,
-    ]);
-});
-
-Route::get('/categories/{category}/edit', function (string $category) {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('category-edit', [
-        'tenantId' => $tenantId,
-        'categoryId' => $category,
-    ]);
-});
-
-Route::get('/customers', function () {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('customers', [
-        'tenantId' => $tenantId,
-    ]);
-});
-
-Route::get('/suppliers', function () {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('suppliers', [
-        'tenantId' => $tenantId,
-    ]);
-});
-
-Route::get('/receiving', function () {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('receiving', [
-        'tenantId' => $tenantId,
-    ]);
-});
-
-Route::get('/branches', function () {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('branches', [
-        'tenantId' => $tenantId,
-    ]);
-});
-
-Route::get('/products', function () {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('products', [
-        'tenantId' => $tenantId,
-    ]);
-});
-
-Route::get('/products/detail', function () {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('product-detail', [
-        'tenantId' => $tenantId,
-    ]);
-});
-
-Route::get('/sales-history', function () {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('sales-history', [
-        'tenantId' => $tenantId,
-    ]);
-});
-
-Route::get('/kasir', function () {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('kasir', [
-        'tenantId' => $tenantId,
-    ]);
-});
-
-Route::get('/payment-method', function () {
-    $tenantId = Tenant::query()->value('id');
-
-    $bankParent = ChartOfAccount::query()
-        ->where('code', '1102')
-        ->whereNull('parent_id')
-        ->first();
-
-    if (! $bankParent) {
-        $bankParent = ChartOfAccount::query()
-            ->whereNull('parent_id')
-            ->where('name', 'like', '%bank%')
-            ->orderBy('code')
-            ->first();
-    }
-
-    if (! $bankParent) {
-        $mappedId = AccountMapping::query()->value('bank_account_id');
-        if ($mappedId) {
-            $mapped = ChartOfAccount::query()->find($mappedId);
-            if ($mapped) {
-                $bankParent = $mapped->parent_id
-                    ? ChartOfAccount::query()->find($mapped->parent_id)
-                    : $mapped;
-            }
-        }
-    }
-
-    $bankAccounts = collect();
-    if ($bankParent) {
-        $bankAccounts = ChartOfAccount::query()
-            ->where('parent_id', $bankParent->id)
-            ->orderBy('code')
-            ->get(['id', 'code', 'name', 'parent_id'])
-            ->filter(fn ($account) => preg_match('/^11\d+$/', (string) ($account->code ?? '')));
-
-        if ($bankAccounts->isEmpty()) {
-            $bankAccounts = preg_match('/^11\d+$/', (string) ($bankParent->code ?? ''))
-                ? collect([$bankParent])
-                : collect();
-        }
-    }
-
-    return view('payment-method', [
-        'tenantId' => $tenantId,
-        'bankAccounts' => $bankAccounts,
-    ]);
-});
-
-Route::get('/receipt-preview', function () {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('receipt-preview', [
-        'tenantId' => $tenantId,
-    ]);
-});
-
-Route::get('/sales-detail', function () {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('sales-detail', [
-        'tenantId' => $tenantId,
-    ]);
-});
-
-Route::get('/sales-void-refund', function () {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('void-refund', [
-        'tenantId' => $tenantId,
-    ]);
-});
-
-Route::get('/shift/open', function () {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('shift-open', [
-        'tenantId' => $tenantId,
-    ]);
-});
-
-Route::get('/branches/edit', function () {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('branch-edit', [
-        'tenantId' => $tenantId,
-    ]);
-});
-
-Route::get('/purchases/new', function () {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('purchase-create', [
-        'tenantId' => $tenantId,
-    ]);
-});
-
-Route::get('/receiving/action', function () {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('receiving-action', [
-        'tenantId' => $tenantId,
-    ]);
-});
-
-Route::get('/shift/close', function () {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('shift-close', [
-        'tenantId' => $tenantId,
-    ]);
-});
-
-Route::get('/shift/close-summary', function () {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('shift-close-summary', [
-        'tenantId' => $tenantId,
-    ]);
-});
-
-Route::get('/purchases/detail', function () {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('purchase-detail', [
-        'tenantId' => $tenantId,
-    ]);
-});
-
-Route::get('/purchase-returns', function () {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('purchase-return', [
-        'tenantId' => $tenantId,
-    ]);
-});
-
-Route::get('/stock-alerts', function () {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('stock-alerts', [
-        'tenantId' => $tenantId,
-    ]);
-});
-
-Route::get('/users', function () {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('users', [
-        'tenantId' => $tenantId,
-    ]);
-});
-
-Route::get('/settings/tax-promo', function () {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('tax-promo', [
-        'tenantId' => $tenantId,
-    ]);
-});
-
-Route::get('/settings/inventory-valuation', function () {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('inventory-valuation-settings', [
-        'tenantId' => $tenantId,
-    ]);
-});
-
-Route::get('/settings/inventory-valuation-audit', function () {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('inventory-valuation-audit', [
-        'tenantId' => $tenantId,
-    ]);
-});
-
-Route::get('/settings/observability', function () {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('observability', [
-        'tenantId' => $tenantId,
-    ]);
-});
-
-Route::get('/finance-summary', function () {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('finance-summary', [
-        'tenantId' => $tenantId,
-    ]);
-});
-
-Route::get('/lock-periods', function () {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('lock-periods', [
-        'tenantId' => $tenantId,
-    ]);
-});
-
-Route::get('/stock-transfers', function () {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('stock-transfers', [
-        'tenantId' => $tenantId,
-    ]);
-});
-
-Route::get('/loyalty', function () {
-    $tenantId = Tenant::query()->value('id');
-
-    return view('loyalty', [
-        'tenantId' => $tenantId,
-    ]);
-});
+Route::get('/platform/dashboard', [PlatformDashboardController::class, 'index']);
