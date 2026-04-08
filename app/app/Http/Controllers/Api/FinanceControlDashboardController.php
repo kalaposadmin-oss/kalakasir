@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\DailyFinanceControlService;
+use App\Support\GovernanceRequestContext;
 use App\Support\TenantContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class FinanceControlDashboardController extends Controller
 {
@@ -16,6 +18,7 @@ class FinanceControlDashboardController extends Controller
 
     public function index(Request $request)
     {
+        $startedAt = microtime(true);
         $tenantId = TenantContext::id();
         if (! $tenantId) {
             return response()->json([
@@ -33,10 +36,17 @@ class FinanceControlDashboardController extends Controller
             ? CarbonImmutable::parse($validated['date'], 'UTC')->toDateString()
             : CarbonImmutable::now('UTC')->toDateString();
 
-        $today = $this->service->capture($tenantId, $date);
+        $today = $this->service->calculate($tenantId, $date);
 
         $weekStart = CarbonImmutable::parse($date, 'UTC')->subDays(6)->toDateString();
-        $weekRows = $this->service->getRange($tenantId, $weekStart, $date);
+        $weekRows = collect($this->service->getRange($tenantId, $weekStart, $date))
+            ->keyBy('snapshot_date');
+
+        $weekRows[$today['snapshot_date']] = $today;
+        $weekRows = $weekRows
+            ->sortKeys()
+            ->values()
+            ->all();
 
         $weekly = [
             'sales_total' => round(collect($weekRows)->sum('sales_total'), 2),
@@ -53,11 +63,12 @@ class FinanceControlDashboardController extends Controller
             'kpi_today' => $today,
             'kpi_week' => $weekly,
             'snapshots' => $weekRows,
-        ]);
+        ], 200, $this->financeResponseHeaders($startedAt, true));
     }
 
     public function snapshot(Request $request)
     {
+        $startedAt = microtime(true);
         $tenantId = TenantContext::id();
         if (! $tenantId) {
             return response()->json([
@@ -69,22 +80,37 @@ class FinanceControlDashboardController extends Controller
 
         $validated = $request->validate([
             'date' => ['nullable', 'date'],
+            ...GovernanceRequestContext::validationRules(),
         ]);
 
-        $date = isset($validated['date'])
-            ? CarbonImmutable::parse($validated['date'], 'UTC')->toDateString()
-            : CarbonImmutable::now('UTC')->toDateString();
+        try {
+            $governance = GovernanceRequestContext::fromRequest($request, $validated);
+            GovernanceRequestContext::enforceRoleConsistency($governance);
+            GovernanceRequestContext::enforceApprovalPolicy($governance, 'finance_control_snapshot');
 
-        $snapshot = $this->service->capture($tenantId, $date);
+            $date = isset($validated['date'])
+                ? CarbonImmutable::parse($validated['date'], 'UTC')->toDateString()
+                : CarbonImmutable::now('UTC')->toDateString();
 
-        return response()->json([
-            'status' => 'snapshotted',
-            'snapshot' => $snapshot,
-        ]);
+            $snapshot = $this->service->capture($tenantId, $date);
+
+            return response()->json([
+                'status' => 'snapshotted',
+                'snapshot' => $snapshot,
+                'governance' => GovernanceRequestContext::responseMeta($governance),
+            ], 200, $this->financeResponseHeaders($startedAt, false));
+        } catch (ValidationException $exception) {
+            return response()->json([
+                'code' => 'VALIDATION_ERROR',
+                'message' => 'Data tidak valid.',
+                'details' => $exception->errors(),
+            ], 422, $this->financeResponseHeaders($startedAt, false));
+        }
     }
 
     public function export(Request $request)
     {
+        $startedAt = microtime(true);
         $tenantId = TenantContext::id();
         if (! $tenantId) {
             return response()->json([
@@ -106,8 +132,7 @@ class FinanceControlDashboardController extends Controller
             ? CarbonImmutable::parse($validated['from'], 'UTC')->toDateString()
             : CarbonImmutable::parse($toDate, 'UTC')->subDays(6)->toDateString();
 
-        $this->service->capture($tenantId, $toDate);
-        $rows = $this->service->getRange($tenantId, $fromDate, $toDate);
+        $rows = $this->service->readRange($tenantId, $fromDate, $toDate);
 
         $lines = [
             'snapshot_date,sales_total,cogs_total,cash_closing_total,debt_due_7d,cash_difference_total,shift_closed_count,transaction_count',
@@ -128,9 +153,17 @@ class FinanceControlDashboardController extends Controller
 
         $csv = implode("\n", $lines);
 
-        return response($csv, 200, [
+        return response($csv, 200, array_merge([
             'Content-Type' => 'text/csv; charset=UTF-8',
             'Content-Disposition' => 'attachment; filename="finance-control-'.$fromDate.'-to-'.$toDate.'.csv"',
-        ]);
+        ], $this->financeResponseHeaders($startedAt, true)));
+    }
+
+    private function financeResponseHeaders(float $startedAt, bool $readOnly): array
+    {
+        return [
+            'Server-Timing' => 'finance-control;dur='.number_format((microtime(true) - $startedAt) * 1000, 2, '.', ''),
+            'X-Finance-Read-Only' => $readOnly ? '1' : '0',
+        ];
     }
 }

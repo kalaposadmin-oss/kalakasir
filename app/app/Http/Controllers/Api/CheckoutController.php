@@ -10,10 +10,9 @@ use App\Http\Controllers\Controller;
 use App\Exceptions\ShiftValidationException;
 use App\Services\AnomalyService;
 use App\Services\CheckoutService;
-use App\Models\Shift;
 use App\Support\TenantContext;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use InvalidArgumentException;
 
 class CheckoutController extends Controller
@@ -24,56 +23,90 @@ class CheckoutController extends Controller
 
     public function store(Request $request)
     {
+        $startedAt = microtime(true);
+        $tenantId = TenantContext::id();
+
         $validated = $request->validate([
             'idempotency_key' => ['required', 'string', 'max:255'],
-            'branch_id' => ['required', 'uuid'],
-            'shift_id' => ['required', 'uuid'],
-            'register_id' => ['required', 'uuid'],
-            'customer_id' => ['nullable', 'uuid'],
+            'branch_id' => ['required', 'uuid', $tenantId
+                ? Rule::exists('branches', 'id')->where('tenant_id', $tenantId)
+                : 'exists:branches,id'],
+            'shift_id' => ['required', 'uuid', $tenantId
+                ? Rule::exists('shifts', 'id')->where('tenant_id', $tenantId)
+                : 'exists:shifts,id'],
+            'register_id' => ['required', 'uuid', $tenantId
+                ? Rule::exists('registers', 'id')->where('tenant_id', $tenantId)
+                : 'exists:registers,id'],
+            'customer_id' => ['nullable', 'uuid', $tenantId
+                ? Rule::exists('customers', 'id')->where('tenant_id', $tenantId)
+                : 'exists:customers,id'],
             'transaction_date' => ['nullable', 'date'],
             'subtotal' => ['required', 'numeric', 'min:0'],
             'discount' => ['required', 'numeric', 'min:0'],
             'tax' => ['required', 'numeric', 'min:0'],
             'total' => ['required', 'numeric', 'min:0'],
             'items' => ['required', 'array', 'min:1'],
-            'items.*.product_id' => ['required', 'uuid'],
+            'items.*.product_id' => ['required', 'uuid', $tenantId
+                ? Rule::exists('products', 'id')->where('tenant_id', $tenantId)
+                : 'exists:products,id'],
             'items.*.product_variant_id' => ['nullable', 'uuid'],
-            'items.*.location_id' => ['required', 'uuid'],
+            'items.*.location_id' => ['required', 'uuid', $tenantId
+                ? Rule::exists('locations', 'id')->where('tenant_id', $tenantId)
+                : 'exists:locations,id'],
             'items.*.qty' => ['required', 'numeric', 'min:0.01'],
             'items.*.price' => ['required', 'numeric', 'min:0'],
+            'items.*.line_type' => ['nullable', 'string', 'in:product,fee'],
             'items.*.discount' => ['nullable', 'numeric', 'min:0'],
+            'items.*.discounts' => ['nullable', 'array'],
+            'items.*.discounts.*.type' => ['required_with:items.*.discounts', 'string', 'in:fixed,percent'],
+            'items.*.discounts.*.value' => ['required_with:items.*.discounts', 'numeric', 'min:0'],
+            'items.*.discounts.*.label' => ['nullable', 'string', 'max:120'],
+            'items.*.discounts.*.source' => ['nullable', 'string', 'max:60'],
+            'items.*.discounts.*.reference_id' => ['nullable', 'string', 'max:120'],
+            'transaction_discounts' => ['nullable', 'array'],
+            'transaction_discounts.*.type' => ['required_with:transaction_discounts', 'string', 'in:fixed,percent'],
+            'transaction_discounts.*.value' => ['required_with:transaction_discounts', 'numeric', 'min:0'],
+            'transaction_discounts.*.label' => ['nullable', 'string', 'max:120'],
+            'transaction_discounts.*.source' => ['nullable', 'string', 'max:60'],
+            'transaction_discounts.*.reference_id' => ['nullable', 'string', 'max:120'],
             'payments' => ['required', 'array', 'min:1'],
-            'payments.*.account_id' => ['required', 'uuid'],
+            'payments.*.account_id' => ['required', 'uuid', $tenantId
+                ? Rule::exists('chart_of_accounts', 'id')->where('tenant_id', $tenantId)
+                : 'exists:chart_of_accounts,id'],
             'payments.*.method' => ['required', 'string', 'max:50'],
             'payments.*.amount' => ['required', 'numeric', 'min:0.01'],
-            'payments.*.payment_method_id' => ['nullable', 'uuid'],
+            'payments.*.payment_method_id' => ['nullable', 'uuid', $tenantId
+                ? Rule::exists('payment_methods', 'id')->where('tenant_id', $tenantId)
+                : 'exists:payment_methods,id'],
         ]);
 
         try {
             $result = $this->service->handle($validated, $this->resolveActorId($request, $validated));
 
-            return response()->json([
+            return $this->timedJsonResponse([
                 'sale_id' => $result['sale_id'],
                 'idempotent' => $result['idempotent'],
-            ], $result['idempotent'] ? 200 : 201);
+            ], $result['idempotent'] ? 200 : 201, $startedAt, [
+                'X-Checkout-Idempotent' => $result['idempotent'] ? '1' : '0',
+            ]);
         } catch (LockPeriodException $exception) {
-            return response()->json([
+            return $this->timedJsonResponse([
                 'code' => $exception->errorCode(),
                 'message' => $exception->getMessage(),
                 'details' => [],
-            ], $exception->status());
+            ], $exception->status(), $startedAt);
         } catch (InsufficientStockException $exception) {
-            return response()->json([
+            return $this->timedJsonResponse([
                 'code' => 'INSUFFICIENT_STOCK',
                 'message' => $exception->getMessage(),
                 'details' => $exception->context(),
-            ], 409);
+            ], 409, $startedAt);
         } catch (ShiftValidationException $exception) {
-            return response()->json([
+            return $this->timedJsonResponse([
                 'code' => $exception->errorCode(),
                 'message' => $exception->getMessage(),
                 'details' => [],
-            ], $exception->status());
+            ], $exception->status(), $startedAt);
         } catch (InvalidTransactionDateException $exception) {
             $tenantId = TenantContext::id();
             if ($tenantId) {
@@ -88,46 +121,35 @@ class CheckoutController extends Controller
                 );
             }
 
-            return response()->json([
+            return $this->timedJsonResponse([
                 'code' => 'INVALID_TRANSACTION_DATE',
                 'message' => $exception->getMessage(),
                 'details' => [],
-            ], 422);
+            ], 422, $startedAt);
         } catch (AutoConsumeValidationException $exception) {
-            return response()->json([
+            return $this->timedJsonResponse([
                 'code' => $exception->errorCode(),
                 'message' => $exception->getMessage(),
                 'details' => $exception->details(),
-            ], $exception->status());
+            ], $exception->status(), $startedAt);
         } catch (InvalidArgumentException $exception) {
-            return response()->json([
+            return $this->timedJsonResponse([
                 'code' => 'INVALID_TOTAL',
                 'message' => $exception->getMessage(),
                 'details' => [],
-            ], 422);
+            ], 422, $startedAt);
         }
     }
 
     private function resolveActorId(Request $request, array $validated): ?string
     {
-        $actorId = $request->user()?->id;
-        if ($actorId) {
-            return $actorId;
-        }
+        return $request->user()?->id;
+    }
 
-        if (! app()->environment('local')) {
-            return null;
-        }
+    private function timedJsonResponse(array $payload, int $status, float $startedAt, array $headers = [])
+    {
+        $headers['Server-Timing'] = 'checkout;dur='.number_format((microtime(true) - $startedAt) * 1000, 2, '.', '');
 
-        $tenantId = TenantContext::id();
-        if (! $tenantId) {
-            return null;
-        }
-
-        return DB::table('shifts')
-            ->where('tenant_id', $tenantId)
-            ->where('id', (string) ($validated['shift_id'] ?? ''))
-            ->where('status', Shift::STATUS_OPEN)
-            ->value('user_id');
+        return response()->json($payload, $status, $headers);
     }
 }
