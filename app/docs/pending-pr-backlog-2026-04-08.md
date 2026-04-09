@@ -288,12 +288,16 @@ Status eksekusi terbaru:
 
 - middleware access/gating sudah di-commit: `05fdf5f` `feat(app): add middleware access and portal gating layer`
 - batch operasional tersisa sekarang hanya command/deploy workflow
+- class command operasional `audit:purge` dan `subscriptions:enforce-lifecycle` masih menjadi slice kecil terpisah yang bisa diangkat setelah workflow/console route batch
 
 Dokumen referensi tambahan untuk batch operasional:
 
 - `docs/pr-summary-ops-commands-deploy-2026-04-09.md`
 - `docs/pr-ready-ops-commands-deploy-2026-04-09.md`
 - `docs/commit-message-ops-commands-deploy-2026-04-09.md`
+- `docs/pr-summary-ops-command-classes-2026-04-09.md`
+- `docs/pr-ready-ops-command-classes-2026-04-09.md`
+- `docs/commit-message-ops-command-classes-2026-04-09.md`
 
 Langkah saat dilanjutkan:
 
