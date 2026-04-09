@@ -299,6 +299,17 @@ Dokumen referensi tambahan untuk batch operasional:
 - `docs/pr-ready-ops-command-classes-2026-04-09.md`
 - `docs/commit-message-ops-command-classes-2026-04-09.md`
 
+Candidate slice kecil berikutnya:
+
+- fondasi `product item type` untuk `product_mode`, `item_type`, checkpoint backfill, dan helper validation
+- jaga tetap terpisah dari `ProductController`, `MaterialController`, variant/register schema, dan flow POS besar
+
+Dokumen referensi tambahan untuk slice fondasi ini:
+
+- `docs/pr-summary-product-item-type-foundation-2026-04-09.md`
+- `docs/pr-ready-product-item-type-foundation-2026-04-09.md`
+- `docs/commit-message-product-item-type-foundation-2026-04-09.md`
+
 Langkah saat dilanjutkan:
 
 1. review command safety dan dependency produksi
