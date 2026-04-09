@@ -6,15 +6,25 @@ use App\Http\Controllers\Controller;
 use App\Models\Customer;
 use App\Models\LoyaltyTier;
 use App\Models\Sale;
+use App\Support\TenantContext;
 
 class LoyaltyController extends Controller
 {
     public function index()
     {
-        $tiers = LoyaltyTier::query()->orderBy('min_points')->get(['id', 'name', 'min_points']);
+        $tenantId = TenantContext::id();
 
-        $customers = Customer::query()->get(['id', 'name']);
+        $tiers = LoyaltyTier::query()
+            ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
+            ->orderBy('min_points')
+            ->get(['id', 'name', 'min_points']);
+
+        $customers = Customer::query()
+            ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
+            ->get(['id', 'name']);
+
         $sales = Sale::query()
+            ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
             ->whereNotNull('customer_id')
             ->where('status', 'completed')
             ->get(['customer_id', 'total']);

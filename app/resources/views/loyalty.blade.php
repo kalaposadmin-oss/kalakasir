@@ -1,5 +1,29 @@
 @extends('layouts.app')
 
+@php
+    $loyaltyTenant = \App\Support\TenantContext::get();
+    $loyaltyUser = auth()->user();
+    $loyaltyRole = null;
+
+    if (! $loyaltyTenant && filled($loyaltyUser?->tenant_id)) {
+        $loyaltyTenant = \App\Models\Tenant::query()->find($loyaltyUser->tenant_id);
+    }
+
+    if ($loyaltyTenant && $loyaltyUser) {
+        $loyaltyRole = app(\App\Services\UserRoleResolverService::class)
+            ->resolveNormalizedRole((string) $loyaltyTenant->id, (string) $loyaltyUser->id);
+
+        if (! $loyaltyRole && filled($loyaltyUser->role ?? null)) {
+            $loyaltyRole = app(\App\Services\UserRoleResolverService::class)
+                ->normalize((string) $loyaltyUser->role);
+        }
+    }
+
+    abort_unless(in_array($loyaltyRole, ['warehouse', 'supervisor', 'admin', 'owner', 'superadmin'], true), 403);
+
+    $canManageLoyalty = in_array($loyaltyRole, ['admin', 'owner', 'superadmin'], true);
+@endphp
+
 @section('page_title', 'Loyalitas dan Member Tiers')
 @section('body_class', 'bg-background-light dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-display')
 @section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-background-light dark:bg-slate-950 shadow-2xl')
@@ -22,13 +46,7 @@
 @endpush
 
 @section('header')
-        <x-page-header title="Loyalitas Pelanggan" backUrl="/menu/management" :showMenuButton="false">
-            <x-slot name="actions">
-                <button class="flex items-center justify-center size-10 rounded-full bg-slate-100 dark:bg-slate-800" type="button" data-menu-trigger>
-                    <span class="material-symbols-outlined text-slate-600 dark:text-slate-400">menu</span>
-                </button>
-            </x-slot>
-        </x-page-header>
+        <x-page-header title="Loyalitas Pelanggan" backUrl="/backoffice/dashboard" :showMenuButton="true" />
 @endsection
 
 @section('content')
@@ -36,7 +54,9 @@
             <section class="p-4">
                 <div class="flex items-center justify-between mb-3 px-1">
                     <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wider">Level Keanggotaan</h2>
-                    <button class="text-xs font-semibold text-primary">Kelola Tier</button>
+                    @if ($canManageLoyalty)
+                        <button class="text-xs font-semibold text-primary">Kelola Tier</button>
+                    @endif
                 </div>
                 <div class="flex gap-3 overflow-x-auto pb-2 no-scrollbar" id="tier-list"></div>
             </section>
@@ -54,12 +74,14 @@
                 <div id="member-list" class="space-y-3"></div>
             </div>
         </div>
-        <div class="fixed bottom-24 right-6 left-6 max-w-[382px] mx-auto z-40">
-            <button class="w-full bg-primary text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-xl shadow-primary/30">
-                <span class="material-symbols-outlined">person_add</span>
-                Tambah Member Baru
-            </button>
-        </div>
+        @if ($canManageLoyalty)
+            <div class="fixed bottom-24 right-6 left-6 max-w-[382px] mx-auto z-40">
+                <button class="w-full bg-primary text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-xl shadow-primary/30">
+                    <span class="material-symbols-outlined">person_add</span>
+                    Tambah Member Baru
+                </button>
+            </div>
+        @endif
 
         <script>
             (() => {
