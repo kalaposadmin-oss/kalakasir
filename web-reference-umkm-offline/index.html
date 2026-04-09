@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>UMKM Offline UI Reference</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="top-status">
+      <div class="brand">Warungku Offline</div>
+      <div id="networkBadge" class="badge offline">OFFLINE</div>
+    </header>
+
+    <main class="content">
+      <section class="card">
+        <h2>Kasir Cepat</h2>
+        <p>Alur sederhana: pilih 1 produk, bayar, selesai.</p>
+        <button id="sellButton" class="big-btn">Jual 1 Item</button>
+      </section>
+
+      <section class="card">
+        <h2>Status Sinkronisasi</h2>
+        <div class="status-row">
+          <span>Queue Pending</span>
+          <strong id="pendingCount">0</strong>
+        </div>
+        <div class="status-row">
+          <span>Transaksi Terakhir</span>
+          <strong id="lastTxStatus">-</strong>
+        </div>
+        <button id="syncNowButton" class="secondary-btn">Sync Sekarang</button>
+      </section>
+
+      <section class="card">
+        <h2>Riwayat Ringkas</h2>
+        <ul id="historyList" class="list"></ul>
+      </section>
+    </main>
+
+    <nav class="bottom-nav">
+      <button class="nav-item active">Kasir</button>
+      <button class="nav-item">Produk</button>
+      <button class="nav-item">Pelanggan</button>
+      <button class="nav-item">Shift</button>
+    </nav>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
