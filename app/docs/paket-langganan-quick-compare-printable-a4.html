@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Paket Langganan Kalakasir - Quick Compare A4</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 12mm;
+    }
+
+    :root {
+      --text: #111827;
+      --muted: #4b5563;
+      --line: #d1d5db;
+      --head: #0f172a;
+      --accent: #0b5d4f;
+      --bg-head: #f3f4f6;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: var(--text);
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      font-size: 12px;
+      line-height: 1.4;
+      background: #fff;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .sheet {
+      width: 100%;
+      max-width: 185mm;
+      margin: 0 auto;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 20px;
+      line-height: 1.2;
+      color: var(--head);
+    }
+
+    h2 {
+      margin: 8px 0 0;
+      font-size: 13px;
+      color: var(--accent);
+      letter-spacing: 0.2px;
+      text-transform: uppercase;
+    }
+
+    h3 {
+      margin: 14px 0 6px;
+      font-size: 12px;
+      color: var(--head);
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    p {
+      margin: 4px 0;
+    }
+
+    .meta {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px;
+      page-break-inside: avoid;
+    }
+
+    .card b {
+      color: var(--head);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    section,
+    tr,
+    td,
+    th,
+    .card {
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    .note-screen {
+      margin-top: 8px;
+      padding: 8px 10px;
+      border: 1px dashed var(--line);
+      border-radius: 8px;
+      background: #fafafa;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    thead th {
+      background: var(--bg-head);
+      color: var(--head);
+      font-weight: 700;
+      border: 1px solid var(--line);
+      padding: 6px 7px;
+      text-align: left;
+    }
+
+    tbody td {
+      border: 1px solid var(--line);
+      padding: 5px 7px;
+      vertical-align: top;
+    }
+
+    tbody td:nth-child(2),
+    tbody td:nth-child(3),
+    tbody td:nth-child(4) {
+      text-align: center;
+      width: 10%;
+      white-space: nowrap;
+    }
+
+    .yes {
+      font-weight: 700;
+      color: #065f46;
+    }
+
+    .no {
+      font-weight: 700;
+      color: #9f1239;
+    }
+
+    ul {
+      margin: 6px 0 0;
+      padding-left: 18px;
+    }
+
+    li {
+      margin: 2px 0;
+    }
+
+    .footer {
+      margin-top: 10px;
+      border-top: 1px solid var(--line);
+      padding-top: 7px;
+      color: var(--muted);
+      font-size: 10.5px;
+    }
+
+    @media print {
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .note-screen {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="sheet">
+    <header>
+      <h1>Paket Langganan Kalakasir</h1>
+      <h2>Quick Compare - 1 Halaman (A4)</h2>
+      <p class="meta">Tanggal: 2026-03-06 | Acuan fitur: app/config/feature-gating.json</p>
+      <p class="note-screen">Siap PDF: gunakan Print -> Save as PDF -> Paper size A4 -> Margin default.</p>
+    </header>
+
+    <section class="grid-3" aria-label="Ringkasan paket">
+      <article class="card">
+        <p><b>S (Starter)</b></p>
+        <p>Tahu kondisi usaha.</p>
+      </article>
+      <article class="card">
+        <p><b>M (Medium)</b></p>
+        <p>Mulai mengelola usaha.</p>
+      </article>
+      <article class="card">
+        <p><b>P (Pro)</b></p>
+        <p>Mengontrol usaha secara profesional.</p>
+      </article>
+    </section>
+
+    <section>
+      <h3>Perbandingan Inti</h3>
+      <table aria-label="Perbandingan paket">
+        <thead>
+          <tr>
+            <th>Fitur Utama</th>
+            <th>S</th>
+            <th>M</th>
+            <th>P</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>POS checkout, refund/void, hold bill, split payment sederhana</td><td class="yes">Ya</td><td class="yes">Ya</td><td class="yes">Ya</td></tr>
+          <tr><td>Buka/tutup shift + riwayat shift</td><td class="yes">Ya</td><td class="yes">Ya</td><td class="yes">Ya</td></tr>
+          <tr><td>Produk, kategori, harga jual/modal, stok minimum</td><td class="yes">Ya</td><td class="yes">Ya</td><td class="yes">Ya</td></tr>
+          <tr><td>Stok masuk/keluar, adjustment sederhana, notifikasi stok menipis</td><td class="yes">Ya</td><td class="yes">Ya</td><td class="yes">Ya</td></tr>
+          <tr><td>Supplier basic + histori pembelian sederhana</td><td class="yes">Ya</td><td class="yes">Ya</td><td class="yes">Ya</td></tr>
+          <tr><td>Pembelian basic + update stok otomatis</td><td class="yes">Ya</td><td class="yes">Ya</td><td class="yes">Ya</td></tr>
+          <tr><td>Laporan dasar + laba rugi sederhana</td><td class="yes">Ya</td><td class="yes">Ya</td><td class="yes">Ya</td></tr>
+          <tr><td>Pembelian lengkap (PO, receiving, retur)</td><td class="no">Tidak</td><td class="yes">Ya</td><td class="yes">Ya</td></tr>
+          <tr><td>Pelanggan, multi staff, multi cabang basic</td><td class="no">Tidak</td><td class="yes">Ya</td><td class="yes">Ya</td></tr>
+          <tr><td>Laporan bisnis lengkap + laporan pembayaran</td><td class="no">Tidak</td><td class="yes">Ya</td><td class="yes">Ya</td></tr>
+          <tr><td>Export laporan CSV/PDF</td><td class="no">Tidak</td><td class="yes">Ya</td><td class="yes">Ya</td></tr>
+          <tr><td>Akuntansi lengkap (L/R, neraca, arus kas, COA)</td><td class="no">Tidak</td><td class="no">Tidak</td><td class="yes">Ya</td></tr>
+          <tr><td>Lock period</td><td class="no">Tidak</td><td class="no">Tidak</td><td class="yes">Ya</td></tr>
+          <tr><td>Inventory advanced (stock card, FIFO, valuation)</td><td class="no">Tidak</td><td class="no">Tidak</td><td class="yes">Ya</td></tr>
+          <tr><td>Governance, observability, integrasi/API</td><td class="no">Tidak</td><td class="no">Tidak</td><td class="yes">Ya</td></tr>
+          <tr><td>Multi cabang advanced</td><td class="no">Tidak</td><td class="no">Tidak</td><td class="yes">Ya</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h3>Limit Contoh</h3>
+      <table aria-label="Limit paket">
+        <thead>
+          <tr>
+            <th>Paket</th>
+            <th>Cabang</th>
+            <th>Staff</th>
+            <th>Produk</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Starter</td><td>1</td><td>2</td><td>1000</td></tr>
+          <tr><td>Medium</td><td>3</td><td>10</td><td>5000</td></tr>
+          <tr><td>Pro</td><td>Unlimited</td><td>Unlimited</td><td>Unlimited</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h3>Rekomendasi Cepat</h3>
+      <ul>
+        <li><b>Starter:</b> cocok untuk UMKM kecil yang ingin tahu kondisi usaha harian.</li>
+        <li><b>Medium:</b> cocok untuk UMKM berkembang yang butuh operasional lebih rapi.</li>
+        <li><b>Pro:</b> cocok untuk bisnis serius yang butuh kontrol dan audit profesional.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h3>Script Sales/CS (30 Detik)</h3>
+      <p>
+        "Kalau fokusnya kasir harian, Starter sudah cukup. Kalau sudah butuh pembelian, supplier,
+        dan laporan operasional, pilih Medium. Kalau butuh multi-cabang, audit, integrasi,
+        serta kontrol keuangan lebih mendalam, pilih Pro."
+      </p>
+    </section>
+
+    <footer class="footer">
+      Cek paket aktif di Pengaturan &gt; Langganan (/settings/subscription).
+      Detail lengkap: app/docs/panduan-paket-langganan-dan-perbedaan.md.
+    </footer>
+  </main>
+</body>
+</html>
