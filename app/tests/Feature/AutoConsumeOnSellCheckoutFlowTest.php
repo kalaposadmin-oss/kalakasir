@@ -84,6 +84,82 @@ class AutoConsumeOnSellCheckoutFlowTest extends TestCase
         ]);
     }
 
+    public function test_variant_raw_material_consumes_exact_variant_bucket(): void
+    {
+        [$tenant, $user] = $this->bootApiActor('admin', 'admin+auto-consume-variant-raw-material@example.test');
+
+        $ctx = $this->prepareRecipeCheckoutContext(
+            $tenant,
+            $user->id,
+            rawMaterialStock: 10,
+            autoConsumeEnabled: true,
+            rawMaterialHasVariants: true,
+            recipeIncludesRawMaterialVariant: true
+        );
+
+        $response = $this->postJson('/api/v1/checkout', $ctx['payload'], $this->tenantHeaders($tenant->id));
+
+        $response->assertCreated();
+        $saleId = (string) $response->json('sale_id');
+
+        $this->assertDatabaseHas('stock_ledger', [
+            'tenant_id' => $tenant->id,
+            'reference_type' => 'sale_recipe_input',
+            'reference_id' => $saleId,
+            'product_id' => $ctx['raw_material_id'],
+            'product_variant_id' => $ctx['raw_material_variant_id'],
+            'qty_out' => 2.00,
+        ]);
+
+        $this->assertDatabaseHas('inventory_balances', [
+            'tenant_id' => $tenant->id,
+            'location_id' => $ctx['fixture']['location_id'],
+            'product_id' => $ctx['raw_material_id'],
+            'product_variant_id' => $ctx['raw_material_variant_id'],
+            'qty_on_hand' => 8.00,
+        ]);
+
+        $this->assertSame(0, DB::table('inventory_balances')
+            ->where('tenant_id', $tenant->id)
+            ->where('product_id', $ctx['raw_material_id'])
+            ->where('location_id', $ctx['fixture']['location_id'])
+            ->whereNull('product_variant_id')
+            ->count());
+
+        $this->assertDatabaseHas('inventory_cost_states', [
+            'tenant_id' => $tenant->id,
+            'product_id' => $ctx['raw_material_id'],
+            'product_variant_id' => $ctx['raw_material_variant_id'],
+            'location_id' => $ctx['fixture']['location_id'],
+            'qty_on_hand' => 8,
+        ]);
+    }
+
+    public function test_variant_raw_material_without_recipe_variant_fails_fast(): void
+    {
+        [$tenant, $user] = $this->bootApiActor('admin', 'admin+auto-consume-variant-missing-context@example.test');
+
+        $ctx = $this->prepareRecipeCheckoutContext(
+            $tenant,
+            $user->id,
+            rawMaterialStock: 10,
+            autoConsumeEnabled: true,
+            rawMaterialHasVariants: true,
+            recipeIncludesRawMaterialVariant: false
+        );
+
+        $response = $this->postJson('/api/v1/checkout', $ctx['payload'], $this->tenantHeaders($tenant->id));
+
+        $response->assertStatus(422)
+            ->assertJsonPath('code', 'AUTO_CONSUME_RECIPE_INVALID')
+            ->assertJsonPath('details.recipe.0', 'Bahan baku bervarian wajib menyimpan product_variant_id pada recipe.');
+
+        $this->assertDatabaseMissing('sales', [
+            'tenant_id' => $tenant->id,
+            'idempotency_key' => $ctx['payload']['idempotency_key'],
+        ]);
+    }
+
     public function test_retry_with_same_idempotency_key_does_not_double_consume(): void
     {
         [$tenant, $user] = $this->bootApiActor('admin', 'admin+auto-consume-idempotency@example.test');
@@ -205,6 +281,37 @@ class AutoConsumeOnSellCheckoutFlowTest extends TestCase
             'tenant_id' => $tenant->id,
             'reference_type' => 'sale_recipe_input',
             'reference_id' => $response->json('sale_id'),
+        ]);
+    }
+
+    public function test_batch_production_product_skips_auto_consume_even_when_recipe_exists(): void
+    {
+        [$tenant, $user] = $this->bootApiActor('admin', 'admin+batch-production-skip@example.test');
+
+        $ctx = $this->prepareRecipeCheckoutContext(
+            $tenant,
+            $user->id,
+            rawMaterialStock: 10,
+            autoConsumeEnabled: true,
+            withRecipe: true,
+            productionMode: Product::PRODUCTION_MODE_BATCH
+        );
+
+        $response = $this->postJson('/api/v1/checkout', $ctx['payload'], $this->tenantHeaders($tenant->id));
+
+        $response->assertCreated();
+
+        $this->assertDatabaseMissing('stock_ledger', [
+            'tenant_id' => $tenant->id,
+            'reference_type' => 'sale_recipe_input',
+            'reference_id' => $response->json('sale_id'),
+        ]);
+
+        $this->assertDatabaseHas('inventory_balances', [
+            'tenant_id' => $tenant->id,
+            'location_id' => $ctx['fixture']['location_id'],
+            'product_id' => $ctx['raw_material_id'],
+            'qty_on_hand' => 10.00,
         ]);
     }
 
@@ -433,7 +540,7 @@ class AutoConsumeOnSellCheckoutFlowTest extends TestCase
     }
 
     /**
-     * @return array{fixture: array<string, mixed>, payload: array<string, mixed>, raw_material_id: string}
+     * @return array{fixture: array<string, mixed>, payload: array<string, mixed>, raw_material_id: string, raw_material_variant_id: ?string}
      */
     private function prepareRecipeCheckoutContext(
         Tenant $tenant,
@@ -443,11 +550,15 @@ class AutoConsumeOnSellCheckoutFlowTest extends TestCase
         bool $allowNegativeRawMaterialStock = false,
         bool $invalidRecipeInputType = false,
         bool $withRecipe = true,
-        string $soldProductItemType = 'finished_good'
+        string $soldProductItemType = 'finished_good',
+        bool $rawMaterialHasVariants = false,
+        bool $recipeIncludesRawMaterialVariant = true,
+        string $productionMode = Product::PRODUCTION_MODE_AUTO_CONSUME_ON_SELL
     ): array {
         $fixture = $this->seedCheckoutFixture($tenant->id, $userId);
 
         $rawMaterialId = (string) Str::uuid();
+        $rawMaterialVariantId = null;
         $rawMaterialMode = $invalidRecipeInputType ? 'default' : 'add_on';
         $rawMaterialType = $invalidRecipeInputType ? 'finished_good' : 'raw_material';
 
@@ -462,6 +573,7 @@ class AutoConsumeOnSellCheckoutFlowTest extends TestCase
             'is_active' => true,
             'track_stock' => true,
             'product_mode' => $rawMaterialMode,
+            'production_mode' => Product::PRODUCTION_MODE_NONE,
             'item_type' => $rawMaterialType,
             'variants' => json_encode([]),
             'bom_items' => json_encode([]),
@@ -473,10 +585,28 @@ class AutoConsumeOnSellCheckoutFlowTest extends TestCase
             'deleted_at' => null,
         ]);
 
+        if ($rawMaterialHasVariants) {
+            $rawMaterialVariantId = (string) Str::uuid();
+
+            DB::table('product_variants')->insert([
+                'id' => $rawMaterialVariantId,
+                'tenant_id' => $tenant->id,
+                'product_id' => $rawMaterialId,
+                'sku' => 'RMV-'.Str::upper(Str::random(6)),
+                'barcode' => null,
+                'name' => 'Bahan Auto Consume Variant',
+                'attributes' => json_encode(['warna' => 'merah']),
+                'price_override' => null,
+                'is_active' => true,
+                'created_at' => now('UTC'),
+                'updated_at' => now('UTC'),
+            ]);
+        }
+
         DB::table('inventory_balances')->insert([
             'tenant_id' => $tenant->id,
             'product_id' => $rawMaterialId,
-            'product_variant_id' => null,
+            'product_variant_id' => $rawMaterialVariantId,
             'location_id' => $fixture['location_id'],
             'qty_on_hand' => $rawMaterialStock,
         ]);
@@ -485,6 +615,7 @@ class AutoConsumeOnSellCheckoutFlowTest extends TestCase
             'id' => (string) Str::uuid(),
             'tenant_id' => $tenant->id,
             'product_id' => $rawMaterialId,
+            'product_variant_id' => $rawMaterialVariantId,
             'location_id' => $fixture['location_id'],
             'qty_on_hand' => $rawMaterialStock,
             'average_cost' => 1500,
@@ -504,10 +635,14 @@ class AutoConsumeOnSellCheckoutFlowTest extends TestCase
             ->where('id', $fixture['product_id'])
             ->update([
                 'product_mode' => $withRecipe ? 'bom' : 'default',
+                'production_mode' => $productionMode,
                 'item_type' => $soldProductItemType,
                 'bom_items' => $withRecipe ? json_encode([
                     [
                         'product_id' => $rawMaterialId,
+                        'product_variant_id' => $rawMaterialHasVariants && $recipeIncludesRawMaterialVariant
+                            ? $rawMaterialVariantId
+                            : null,
                         'name' => 'Bahan Auto Consume',
                         'qty' => 2,
                         'unit' => 'gram',
@@ -522,6 +657,7 @@ class AutoConsumeOnSellCheckoutFlowTest extends TestCase
             'fixture' => $fixture,
             'payload' => $payload,
             'raw_material_id' => $rawMaterialId,
+            'raw_material_variant_id' => $rawMaterialVariantId,
         ];
     }
 
@@ -553,6 +689,9 @@ class AutoConsumeOnSellCheckoutFlowTest extends TestCase
             'is_active' => true,
             'track_stock' => true,
             'product_mode' => $productMode,
+            'production_mode' => $productMode === 'bom'
+                ? Product::PRODUCTION_MODE_AUTO_CONSUME_ON_SELL
+                : Product::PRODUCTION_MODE_NONE,
             'item_type' => $itemType,
             'variants' => json_encode([]),
             'bom_items' => json_encode($bomItems),

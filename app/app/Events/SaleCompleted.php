@@ -20,6 +20,7 @@ class SaleCompleted implements ShouldDispatchAfterCommit
         public readonly float $total,
         public readonly ?string $actorId,
         public readonly string $occurredAt,
+        public readonly ?string $requestId = null,
         ?string $eventId = null
     ) {
         $this->eventId = $eventId ?: (string) Str::uuid();

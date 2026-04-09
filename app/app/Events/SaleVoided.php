@@ -20,6 +20,7 @@ class SaleVoided implements ShouldDispatchAfterCommit
         public readonly ?string $actorId,
         public readonly ?string $reason,
         public readonly string $occurredAt,
+        public readonly ?string $requestId = null,
         ?string $eventId = null
     ) {
         $this->eventId = $eventId ?: (string) Str::uuid();

@@ -17,15 +17,21 @@ class AuditSaleVoided implements ShouldQueue
 
     public function handle(SaleVoided $event): void
     {
+        $payload = [
+            'reason' => $event->reason,
+            'occurred_at' => $event->occurredAt,
+        ];
+
+        if ($event->requestId) {
+            $payload['request_id'] = $event->requestId;
+        }
+
         $this->logger->log(
             event: 'sale.voided',
             actorId: $event->actorId,
             referenceType: 'sale',
             referenceId: $event->saleId,
-            payload: [
-                'reason' => $event->reason,
-                'occurred_at' => $event->occurredAt,
-            ],
+            payload: $payload,
             tenantId: $event->tenantId,
             occurredAt: CarbonImmutable::parse($event->occurredAt)
         );

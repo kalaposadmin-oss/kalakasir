@@ -6,6 +6,7 @@ use App\Exceptions\AutoConsumeValidationException;
 use App\Models\InventoryBalance;
 use App\Models\Product;
 use App\Models\StockLedger;
+use App\Support\Decimal;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
@@ -34,7 +35,8 @@ class AutoConsumeOnSellService
             'product_id' => (string) $soldProduct->id,
             'recipe_id' => null,
             'raw_material_product_id' => null,
-            'qty_requested' => round($soldQty, 4),
+            'raw_material_variant_id' => null,
+            'qty_requested' => Decimal::float(Decimal::qty($soldQty), Decimal::QTY_SCALE),
             'qty_consumed' => 0.0,
             'policy_negative_stock' => $allowNegative,
             'error_code' => null,
@@ -47,15 +49,22 @@ class AutoConsumeOnSellService
             return;
         }
 
+        if ((string) ($soldProduct->production_mode ?? Product::PRODUCTION_MODE_NONE) !== Product::PRODUCTION_MODE_AUTO_CONSUME_ON_SELL) {
+            $this->emitSkipped($tenantId, $baseContext, 'production_mode_not_auto_consume');
+            return;
+        }
+
+        $recipeLines = $this->normalizeBomItems($soldProduct->bom_items ?? []);
+
         $soldType = ProductItemTypeMapper::resolve(
             $soldProduct->item_type,
             (string) ($soldProduct->product_mode ?? 'default')
         );
         if ($soldType !== 'finished_good') {
-            $candidateRecipeItems = collect($soldProduct->bom_items ?? [])
+            $candidateRecipeItems = collect($recipeLines)
                 ->filter(fn ($line) => is_array($line)
                     && ! empty($line['product_id'])
-                    && (float) ($line['qty'] ?? 0) > 0)
+                    && Decimal::compare(Decimal::qty($line['qty'] ?? 0), '0') > 0)
                 ->values();
 
             if ($candidateRecipeItems->isNotEmpty()) {
@@ -70,10 +79,10 @@ class AutoConsumeOnSellService
             return;
         }
 
-        $recipeItems = collect($soldProduct->bom_items ?? [])
+        $recipeItems = collect($recipeLines)
             ->filter(fn ($line) => is_array($line)
                 && ! empty($line['product_id'])
-                && (float) ($line['qty'] ?? 0) > 0)
+                && Decimal::compare(Decimal::qty($line['qty'] ?? 0), '0') > 0)
             ->values();
 
         if ($recipeItems->isEmpty()) {
@@ -136,22 +145,28 @@ class AutoConsumeOnSellService
         try {
             foreach ($recipeItems as $line) {
                 $rawMaterialId = (string) $line['product_id'];
-                $recipeQty = (float) $line['qty'];
-                $requiredQty = round($soldQty * $recipeQty, 4);
+                $rawMaterialVariantId = $this->resolveRawMaterialVariantId($tenantId, $rawMaterialId, $line);
+                $recipeQty = Decimal::qty($line['qty']);
+                $requiredQty = Decimal::multiply(Decimal::qty($soldQty), $recipeQty, Decimal::QTY_SCALE);
 
-                if ($requiredQty <= 0) {
+                if (Decimal::compare($requiredQty, '0') <= 0) {
                     $this->emitSkipped($tenantId, [
                         ...$baseContext,
                         'raw_material_product_id' => $rawMaterialId,
+                        'raw_material_variant_id' => $rawMaterialVariantId,
                     ], 'non_positive_required_qty');
                     continue;
                 }
 
                 if (! $allowNegative) {
-                    $affected = DB::update(
-                        'UPDATE inventory_balances SET qty_on_hand = qty_on_hand - ? WHERE tenant_id = ? AND product_id = ? AND location_id = ? AND product_variant_id IS NULL AND qty_on_hand >= ?',
-                        [$requiredQty, $tenantId, $rawMaterialId, $locationId, $requiredQty]
-                    );
+                    $affected = $this->inventoryBalanceQuery(
+                        tenantId: $tenantId,
+                        productId: $rawMaterialId,
+                        productVariantId: $rawMaterialVariantId,
+                        locationId: $locationId,
+                    )
+                        ->where('qty_on_hand', '>=', Decimal::float($requiredQty, Decimal::QTY_SCALE))
+                        ->decrement('qty_on_hand', Decimal::float($requiredQty, Decimal::QTY_SCALE));
 
                     if ($affected === 0) {
                         throw new AutoConsumeValidationException(
@@ -159,8 +174,9 @@ class AutoConsumeOnSellService
                             'Stok bahan baku tidak mencukupi untuk auto-consume.',
                             [
                                 'product_id' => $rawMaterialId,
+                                'product_variant_id' => $rawMaterialVariantId,
                                 'location_id' => $locationId,
-                                'required_qty' => $requiredQty,
+                                'required_qty' => Decimal::float($requiredQty, Decimal::QTY_SCALE),
                             ]
                         );
                     }
@@ -168,15 +184,17 @@ class AutoConsumeOnSellService
                     DB::table('inventory_balances')->insertOrIgnore([
                         'tenant_id' => $tenantId,
                         'product_id' => $rawMaterialId,
-                        'product_variant_id' => null,
+                        'product_variant_id' => $rawMaterialVariantId,
                         'location_id' => $locationId,
                         'qty_on_hand' => 0,
                     ]);
 
-                    DB::update(
-                        'UPDATE inventory_balances SET qty_on_hand = qty_on_hand - ? WHERE tenant_id = ? AND product_id = ? AND location_id = ? AND product_variant_id IS NULL',
-                        [$requiredQty, $tenantId, $rawMaterialId, $locationId]
-                    );
+                    $this->inventoryBalanceQuery(
+                        tenantId: $tenantId,
+                        productId: $rawMaterialId,
+                        productVariantId: $rawMaterialVariantId,
+                        locationId: $locationId,
+                    )->decrement('qty_on_hand', Decimal::float($requiredQty, Decimal::QTY_SCALE));
 
                     app(AnomalyService::class)->raise(
                         tenantId: $tenantId,
@@ -187,8 +205,9 @@ class AutoConsumeOnSellService
                             'sale_id' => $saleId,
                             'sale_item_id' => $saleItemId,
                             'product_id' => $rawMaterialId,
+                            'product_variant_id' => $rawMaterialVariantId,
                             'location_id' => $locationId,
-                            'requested_qty' => $requiredQty,
+                            'requested_qty' => Decimal::float($requiredQty, Decimal::QTY_SCALE),
                             'allow_negative_policy' => true,
                         ],
                         referenceId: $saleId
@@ -198,35 +217,36 @@ class AutoConsumeOnSellService
                 $valuation = $valuationService->issue(
                     tenantId: $tenantId,
                     productId: $rawMaterialId,
+                    productVariantId: $rawMaterialVariantId,
                     locationId: $locationId,
-                    qty: $requiredQty,
+                    qty: Decimal::float($requiredQty, Decimal::QTY_SCALE),
                     referenceType: 'sale_recipe_input',
                     referenceId: $saleId,
                     referenceItemId: $saleItemId,
                     at: $at
                 );
 
-                $balanceAfter = (float) InventoryBalance::query()
-                    ->where('tenant_id', $tenantId)
-                    ->where('product_id', $rawMaterialId)
-                    ->where('location_id', $locationId)
-                    ->whereNull('product_variant_id')
-                    ->value('qty_on_hand');
+                $balanceAfter = Decimal::qty($this->inventoryBalanceQuery(
+                    tenantId: $tenantId,
+                    productId: $rawMaterialId,
+                    productVariantId: $rawMaterialVariantId,
+                    locationId: $locationId,
+                )->value('qty_on_hand'));
 
                 $ledgerRows[] = [
                     'id' => (string) Str::uuid(),
                     'tenant_id' => $tenantId,
                     'product_id' => $rawMaterialId,
-                    'product_variant_id' => null,
+                    'product_variant_id' => $rawMaterialVariantId,
                     'location_id' => $locationId,
                     'reference_type' => 'sale_recipe_input',
                     'reference_id' => $saleId,
                     'reference_item_id' => $saleItemId,
                     'qty_in' => 0,
-                    'qty_out' => $requiredQty,
-                    'balance_after' => $balanceAfter,
-                    'unit_cost' => (float) ($valuation['unit_cost'] ?? 0),
-                    'total_cost' => (float) ($valuation['total_cost'] ?? 0),
+                    'qty_out' => Decimal::float($requiredQty, Decimal::QTY_SCALE),
+                    'balance_after' => Decimal::float($balanceAfter, Decimal::QTY_SCALE),
+                    'unit_cost' => Decimal::float(Decimal::cost($valuation['unit_cost'] ?? 0), Decimal::COST_SCALE),
+                    'total_cost' => Decimal::float(Decimal::cost($valuation['total_cost'] ?? 0), Decimal::COST_SCALE),
                     'created_at' => $at,
                     'created_by' => $userId,
                 ];
@@ -234,8 +254,9 @@ class AutoConsumeOnSellService
                 $this->emitEvent('auto_consume.succeeded', $tenantId, [
                     ...$baseContext,
                     'raw_material_product_id' => $rawMaterialId,
-                    'qty_requested' => $requiredQty,
-                    'qty_consumed' => $requiredQty,
+                    'raw_material_variant_id' => $rawMaterialVariantId,
+                    'qty_requested' => Decimal::float($requiredQty, Decimal::QTY_SCALE),
+                    'qty_consumed' => Decimal::float($requiredQty, Decimal::QTY_SCALE),
                 ]);
             }
 
@@ -277,5 +298,97 @@ class AutoConsumeOnSellService
     {
         Log::info($event, $context);
         app(ValuationAuditService::class)->log($tenantId, $event, $context);
+    }
+
+    /**
+     * @param mixed $bomItems
+     * @return array<int, array<string, mixed>>
+     */
+    private function normalizeBomItems(mixed $bomItems): array
+    {
+        if (is_array($bomItems)) {
+            return $bomItems;
+        }
+
+        if (is_string($bomItems) && $bomItems !== '') {
+            $decoded = json_decode($bomItems, true);
+            if (is_array($decoded)) {
+                return $decoded;
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * @param array<string, mixed> $line
+     */
+    private function resolveRawMaterialVariantId(string $tenantId, string $productId, array $line): ?string
+    {
+        $variantId = isset($line['product_variant_id']) && $line['product_variant_id'] !== ''
+            ? (string) $line['product_variant_id']
+            : null;
+
+        $hasVariants = DB::table('product_variants')
+            ->where('tenant_id', $tenantId)
+            ->where('product_id', $productId)
+            ->exists();
+
+        if (! $hasVariants) {
+            if ($variantId !== null) {
+                $variantExists = DB::table('product_variants')
+                    ->where('tenant_id', $tenantId)
+                    ->where('product_id', $productId)
+                    ->where('id', $variantId)
+                    ->exists();
+
+                if (! $variantExists) {
+                    throw new AutoConsumeValidationException(
+                        'AUTO_CONSUME_RECIPE_INVALID',
+                        'Recipe auto-consume tidak valid.',
+                        ['recipe' => ['Variant bahan baku pada recipe tidak cocok dengan product_id komponen.']]
+                    );
+                }
+            }
+
+            return $variantId;
+        }
+
+        if ($variantId === null) {
+            throw new AutoConsumeValidationException(
+                'AUTO_CONSUME_RECIPE_INVALID',
+                'Recipe auto-consume tidak valid.',
+                ['recipe' => ['Bahan baku bervarian wajib menyimpan product_variant_id pada recipe.']]
+            );
+        }
+
+        $resolvedVariantId = DB::table('product_variants')
+            ->where('tenant_id', $tenantId)
+            ->where('product_id', $productId)
+            ->where('id', $variantId)
+            ->value('id');
+
+        if (! $resolvedVariantId) {
+            throw new AutoConsumeValidationException(
+                'AUTO_CONSUME_RECIPE_INVALID',
+                'Recipe auto-consume tidak valid.',
+                ['recipe' => ['Variant bahan baku pada recipe tidak cocok dengan product_id komponen.']]
+            );
+        }
+
+        return (string) $resolvedVariantId;
+    }
+
+    private function inventoryBalanceQuery(string $tenantId, string $productId, ?string $productVariantId, string $locationId)
+    {
+        return DB::table('inventory_balances')
+            ->where('tenant_id', $tenantId)
+            ->where('product_id', $productId)
+            ->where('location_id', $locationId)
+            ->when($productVariantId !== null, function ($query) use ($productVariantId) {
+                $query->where('product_variant_id', $productVariantId);
+            }, function ($query) {
+                $query->whereNull('product_variant_id');
+            });
     }
 }

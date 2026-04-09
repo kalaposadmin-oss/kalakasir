@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -15,19 +16,45 @@ class VoidManagerPinEnforcementTest extends TestCase
 
     private string $tenantId;
     private string $userId;
+    private string $approverId;
     private array $fixture;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        [$tenant, $user] = $this->bootApiActor('admin', 'admin-void-pin@example.com', 'Admin Void Pin');
+        [$tenant, $user] = $this->bootApiActor('cashier', 'cashier-void-pin@example.com', 'Cashier Void Pin');
         $this->tenantId = $tenant->id;
         $this->userId = $user->id;
         $this->fixture = $this->seedCheckoutFixture($this->tenantId, $this->userId);
 
-        \DB::table('users')->where('id', $this->userId)->update([
+        $this->approverId = (string) Str::uuid();
+        \DB::table('users')->insert([
+            'id' => $this->approverId,
+            'tenant_id' => $this->tenantId,
+            'name' => 'Admin Approver',
+            'email' => 'admin-approver-void-pin@example.com',
+            'password' => 'secret',
             'manager_pin_hash' => Hash::make('123456'),
+            'failed_login_attempts' => 0,
+            'remember_token' => null,
+            'created_at' => now('UTC'),
+            'updated_at' => now('UTC'),
+            'deleted_at' => null,
+        ]);
+
+        $roleId = (string) Str::uuid();
+        \DB::table('roles')->insert([
+            'id' => $roleId,
+            'tenant_id' => $this->tenantId,
+            'name' => 'admin',
+        ]);
+
+        \DB::table('user_roles')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenantId,
+            'user_id' => $this->approverId,
+            'role_id' => $roleId,
         ]);
     }
 
@@ -121,7 +148,7 @@ class VoidManagerPinEnforcementTest extends TestCase
             'tenant_id' => $this->tenantId,
             'status' => 'voided',
             'voided_by' => $this->userId,
-            'void_approved_by' => $this->userId,
+            'void_approved_by' => $this->approverId,
         ]);
 
         $this->assertDatabaseHas('audit_logs', [
@@ -131,6 +158,27 @@ class VoidManagerPinEnforcementTest extends TestCase
             'reference_type' => 'sale',
             'reference_id' => $saleId,
         ]);
+    }
+
+    public function test_void_rejects_sale_from_other_tenant(): void
+    {
+        $foreignTenant = Tenant::query()->create([
+            'id' => (string) Str::uuid(),
+            'name' => 'Tenant Void Lain',
+            'timezone' => 'UTC',
+        ]);
+
+        $foreignSaleId = $this->createForeignTenantSale($foreignTenant);
+
+        $response = $this->withHeaders($this->tenantHeaders($this->tenantId))
+            ->postJson('/api/v1/sales/'.$foreignSaleId.'/void', [
+                'reason' => 'cross tenant void attempt',
+            ]);
+
+        $response->assertStatus(422)
+            ->assertJsonPath('code', 'VOID_FAILED');
+
+        $this->assertNotSame('', (string) $response->json('message'));
     }
 
     private function createSale(): string
@@ -143,6 +191,39 @@ class VoidManagerPinEnforcementTest extends TestCase
 
         $response->assertStatus(201);
 
-        return (string) $response->json('sale_id');
+        $saleId = (string) $response->json('sale_id');
+
+        // Force amount above cashier direct-void threshold so manager PIN is required.
+        \DB::table('sales')->where('id', $saleId)->where('tenant_id', $this->tenantId)->update([
+            'subtotal' => 300000,
+            'total' => 300000,
+        ]);
+
+        return $saleId;
+    }
+
+    private function createForeignTenantSale(Tenant $tenant): string
+    {
+        $fixture = $this->seedCheckoutFixture($tenant->id, $this->userId);
+        $saleId = (string) Str::uuid();
+
+        \DB::table('sales')->insert([
+            'id' => $saleId,
+            'tenant_id' => $tenant->id,
+            'branch_id' => $fixture['branch_id'],
+            'shift_id' => $fixture['shift_id'],
+            'customer_id' => null,
+            'subtotal' => 100000,
+            'discount' => 0,
+            'tax' => 0,
+            'total' => 100000,
+            'status' => 'completed',
+            'idempotency_key' => (string) Str::uuid(),
+            'created_by' => $this->userId,
+            'voided_by' => null,
+            'created_at' => now('UTC'),
+        ]);
+
+        return $saleId;
     }
 }
