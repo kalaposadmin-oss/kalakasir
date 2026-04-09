@@ -310,6 +310,16 @@ Dokumen referensi tambahan untuk slice fondasi ini:
 - `docs/pr-ready-product-item-type-foundation-2026-04-09.md`
 - `docs/commit-message-product-item-type-foundation-2026-04-09.md`
 
+Candidate slice kecil lain yang masih kohesif:
+
+- bootstrap default tenant untuk accounting, branch/location default, dan onboarding owner provisioning
+
+Dokumen referensi tambahan untuk slice bootstrap tenant:
+
+- `docs/pr-summary-tenant-bootstrap-defaults-2026-04-09.md`
+- `docs/pr-ready-tenant-bootstrap-defaults-2026-04-09.md`
+- `docs/commit-message-tenant-bootstrap-defaults-2026-04-09.md`
+
 Langkah saat dilanjutkan:
 
 1. review command safety dan dependency produksi
