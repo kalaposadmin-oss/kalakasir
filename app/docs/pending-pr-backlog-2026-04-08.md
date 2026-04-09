@@ -320,6 +320,16 @@ Dokumen referensi tambahan untuk slice bootstrap tenant:
 - `docs/pr-ready-tenant-bootstrap-defaults-2026-04-09.md`
 - `docs/commit-message-tenant-bootstrap-defaults-2026-04-09.md`
 
+Candidate slice berikutnya yang tetap cukup kohesif:
+
+- material management surface untuk schema + API + backoffice page bahan
+
+Dokumen referensi tambahan untuk slice materials:
+
+- `docs/pr-summary-material-management-2026-04-09.md`
+- `docs/pr-ready-material-management-2026-04-09.md`
+- `docs/commit-message-material-management-2026-04-09.md`
+
 Langkah saat dilanjutkan:
 
 1. review command safety dan dependency produksi

@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\InventoryAlertController;
 use App\Http\Controllers\Api\InventoryReportController;
 use App\Http\Controllers\Api\LockPeriodController;
 use App\Http\Controllers\Api\LoyaltyController;
+use App\Http\Controllers\Api\MaterialController;
 use App\Http\Controllers\Api\ObservabilityController;
 use App\Http\Controllers\Api\PurchaseController;
 use App\Http\Controllers\Api\ProductController;
@@ -70,6 +71,8 @@ Route::prefix('v1')
         Route::get('reports/inventory/stock-card/{product}/export/csv', [InventoryReportController::class, 'exportStockCardCsv'])->middleware('role:warehouse,supervisor,admin,owner');
         Route::get('lock-periods', [LockPeriodController::class, 'index']);
         Route::get('loyalty', [LoyaltyController::class, 'index']);
+        Route::get('materials', [MaterialController::class, 'index'])->middleware('role:admin,owner,superadmin');
+        Route::get('materials/{material}', [MaterialController::class, 'show'])->middleware('role:admin,owner,superadmin');
         Route::get('observability/health', ObservabilityController::class)->middleware('role:admin');
         Route::get('anomalies', [AnomalyController::class, 'index'])->middleware('role:admin');
         Route::post('anomalies/{anomaly}/resolve', [AnomalyController::class, 'resolve'])->middleware('role:admin');
@@ -141,6 +144,7 @@ Route::prefix('v1')
         Route::delete('categories/{category}', [CategoryController::class, 'destroy'])->middleware('role:admin');
         Route::delete('products/{product}', [ProductController::class, 'destroy'])->middleware('role:admin');
         Route::post('lock-periods', [LockPeriodController::class, 'store'])->middleware('role:admin');
+        Route::post('materials', [MaterialController::class, 'store'])->middleware('role:admin,owner,superadmin');
         Route::patch('lock-periods/{period}', [LockPeriodController::class, 'toggle'])->middleware('role:admin');
         Route::patch('taxes/{tax}', [SettingsController::class, 'updateTax'])->middleware('role:admin');
         Route::patch('settings/inventory-valuation-method', [SettingsController::class, 'updateInventoryValuationMethod'])->middleware('role:owner,admin');
@@ -160,6 +164,8 @@ Route::prefix('v1')
         Route::post('stock-transfers/{transfer}/cancel', [StockTransferController::class, 'cancel'])->middleware('role:admin');
         Route::post('sales/{sale}/void', VoidSaleController::class)->middleware('role:cashier,supervisor,admin,owner');
         Route::put('branches/{branch}', [BranchController::class, 'update'])->middleware('role:admin');
+        Route::put('materials/{material}', [MaterialController::class, 'update'])->middleware('role:admin,owner,superadmin');
+        Route::delete('materials/{material}', [MaterialController::class, 'destroy'])->middleware('role:admin,owner,superadmin');
     });
 
 
