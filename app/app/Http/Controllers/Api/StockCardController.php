@@ -109,14 +109,28 @@ class StockCardController extends Controller
             ->where('stock_ledger.created_at', '>=', $startUtc)
             ->where('stock_ledger.created_at', '<', $endExclusiveUtc);
 
+        $ledgerSummaryQuery = StockLedger::query()
+            ->where('tenant_id', $tenantId)
+            ->where('product_id', $product->id)
+            ->where('location_id', $location->id)
+            ->where('created_at', '>=', $startUtc)
+            ->where('created_at', '<', $endExclusiveUtc);
+
         if ($type && $type !== 'all') {
             $ledgerQuery->where('stock_ledger.reference_type', $type);
+            $ledgerSummaryQuery->where('reference_type', $type);
         }
 
         $ledger = $ledgerQuery
             ->orderBy('stock_ledger.created_at', 'desc')
             ->limit(200)
             ->get();
+
+        $ledgerSummary = $ledgerSummaryQuery
+            ->selectRaw('sum(qty_in) as total_in')
+            ->selectRaw('sum(qty_out) as total_out')
+            ->selectRaw('count(*) as movement_count')
+            ->first();
 
         $balance = (float) InventoryBalance::query()
             ->where('tenant_id', $tenantId)
@@ -200,6 +214,11 @@ class StockCardController extends Controller
             ],
             'valuation_method' => $valuationMethod,
             'balance' => $balance,
+            'summary' => [
+                'total_in' => (float) ($ledgerSummary->total_in ?? 0),
+                'total_out' => (float) ($ledgerSummary->total_out ?? 0),
+                'movement_count' => (int) ($ledgerSummary->movement_count ?? 0),
+            ],
             'ledger' => $ledger,
             'layers' => $layers,
             'allocations' => $allocations,

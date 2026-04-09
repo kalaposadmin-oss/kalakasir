@@ -9,6 +9,7 @@ use App\Services\AnomalyService;
 use App\Support\TenantContext;
 use Illuminate\Http\Request;
 use App\Exceptions\LockPeriodException;
+use App\Models\ProductionBatch;
 use Illuminate\Validation\Rule;
 use InvalidArgumentException;
 use RuntimeException;
@@ -25,14 +26,25 @@ class StockAdjustmentController extends Controller
 
     public function store(Request $request, StockAdjustmentService $service)
     {
+        $tenantId = TenantContext::id();
+
         $payload = $request->validate([
-            'location_id' => ['required', 'uuid', 'exists:locations,id'],
+            'location_id' => ['required', 'uuid', $tenantId
+                ? Rule::exists('locations', 'id')->where('tenant_id', $tenantId)
+                : 'exists:locations,id'],
             'reference_no' => ['nullable', 'string', 'max:100'],
             'transaction_date' => ['nullable', 'date'],
             'reason_code' => ['required', Rule::in(self::ADJUSTMENT_REASON_CODES)],
+            'waste_type' => ['nullable', 'string', 'max:30'],
+            'production_batch_id' => ['nullable', 'uuid'],
             'notes' => ['nullable', 'string', 'max:500'],
             'items' => ['required', 'array', 'min:1'],
-            'items.*.product_id' => ['required', 'uuid', 'exists:products,id'],
+            'items.*.product_id' => ['required', 'uuid', $tenantId
+                ? Rule::exists('products', 'id')->where('tenant_id', $tenantId)
+                : 'exists:products,id'],
+            'items.*.product_variant_id' => ['nullable', 'uuid', $tenantId
+                ? Rule::exists('product_variants', 'id')->where('tenant_id', $tenantId)
+                : 'exists:product_variants,id'],
             'items.*.physical_qty' => ['required', 'numeric', 'min:0'],
         ]);
 
@@ -45,6 +57,19 @@ class StockAdjustmentController extends Controller
         }
 
         try {
+            if (! empty($payload['production_batch_id'])) {
+                $batchExists = $tenantId
+                    ? ProductionBatch::query()
+                        ->where('tenant_id', $tenantId)
+                        ->where('id', $payload['production_batch_id'])
+                        ->exists()
+                    : false;
+
+                if (! $batchExists) {
+                    throw new RuntimeException('Production batch tidak ditemukan untuk tenant aktif.');
+                }
+            }
+
             $adjustmentId = $service->createDraft($payload, $request->user()?->id);
 
             return response()->json([

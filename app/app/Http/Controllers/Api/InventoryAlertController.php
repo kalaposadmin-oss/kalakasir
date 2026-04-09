@@ -32,7 +32,7 @@ class InventoryAlertController extends Controller
             ->where('tenant_id', $tenantId)
             ->select('product_id')
             ->selectRaw('sum(qty_on_hand) as qty_on_hand')
-            ->groupBy('product_id')
+            ->groupBy('tenant_id', 'product_id')
             ->get()
             ->keyBy('product_id');
 
@@ -79,7 +79,7 @@ class InventoryAlertController extends Controller
             ->where('sales.created_at', '>=', $now->subDays($lookbackDays))
             ->select('sale_items.product_id')
             ->selectRaw('sum(sale_items.qty) as qty_sold')
-            ->groupBy('sale_items.product_id')
+            ->groupBy('sale_items.tenant_id', 'sale_items.product_id')
             ->get()
             ->keyBy('product_id');
 

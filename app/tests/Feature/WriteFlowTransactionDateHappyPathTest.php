@@ -41,6 +41,7 @@ class WriteFlowTransactionDateHappyPathTest extends TestCase
             ->postJson('/api/v1/checkout', $payload);
 
         $response->assertStatus(201);
+        $this->assertStringContainsString('checkout;dur=', (string) $response->headers->get('Server-Timing'));
         $saleId = (string) $response->json('sale_id');
 
         $this->assertDatabaseHas('sales', [

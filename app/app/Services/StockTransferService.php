@@ -8,6 +8,7 @@ use App\Models\StockLedger;
 use App\Models\StockTransfer;
 use App\Models\StockTransferItem;
 use App\Services\InventoryValuationService;
+use App\Support\Decimal;
 use App\Support\TenantContext;
 use App\Events\TransferShipped;
 use App\Events\TransferReceived;
@@ -58,12 +59,15 @@ class StockTransferService
         ]);
 
         $items = collect($payload['items'])->map(function ($item) use ($tenantId, $transferId) {
+            $productVariantId = $this->resolveVariantId($tenantId, (string) $item['product_id'], Arr::get($item, 'product_variant_id'));
+
             return [
                 'id' => (string) Str::uuid(),
                 'tenant_id' => $tenantId,
                 'stock_transfer_id' => $transferId,
                 'product_id' => $item['product_id'],
-                'qty' => (float) $item['qty'],
+                'product_variant_id' => $productVariantId,
+                'qty' => Decimal::float(Decimal::qty($item['qty']), Decimal::QTY_SCALE),
             ];
         })->all();
 
@@ -154,10 +158,13 @@ class StockTransferService
             $ledgerRows = [];
 
             foreach ($items as $item) {
-                $qty = (float) $item->qty;
-                $affected = DB::update(
-                    'UPDATE inventory_balances SET qty_on_hand = qty_on_hand - ? WHERE tenant_id = ? AND product_id = ? AND location_id = ? AND qty_on_hand >= ?',
-                    [$qty, $tenantId, $item->product_id, $transfer->from_location_id, $qty]
+                $qty = Decimal::qty($item->qty);
+                $affected = $this->decrementInventory(
+                    tenantId: $tenantId,
+                    productId: (string) $item->product_id,
+                    productVariantId: $item->product_variant_id ? (string) $item->product_variant_id : null,
+                    locationId: (string) $transfer->from_location_id,
+                    qty: Decimal::float($qty, Decimal::QTY_SCALE)
                 );
 
                 if ($affected === 0) {
@@ -170,30 +177,36 @@ class StockTransferService
                             'transfer_id' => $transfer->id,
                             'product_id' => $item->product_id,
                             'location_id' => $transfer->from_location_id,
-                            'requested_qty' => $qty,
+                            'requested_qty' => Decimal::float($qty, Decimal::QTY_SCALE),
                         ],
                         referenceId: $transfer->id
                     );
                     throw new RuntimeException('Stok tidak mencukupi untuk transfer.');
                 }
 
-                $balanceAfter = (float) InventoryBalance::query()
+                $balanceAfter = Decimal::qty(InventoryBalance::query()
                     ->where('tenant_id', $tenantId)
                     ->where('product_id', $item->product_id)
                     ->where('location_id', $transfer->from_location_id)
-                    ->value('qty_on_hand');
+                    ->when($item->product_variant_id, function ($query) use ($item) {
+                        $query->where('product_variant_id', $item->product_variant_id);
+                    }, function ($query) {
+                        $query->whereNull('product_variant_id');
+                    })
+                    ->value('qty_on_hand'));
 
                 $ledgerRows[] = [
                     'id' => (string) Str::uuid(),
                     'tenant_id' => $tenantId,
                     'product_id' => $item->product_id,
+                    'product_variant_id' => $item->product_variant_id,
                     'location_id' => $transfer->from_location_id,
                     'reference_type' => 'transfer_out',
                     'reference_id' => $transfer->id,
                     'reference_item_id' => $item->id,
                     'qty_in' => 0,
-                    'qty_out' => $qty,
-                    'balance_after' => $balanceAfter,
+                    'qty_out' => Decimal::float($qty, Decimal::QTY_SCALE),
+                    'balance_after' => Decimal::float($balanceAfter, Decimal::QTY_SCALE),
                     'created_at' => $now,
                     'created_by' => $userId,
                 ];
@@ -201,8 +214,9 @@ class StockTransferService
                 $valuationResult = $valuationService->issue(
                     tenantId: $tenantId,
                     productId: $item->product_id,
+                    productVariantId: $item->product_variant_id ? (string) $item->product_variant_id : null,
                     locationId: $transfer->from_location_id,
-                    qty: $qty,
+                    qty: Decimal::float($qty, Decimal::QTY_SCALE),
                     referenceType: 'transfer_out',
                     referenceId: $transfer->id,
                     referenceItemId: $item->id,
@@ -210,7 +224,7 @@ class StockTransferService
                 );
 
                 $item->update([
-                    'unit_cost_snapshot' => (float) $valuationResult['unit_cost'],
+                    'unit_cost_snapshot' => Decimal::float(Decimal::cost($valuationResult['unit_cost']), Decimal::COST_SCALE),
                 ]);
             }
 
@@ -268,41 +282,45 @@ class StockTransferService
             $ledgerRows = [];
 
             foreach ($items as $item) {
-                $qty = (float) $item->qty;
-
-                InventoryBalance::query()->firstOrCreate(
-                    [
-                        'tenant_id' => $tenantId,
-                        'product_id' => $item->product_id,
-                        'location_id' => $transfer->to_location_id,
-                    ],
-                    [
-                        'qty_on_hand' => 0,
-                    ]
+                $qty = Decimal::qty($item->qty);
+                $this->ensureInventoryBalanceBucket(
+                    tenantId: $tenantId,
+                    productId: (string) $item->product_id,
+                    productVariantId: $item->product_variant_id ? (string) $item->product_variant_id : null,
+                    locationId: (string) $transfer->to_location_id
                 );
 
-                DB::update(
-                    'UPDATE inventory_balances SET qty_on_hand = qty_on_hand + ? WHERE tenant_id = ? AND product_id = ? AND location_id = ?',
-                    [$qty, $tenantId, $item->product_id, $transfer->to_location_id]
+                $this->incrementInventory(
+                    tenantId: $tenantId,
+                    productId: (string) $item->product_id,
+                    productVariantId: $item->product_variant_id ? (string) $item->product_variant_id : null,
+                    locationId: (string) $transfer->to_location_id,
+                    qty: Decimal::float($qty, Decimal::QTY_SCALE)
                 );
 
-                $balanceAfter = (float) InventoryBalance::query()
+                $balanceAfter = Decimal::qty(InventoryBalance::query()
                     ->where('tenant_id', $tenantId)
                     ->where('product_id', $item->product_id)
                     ->where('location_id', $transfer->to_location_id)
-                    ->value('qty_on_hand');
+                    ->when($item->product_variant_id, function ($query) use ($item) {
+                        $query->where('product_variant_id', $item->product_variant_id);
+                    }, function ($query) {
+                        $query->whereNull('product_variant_id');
+                    })
+                    ->value('qty_on_hand'));
 
                 $ledgerRows[] = [
                     'id' => (string) Str::uuid(),
                     'tenant_id' => $tenantId,
                     'product_id' => $item->product_id,
+                    'product_variant_id' => $item->product_variant_id,
                     'location_id' => $transfer->to_location_id,
                     'reference_type' => 'transfer_in',
                     'reference_id' => $transfer->id,
                     'reference_item_id' => $item->id,
-                    'qty_in' => $qty,
+                    'qty_in' => Decimal::float($qty, Decimal::QTY_SCALE),
                     'qty_out' => 0,
-                    'balance_after' => $balanceAfter,
+                    'balance_after' => Decimal::float($balanceAfter, Decimal::QTY_SCALE),
                     'created_at' => $now,
                     'created_by' => $userId,
                 ];
@@ -310,11 +328,13 @@ class StockTransferService
                 $valuationService->receive(
                     tenantId: $tenantId,
                     productId: $item->product_id,
+                    productVariantId: $item->product_variant_id ? (string) $item->product_variant_id : null,
                     locationId: $transfer->to_location_id,
-                    qty: $qty,
-                    unitCost: (float) $item->unit_cost_snapshot,
+                    qty: Decimal::float($qty, Decimal::QTY_SCALE),
+                    unitCost: Decimal::float(Decimal::cost($item->unit_cost_snapshot), Decimal::COST_SCALE),
                     sourceType: 'transfer_in',
                     sourceId: $transfer->id,
+                    sourceItemId: null,
                     at: $now
                 );
             }
@@ -382,5 +402,80 @@ class StockTransferService
             ->where('branch_id', $branchId)
             ->orderBy('name')
             ->first();
+    }
+
+    private function resolveVariantId(string $tenantId, string $productId, ?string $variantId): ?string
+    {
+        if ($variantId) {
+            $exists = DB::table('product_variants')
+                ->where('tenant_id', $tenantId)
+                ->where('id', $variantId)
+                ->where('product_id', $productId)
+                ->exists();
+
+            if (! $exists) {
+                throw new RuntimeException('Varian produk transfer tidak valid.');
+            }
+
+            return $variantId;
+        }
+
+        $hasVariants = DB::table('product_variants')
+            ->where('tenant_id', $tenantId)
+            ->where('product_id', $productId)
+            ->exists();
+
+        if ($hasVariants) {
+            throw new RuntimeException('Produk varian memerlukan product_variant_id pada transfer.');
+        }
+
+        return null;
+    }
+
+    private function decrementInventory(string $tenantId, string $productId, ?string $productVariantId, string $locationId, float $qty): int
+    {
+        if ($productVariantId) {
+            return DB::update(
+                'UPDATE inventory_balances SET qty_on_hand = qty_on_hand - ? WHERE tenant_id = ? AND product_id = ? AND product_variant_id = ? AND location_id = ? AND qty_on_hand >= ?',
+                [$qty, $tenantId, $productId, $productVariantId, $locationId, $qty]
+            );
+        }
+
+        return DB::update(
+            'UPDATE inventory_balances SET qty_on_hand = qty_on_hand - ? WHERE tenant_id = ? AND product_id = ? AND location_id = ? AND product_variant_id IS NULL AND qty_on_hand >= ?',
+            [$qty, $tenantId, $productId, $locationId, $qty]
+        );
+    }
+
+    private function ensureInventoryBalanceBucket(string $tenantId, string $productId, ?string $productVariantId, string $locationId): void
+    {
+        InventoryBalance::query()->firstOrCreate(
+            [
+                'tenant_id' => $tenantId,
+                'product_id' => $productId,
+                'product_variant_id' => $productVariantId,
+                'location_id' => $locationId,
+            ],
+            [
+                'qty_on_hand' => 0,
+            ]
+        );
+    }
+
+    private function incrementInventory(string $tenantId, string $productId, ?string $productVariantId, string $locationId, float $qty): void
+    {
+        if ($productVariantId) {
+            DB::update(
+                'UPDATE inventory_balances SET qty_on_hand = qty_on_hand + ? WHERE tenant_id = ? AND product_id = ? AND product_variant_id = ? AND location_id = ?',
+                [$qty, $tenantId, $productId, $productVariantId, $locationId]
+            );
+
+            return;
+        }
+
+        DB::update(
+            'UPDATE inventory_balances SET qty_on_hand = qty_on_hand + ? WHERE tenant_id = ? AND product_id = ? AND location_id = ? AND product_variant_id IS NULL',
+            [$qty, $tenantId, $productId, $locationId]
+        );
     }
 }

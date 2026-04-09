@@ -10,6 +10,7 @@ use App\Models\Product;
 use App\Models\InventoryCostState;
 use App\Services\LockPeriodService;
 use App\Services\InventoryValuationService;
+use App\Support\Decimal;
 use App\Support\TenantContext;
 use App\Events\AdjustmentPosted;
 use App\Services\AnomalyService;
@@ -35,16 +36,32 @@ class StockAdjustmentService
 
         return DB::transaction(function () use ($payload, $tenantId, $userId, $now, $transactionDate): string {
             $adjustmentId = (string) Str::uuid();
+            $firstPayloadItem = collect($payload['items'])->first();
+            $firstProductId = (string) Arr::get($firstPayloadItem, 'product_id', '');
+            $firstProductVariantId = $firstProductId !== ''
+                ? $this->resolveVariantId($tenantId, $firstProductId, Arr::get($firstPayloadItem, 'product_variant_id'))
+                : null;
+            $firstSystemQty = $firstProductId !== ''
+                ? $this->getSystemQty($tenantId, $firstProductId, $firstProductVariantId, $payload['location_id'])
+                : 0.0;
+            $firstPhysicalQty = Decimal::qty(Arr::get($firstPayloadItem, 'physical_qty', 0));
 
             StockAdjustment::query()->create([
                 'id' => $adjustmentId,
                 'tenant_id' => $tenantId,
+                'product_id' => $firstProductId !== '' ? $firstProductId : null,
                 'location_id' => $payload['location_id'],
                 'reference_no' => Arr::get($payload, 'reference_no'),
                 'reason_code' => $payload['reason_code'],
+                'waste_type' => Arr::get($payload, 'waste_type'),
+                'production_batch_id' => Arr::get($payload, 'production_batch_id'),
+                'type' => 'multi_item',
+                'qty' => Decimal::abs(Decimal::subtract($firstPhysicalQty, $firstSystemQty, Decimal::QTY_SCALE), Decimal::QTY_SCALE),
                 'reason' => $payload['reason_code'],
                 'notes' => Arr::get($payload, 'notes'),
                 'note' => Arr::get($payload, 'notes'),
+                'balance_before' => $firstSystemQty,
+                'balance_after' => $firstPhysicalQty,
                 'status' => 'draft',
                 'created_by' => $userId,
                 'created_at' => $now,
@@ -52,15 +69,17 @@ class StockAdjustmentService
             ]);
 
             $items = collect($payload['items'])->map(function ($item) use ($tenantId, $adjustmentId, $payload) {
-                $systemQty = $this->getSystemQty($tenantId, $item['product_id'], $payload['location_id']);
-                $physicalQty = (float) $item['physical_qty'];
-                $difference = $physicalQty - $systemQty;
+                $productVariantId = $this->resolveVariantId($tenantId, (string) $item['product_id'], Arr::get($item, 'product_variant_id'));
+                $systemQty = $this->getSystemQty($tenantId, $item['product_id'], $productVariantId, $payload['location_id']);
+                $physicalQty = Decimal::qty($item['physical_qty']);
+                $difference = Decimal::subtract($physicalQty, $systemQty, Decimal::QTY_SCALE);
                 $product = Product::query()->where('id', $item['product_id'])->first();
                 $unitCost = $this->resolveUnitCostSnapshot(
                     tenantId: $tenantId,
                     productId: $item['product_id'],
+                    productVariantId: $productVariantId,
                     locationId: $payload['location_id'],
-                    fallback: (float) ($product?->hpp_average ?? 0)
+                    fallback: Decimal::float($product?->hpp_average ?? 0, Decimal::COST_SCALE)
                 );
 
                 return [
@@ -68,6 +87,7 @@ class StockAdjustmentService
                     'tenant_id' => $tenantId,
                     'stock_adjustment_id' => $adjustmentId,
                     'product_id' => $item['product_id'],
+                    'product_variant_id' => $productVariantId,
                     'system_qty' => $systemQty,
                     'physical_qty' => $physicalQty,
                     'difference_qty' => $difference,
@@ -140,9 +160,13 @@ class StockAdjustmentService
                 throw new RuntimeException('Item adjustment tidak ditemukan.');
             }
 
-            $adjustmentValue = (float) $items->sum(function ($item) {
-                return abs((float) $item->difference_qty) * (float) $item->unit_cost_snapshot;
-            });
+            $adjustmentValue = Decimal::float($items->reduce(function (string $carry, $item) {
+                return Decimal::add(
+                    $carry,
+                    Decimal::multiply(Decimal::abs($item->difference_qty, Decimal::QTY_SCALE), $item->unit_cost_snapshot, Decimal::MONEY_SCALE),
+                    Decimal::MONEY_SCALE
+                );
+            }, Decimal::money(0)), Decimal::MONEY_SCALE);
 
             app(TransactionAuthorizationPolicyService::class)->ensureAdjustmentPostingAllowed(
                 tenantId: $tenantId,
@@ -153,22 +177,20 @@ class StockAdjustmentService
             $ledgerRows = [];
 
             foreach ($items as $item) {
-                $difference = (float) $item->difference_qty;
+                $difference = Decimal::qty($item->difference_qty);
+                $productVariantId = $item->product_variant_id ? (string) $item->product_variant_id : null;
 
-                if ($difference === 0.0) {
+                if (Decimal::compare($difference, 0) === 0) {
                     continue;
                 }
 
-                if ($item->physical_qty < 0) {
+                if (Decimal::compare($item->physical_qty, 0) < 0) {
                     throw new RuntimeException('Qty fisik tidak boleh negatif.');
                 }
 
-                if ($difference < 0) {
-                    $qty = abs($difference);
-                    $affected = DB::update(
-                        'UPDATE inventory_balances SET qty_on_hand = qty_on_hand - ? WHERE tenant_id = ? AND product_id = ? AND location_id = ? AND qty_on_hand >= ?',
-                        [$qty, $tenantId, $item->product_id, $adjustment->location_id, $qty]
-                    );
+                if (Decimal::compare($difference, 0) < 0) {
+                    $qty = Decimal::abs($difference, Decimal::QTY_SCALE);
+                    $affected = $this->decrementInventory($tenantId, (string) $item->product_id, $productVariantId, (string) $adjustment->location_id, $qty);
 
                     if ($affected === 0) {
                         app(AnomalyService::class)->raise(
@@ -180,7 +202,7 @@ class StockAdjustmentService
                                 'adjustment_id' => $adjustment->id,
                                 'product_id' => $item->product_id,
                                 'location_id' => $adjustment->location_id,
-                                'requested_qty' => $qty,
+                                'requested_qty' => Decimal::float($qty, Decimal::QTY_SCALE),
                             ],
                             referenceId: $adjustment->id
                         );
@@ -190,58 +212,54 @@ class StockAdjustmentService
                     $valuationService->issue(
                         tenantId: $tenantId,
                         productId: $item->product_id,
+                        productVariantId: $productVariantId,
                         locationId: $adjustment->location_id,
-                        qty: $qty,
+                        qty: Decimal::float($qty, Decimal::QTY_SCALE),
                         referenceType: 'stock_adjustment',
                         referenceId: $adjustment->id,
                         referenceItemId: $item->id,
                         at: $now
                     );
                 } else {
-                    InventoryBalance::query()->firstOrCreate(
-                        [
-                            'tenant_id' => $tenantId,
-                            'product_id' => $item->product_id,
-                            'location_id' => $adjustment->location_id,
-                        ],
-                        [
-                            'qty_on_hand' => 0,
-                        ]
-                    );
-
-                    DB::update(
-                        'UPDATE inventory_balances SET qty_on_hand = qty_on_hand + ? WHERE tenant_id = ? AND product_id = ? AND location_id = ?',
-                        [$difference, $tenantId, $item->product_id, $adjustment->location_id]
-                    );
+                    $this->ensureInventoryBalanceBucket($tenantId, (string) $item->product_id, $productVariantId, (string) $adjustment->location_id);
+                    $this->incrementInventory($tenantId, (string) $item->product_id, $productVariantId, (string) $adjustment->location_id, $difference);
 
                     $valuationService->receive(
                         tenantId: $tenantId,
                         productId: $item->product_id,
+                        productVariantId: $productVariantId,
                         locationId: $adjustment->location_id,
-                        qty: $difference,
-                        unitCost: (float) $item->unit_cost_snapshot,
+                        qty: Decimal::float($difference, Decimal::QTY_SCALE),
+                        unitCost: Decimal::float($item->unit_cost_snapshot, Decimal::COST_SCALE),
                         sourceType: 'stock_adjustment',
                         sourceId: $adjustment->id,
+                        sourceItemId: null,
                         at: $now
                     );
                 }
 
-                $balanceAfter = (float) InventoryBalance::query()
+                $balanceAfter = Decimal::qty(InventoryBalance::query()
                     ->where('tenant_id', $tenantId)
                     ->where('product_id', $item->product_id)
                     ->where('location_id', $adjustment->location_id)
-                    ->value('qty_on_hand');
+                    ->when($productVariantId, function ($query) use ($productVariantId) {
+                        $query->where('product_variant_id', $productVariantId);
+                    }, function ($query) {
+                        $query->whereNull('product_variant_id');
+                    })
+                    ->value('qty_on_hand'));
 
                 $ledgerRows[] = [
                     'id' => (string) Str::uuid(),
                     'tenant_id' => $tenantId,
                     'product_id' => $item->product_id,
+                    'product_variant_id' => $productVariantId,
                     'location_id' => $adjustment->location_id,
                     'reference_type' => 'stock_adjustment',
                     'reference_id' => $adjustment->id,
                     'reference_item_id' => $item->id,
-                    'qty_in' => $difference > 0 ? $difference : 0,
-                    'qty_out' => $difference < 0 ? abs($difference) : 0,
+                    'qty_in' => Decimal::compare($difference, 0) > 0 ? $difference : Decimal::qty(0),
+                    'qty_out' => Decimal::compare($difference, 0) < 0 ? Decimal::abs($difference, Decimal::QTY_SCALE) : Decimal::qty(0),
                     'balance_after' => $balanceAfter,
                     'created_at' => $now,
                     'created_by' => $userId,
@@ -298,18 +316,24 @@ class StockAdjustmentService
         ]);
     }
 
-    private function getSystemQty(string $tenantId, string $productId, string $locationId): float
+    private function getSystemQty(string $tenantId, string $productId, ?string $productVariantId, string $locationId): float
     {
         return (float) InventoryBalance::query()
             ->where('tenant_id', $tenantId)
             ->where('product_id', $productId)
             ->where('location_id', $locationId)
+            ->when($productVariantId, function ($query) use ($productVariantId) {
+                $query->where('product_variant_id', $productVariantId);
+            }, function ($query) {
+                $query->whereNull('product_variant_id');
+            })
             ->value('qty_on_hand');
     }
 
     private function resolveUnitCostSnapshot(
         string $tenantId,
         string $productId,
+        ?string $productVariantId,
         string $locationId,
         float $fallback
     ): float {
@@ -317,9 +341,89 @@ class StockAdjustmentService
             ->where('tenant_id', $tenantId)
             ->where('product_id', $productId)
             ->where('location_id', $locationId)
+            ->when($productVariantId, function ($query) use ($productVariantId) {
+                $query->where('product_variant_id', $productVariantId);
+            }, function ($query) {
+                $query->whereNull('product_variant_id');
+            })
             ->value('average_cost');
 
         return $averageCost > 0 ? $averageCost : $fallback;
+    }
+
+    private function resolveVariantId(string $tenantId, string $productId, ?string $variantId): ?string
+    {
+        if ($variantId) {
+            $exists = DB::table('product_variants')
+                ->where('tenant_id', $tenantId)
+                ->where('id', $variantId)
+                ->where('product_id', $productId)
+                ->exists();
+
+            if (! $exists) {
+                throw new RuntimeException('Varian produk adjustment tidak valid.');
+            }
+
+            return $variantId;
+        }
+
+        $hasVariants = DB::table('product_variants')
+            ->where('tenant_id', $tenantId)
+            ->where('product_id', $productId)
+            ->exists();
+
+        if ($hasVariants) {
+            throw new RuntimeException('Produk varian memerlukan product_variant_id pada stock adjustment.');
+        }
+
+        return null;
+    }
+
+    private function decrementInventory(string $tenantId, string $productId, ?string $productVariantId, string $locationId, float $qty): int
+    {
+        if ($productVariantId) {
+            return DB::update(
+                'UPDATE inventory_balances SET qty_on_hand = qty_on_hand - ? WHERE tenant_id = ? AND product_id = ? AND product_variant_id = ? AND location_id = ? AND qty_on_hand >= ?',
+                [$qty, $tenantId, $productId, $productVariantId, $locationId, $qty]
+            );
+        }
+
+        return DB::update(
+            'UPDATE inventory_balances SET qty_on_hand = qty_on_hand - ? WHERE tenant_id = ? AND product_id = ? AND location_id = ? AND product_variant_id IS NULL AND qty_on_hand >= ?',
+            [$qty, $tenantId, $productId, $locationId, $qty]
+        );
+    }
+
+    private function ensureInventoryBalanceBucket(string $tenantId, string $productId, ?string $productVariantId, string $locationId): void
+    {
+        InventoryBalance::query()->firstOrCreate(
+            [
+                'tenant_id' => $tenantId,
+                'product_id' => $productId,
+                'product_variant_id' => $productVariantId,
+                'location_id' => $locationId,
+            ],
+            [
+                'qty_on_hand' => 0,
+            ]
+        );
+    }
+
+    private function incrementInventory(string $tenantId, string $productId, ?string $productVariantId, string $locationId, float $qty): void
+    {
+        if ($productVariantId) {
+            DB::update(
+                'UPDATE inventory_balances SET qty_on_hand = qty_on_hand + ? WHERE tenant_id = ? AND product_id = ? AND product_variant_id = ? AND location_id = ?',
+                [$qty, $tenantId, $productId, $productVariantId, $locationId]
+            );
+
+            return;
+        }
+
+        DB::update(
+            'UPDATE inventory_balances SET qty_on_hand = qty_on_hand + ? WHERE tenant_id = ? AND product_id = ? AND location_id = ? AND product_variant_id IS NULL',
+            [$qty, $tenantId, $productId, $locationId]
+        );
     }
 
 }

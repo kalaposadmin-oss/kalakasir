@@ -11,6 +11,7 @@ use App\Services\AnomalyService;
 use App\Support\TenantContext;
 use App\Exceptions\LockPeriodException;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use InvalidArgumentException;
 use RuntimeException;
 
@@ -88,15 +89,30 @@ class StockTransferController extends Controller
 
     public function store(Request $request, StockTransferService $service)
     {
+        $tenantId = TenantContext::id();
+
         $payload = $request->validate([
-            'from_branch_id' => ['required', 'uuid'],
-            'to_branch_id' => ['required', 'uuid'],
-            'from_location_id' => ['nullable', 'uuid'],
-            'to_location_id' => ['nullable', 'uuid'],
+            'from_branch_id' => ['required', 'uuid', $tenantId
+                ? Rule::exists('branches', 'id')->where('tenant_id', $tenantId)
+                : 'exists:branches,id'],
+            'to_branch_id' => ['required', 'uuid', $tenantId
+                ? Rule::exists('branches', 'id')->where('tenant_id', $tenantId)
+                : 'exists:branches,id'],
+            'from_location_id' => ['nullable', 'uuid', $tenantId
+                ? Rule::exists('locations', 'id')->where('tenant_id', $tenantId)
+                : 'exists:locations,id'],
+            'to_location_id' => ['nullable', 'uuid', $tenantId
+                ? Rule::exists('locations', 'id')->where('tenant_id', $tenantId)
+                : 'exists:locations,id'],
             'transaction_date' => ['nullable', 'date'],
             'reference' => ['nullable', 'string', 'max:100'],
             'items' => ['required', 'array', 'min:1'],
-            'items.*.product_id' => ['required', 'uuid'],
+            'items.*.product_id' => ['required', 'uuid', $tenantId
+                ? Rule::exists('products', 'id')->where('tenant_id', $tenantId)
+                : 'exists:products,id'],
+            'items.*.product_variant_id' => ['nullable', 'uuid', $tenantId
+                ? Rule::exists('product_variants', 'id')->where('tenant_id', $tenantId)
+                : 'exists:product_variants,id'],
             'items.*.qty' => ['required', 'numeric', 'min:0.01'],
         ]);
 
@@ -129,6 +145,7 @@ class StockTransferController extends Controller
             ->select([
                 'stock_transfer_items.id',
                 'stock_transfer_items.qty',
+                'stock_transfer_items.product_variant_id',
                 'products.id as product_id',
                 'products.name as product_name',
                 'products.sku as product_sku',
