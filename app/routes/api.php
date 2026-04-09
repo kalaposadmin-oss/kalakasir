@@ -73,9 +73,9 @@ Route::prefix('v1')
         Route::get('loyalty', [LoyaltyController::class, 'index']);
         Route::get('materials', [MaterialController::class, 'index'])->middleware('role:admin,owner,superadmin');
         Route::get('materials/{material}', [MaterialController::class, 'show'])->middleware('role:admin,owner,superadmin');
-        Route::get('observability/health', ObservabilityController::class)->middleware('role:admin');
-        Route::get('anomalies', [AnomalyController::class, 'index'])->middleware('role:admin');
-        Route::post('anomalies/{anomaly}/resolve', [AnomalyController::class, 'resolve'])->middleware('role:admin');
+        Route::get('observability/health', ObservabilityController::class)->middleware(['role:admin,owner', 'feature_gate:settings.observability']);
+        Route::get('anomalies', [AnomalyController::class, 'index'])->middleware('role:admin,owner');
+        Route::post('anomalies/{anomaly}/resolve', [AnomalyController::class, 'resolve'])->middleware('role:admin,owner');
         Route::get('purchases', [PurchaseController::class, 'index']);
         Route::get('purchases/{purchase}', [PurchaseController::class, 'show']);
         Route::get('products', [ProductController::class, 'index']);

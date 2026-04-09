@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Anomaly;
+use App\Services\AuditLogger;
 use App\Support\TenantContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
@@ -25,6 +26,9 @@ class AnomalyController extends Controller
         $validated = $request->validate([
             'severity' => ['nullable', 'string', 'max:32'],
             'type' => ['nullable', 'string', 'max:100'],
+            'reference_id' => ['nullable', 'string', 'max:100'],
+            'branch_id' => ['nullable', 'uuid'],
+            'location_id' => ['nullable', 'uuid'],
             'actor_id' => ['nullable', 'uuid'],
             'resolved' => ['nullable', 'in:0,1'],
             'preset' => ['nullable', 'string'],
@@ -46,6 +50,9 @@ class AnomalyController extends Controller
             ->where('tenant_id', $tenantId)
             ->when(isset($validated['severity']), fn ($q) => $q->where('severity', $validated['severity']))
             ->when(isset($validated['type']), fn ($q) => $q->where('type', $validated['type']))
+            ->when(isset($validated['reference_id']), fn ($q) => $q->where('reference_id', $validated['reference_id']))
+            ->when(isset($validated['branch_id']), fn ($q) => $q->where('payload_json->branch_id', $validated['branch_id']))
+            ->when(isset($validated['location_id']), fn ($q) => $q->where('payload_json->location_id', $validated['location_id']))
             ->when(isset($validated['resolved']), function ($q) use ($validated) {
                 if ((string) $validated['resolved'] === '1') {
                     $q->whereNotNull('resolved_at');
@@ -178,11 +185,32 @@ class AnomalyController extends Controller
             $payload['resolved_note'] = $validated['note'];
         }
 
+        $resolvedAt = CarbonImmutable::now('UTC');
+
         $row->update([
             'payload_json' => $payload,
-            'resolved_at' => CarbonImmutable::now('UTC'),
+            'resolved_at' => $resolvedAt,
             'resolved_by' => $request->user()?->id,
         ]);
+
+        app(AuditLogger::class)->log(
+            event: 'anomaly_resolved',
+            actorId: $request->user()?->id,
+            referenceType: 'anomaly',
+            referenceId: (string) $row->id,
+            payload: [
+                'type' => (string) $row->type,
+                'severity' => (string) $row->severity,
+                'reference_id' => $row->reference_id,
+                'branch_id' => $payload['branch_id'] ?? null,
+                'location_id' => $payload['location_id'] ?? null,
+                'resolved_note' => $payload['resolved_note'] ?? null,
+            ],
+            ipAddress: $request->ip(),
+            userAgent: $request->userAgent(),
+            tenantId: $tenantId,
+            occurredAt: $resolvedAt,
+        );
 
         return response()->json([
             'status' => 'resolved',

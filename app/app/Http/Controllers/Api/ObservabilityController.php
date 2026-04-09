@@ -4,14 +4,15 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Anomaly;
+use App\Models\Branch;
 use App\Models\DailySalesSummary;
+use App\Models\Location;
 use App\Models\Sale;
 use App\Services\AnomalyDetectorMetricsService;
 use App\Support\TenantContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Redis;
 
 class ObservabilityController extends Controller
 {
@@ -26,38 +27,41 @@ class ObservabilityController extends Controller
             ], 400);
         }
 
+        $filters = $request->validate([
+            'preset' => ['nullable', 'string'],
+            'start_date' => ['nullable', 'date'],
+            'end_date' => ['nullable', 'date'],
+            'branch_id' => ['nullable', 'uuid'],
+            'location_id' => ['nullable', 'uuid'],
+        ]);
+
         $connection = config('queue.default');
-        $queueDepth = 0;
-
-        if ($connection === 'database') {
-            $queueDepth = (int) DB::table(config('queue.connections.database.table', 'jobs'))->count();
-        } elseif ($connection === 'redis') {
-            $queueDepth = (int) Redis::llen('queues:'.config('queue.connections.redis.queue', 'default'));
-        }
-
-        $failedJobs5m = (int) DB::table('failed_jobs')
-            ->where('failed_at', '>=', CarbonImmutable::now('UTC')->subMinutes(5))
-            ->count();
+        $queueDepth = null;
+        $failedJobs5m = null;
 
         [$startUtc, $endExclusiveUtc, $rangeMeta] = $this->resolveRange(
-            preset: $request->query('preset', 'last7'),
-            startDate: $request->query('start_date'),
-            endDate: $request->query('end_date')
+            preset: $filters['preset'] ?? 'last7',
+            startDate: $filters['start_date'] ?? null,
+            endDate: $filters['end_date'] ?? null
         );
 
-        $anomalyCountsBySeverity = Anomaly::query()
+        $branchId = $filters['branch_id'] ?? null;
+        $locationId = $filters['location_id'] ?? null;
+
+        $anomalyWindowQuery = Anomaly::query()
             ->where('tenant_id', $tenantId)
             ->where('detected_at', '>=', $startUtc)
             ->where('detected_at', '<', $endExclusiveUtc)
+            ->when($branchId, fn ($query, $value) => $query->where('payload_json->branch_id', $value))
+            ->when($locationId, fn ($query, $value) => $query->where('payload_json->location_id', $value));
+
+        $anomalyCountsBySeverity = (clone $anomalyWindowQuery)
             ->select('severity')
             ->selectRaw('count(*) as total')
             ->groupBy('severity')
             ->pluck('total', 'severity');
 
-        $anomalyCountsByType = Anomaly::query()
-            ->where('tenant_id', $tenantId)
-            ->where('detected_at', '>=', $startUtc)
-            ->where('detected_at', '<', $endExclusiveUtc)
+        $anomalyCountsByType = (clone $anomalyWindowQuery)
             ->select('type')
             ->selectRaw('count(*) as total')
             ->groupBy('type')
@@ -75,20 +79,14 @@ class ObservabilityController extends Controller
             'fifo_void_allocation_not_reversed',
         ];
 
-        $invariantCounts = Anomaly::query()
-            ->where('tenant_id', $tenantId)
-            ->where('detected_at', '>=', $startUtc)
-            ->where('detected_at', '<', $endExclusiveUtc)
+        $invariantCounts = (clone $anomalyWindowQuery)
             ->whereIn('type', $inventoryInvariantTypes)
             ->select('type')
             ->selectRaw('count(*) as total')
             ->groupBy('type')
             ->pluck('total', 'type');
 
-        $resolutionRows = Anomaly::query()
-            ->where('tenant_id', $tenantId)
-            ->where('detected_at', '>=', $startUtc)
-            ->where('detected_at', '<', $endExclusiveUtc)
+        $resolutionRows = (clone $anomalyWindowQuery)
             ->select('type')
             ->selectRaw('count(*) as total')
             ->selectRaw('sum(case when resolved_at is not null then 1 else 0 end) as resolved_total')
@@ -108,7 +106,14 @@ class ObservabilityController extends Controller
             'void_split_attack',
         ]);
 
-        $lag = $this->summaryLagP95Seconds($tenantId);
+        $lag = $this->summaryLagP95Seconds($tenantId, $branchId, $locationId);
+
+        $selectedBranch = $branchId
+            ? Branch::query()->where('tenant_id', $tenantId)->where('id', $branchId)->value('name')
+            : null;
+        $selectedLocation = $locationId
+            ? Location::query()->where('tenant_id', $tenantId)->where('id', $locationId)->value('name')
+            : null;
 
         return response()->json([
             'queue' => [
@@ -122,6 +127,12 @@ class ObservabilityController extends Controller
             'anomalies' => [
                 'window_hours' => (int) ($rangeMeta['window_hours'] ?? 0),
                 'range' => $rangeMeta,
+                'filters' => [
+                    'branch_id' => $branchId,
+                    'branch_name' => $selectedBranch,
+                    'location_id' => $locationId,
+                    'location_name' => $selectedLocation,
+                ],
                 'count_by_severity' => $anomalyCountsBySeverity,
                 'count_by_type' => $anomalyCountsByType,
                 'inventory_invariants' => $invariantCounts,
@@ -133,12 +144,13 @@ class ObservabilityController extends Controller
         ]);
     }
 
-    private function summaryLagP95Seconds(string $tenantId): int
+    private function summaryLagP95Seconds(string $tenantId, ?string $branchId = null, ?string $locationId = null): int
     {
         $rows = Sale::query()
             ->where('tenant_id', $tenantId)
             ->where('status', 'completed')
             ->where('created_at', '>=', CarbonImmutable::now('UTC')->subMinutes(15))
+            ->when($branchId, fn ($query, $value) => $query->where('branch_id', $value))
             ->limit(300)
             ->get(['tenant_id', 'created_at', 'transaction_date']);
 
