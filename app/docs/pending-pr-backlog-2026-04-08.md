@@ -284,6 +284,17 @@ Dokumen referensi tambahan:
 - `docs/pr-ready-middleware-access-gates-2026-04-09.md`
 - `docs/commit-message-middleware-access-gates-2026-04-09.md`
 
+Status eksekusi terbaru:
+
+- middleware access/gating sudah di-commit: `05fdf5f` `feat(app): add middleware access and portal gating layer`
+- batch operasional tersisa sekarang hanya command/deploy workflow
+
+Dokumen referensi tambahan untuk batch operasional:
+
+- `docs/pr-summary-ops-commands-deploy-2026-04-09.md`
+- `docs/pr-ready-ops-commands-deploy-2026-04-09.md`
+- `docs/commit-message-ops-commands-deploy-2026-04-09.md`
+
 Langkah saat dilanjutkan:
 
 1. review command safety dan dependency produksi

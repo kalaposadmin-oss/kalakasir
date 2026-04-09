@@ -10,6 +10,7 @@ use App\Models\Tenant;
 use App\Services\InventoryValuationService;
 use App\Services\AnomalyService;
 use App\Services\RefundLegacyAuditService;
+use App\Services\PurchaseHistoryBackfillService;
 use App\Services\ValuationRebuildStateService;
 use App\Services\ValuationComparisonExportService;
 use App\Services\ValuationAuditService;
@@ -28,6 +29,42 @@ use App\Jobs\DetectInventoryInvariantJob;
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
+
+Artisan::command('pos:audit-consistency {--tenant_id=}', function () {
+    $tenantId = (string) $this->option('tenant_id');
+
+    $productQuery = DB::table('products')
+        ->when($tenantId !== '', function ($query) use ($tenantId): void {
+            $query->where('tenant_id', $tenantId);
+        });
+
+    $itemTypeIsNull = (clone $productQuery)
+        ->whereNull('item_type')
+        ->count();
+
+    $modeAddOnNotRawMaterial = (clone $productQuery)
+        ->where('product_mode', 'add_on')
+        ->where(function ($query): void {
+            $query->whereNull('item_type')
+                ->orWhere('item_type', '!=', 'raw_material');
+        })
+        ->count();
+
+    $modeBomNotFinishedGood = (clone $productQuery)
+        ->where('product_mode', 'bom')
+        ->where(function ($query): void {
+            $query->whereNull('item_type')
+                ->orWhere('item_type', '!=', 'finished_good');
+        })
+        ->count();
+
+    $scope = $tenantId !== '' ? $tenantId : 'ALL';
+
+    $this->info('POS consistency audit scope: '.$scope);
+    $this->line('item_type_is_null: '.$itemTypeIsNull);
+    $this->line('mode_add_on_not_raw_material: '.$modeAddOnNotRawMaterial);
+    $this->line('mode_bom_not_finished_good: '.$modeBomNotFinishedGood);
+})->purpose('Audit product item_type consistency indicators for POS catalog migration readiness');
 
 Artisan::command('transactions:backfill-transaction-date {--tenant_id=} {--confirm=}', function () {
     $tenantId = (string) $this->option('tenant_id');
@@ -247,6 +284,75 @@ Artisan::command('refunds:remediate-legacy-sale-item {--tenant_id=} {--limit=100
     $this->info('Updated rows: '.$result['updated']);
     $this->line('Skipped rows: '.$result['skipped']);
 })->purpose('Backfill sale_item_id and economic snapshots for resolvable historical refund_items within a tenant');
+
+Artisan::command('valuation:backfill-purchase-layer-source-items {--tenant_id=} {--limit=10} {--confirm=}', function () {
+    $tenantId = trim((string) $this->option('tenant_id'));
+    $limit = max(1, (int) $this->option('limit'));
+    $confirm = trim((string) $this->option('confirm'));
+    $service = app(PurchaseHistoryBackfillService::class);
+
+    $scopeTenantId = $tenantId !== '' ? $tenantId : null;
+    $audit = $service->audit($scopeTenantId);
+    $apply = $confirm === 'BACKFILL_ACK';
+    $result = $service->backfillPurchaseLayerSourceItems($scopeTenantId, $apply, 5000);
+
+    $scope = $tenantId !== '' ? $tenantId : 'ALL';
+    $this->info('Purchase layer source_item_id audit scope: '.$scope);
+
+    $layerSummary = $audit['purchase_layers']['summary'];
+    $returnSummary = $audit['purchase_return_items']['summary'];
+
+    $this->line('legacy_purchase_layers_missing_source_item_id: '.$layerSummary['total']);
+    $this->line('layers_resolved_exact_ledger: '.$layerSummary['resolved_exact_ledger']);
+    $this->line('layers_resolved_single_purchase_item: '.$layerSummary['resolved_single_purchase_item']);
+    $this->line('layers_legacy_ambiguous: '.$layerSummary['legacy_ambiguous']);
+    $this->line('layers_orphan_no_match: '.$layerSummary['orphan_no_match']);
+    $this->line('legacy_purchase_return_items_missing_purchase_item_id: '.$returnSummary['total']);
+    $this->line('returns_resolved_single_purchase_item: '.$returnSummary['resolved_single_purchase_item']);
+    $this->line('returns_legacy_ambiguous: '.$returnSummary['legacy_ambiguous']);
+    $this->line('returns_orphan_no_match: '.$returnSummary['orphan_no_match']);
+
+    if ($apply) {
+        $this->line('layers_updated: '.$result['updated']);
+    } else {
+        $this->warn('Dry run only. Tambahkan --confirm=BACKFILL_ACK untuk apply backfill.');
+    }
+
+    $ambiguousLayers = collect($audit['purchase_layers']['rows'])
+        ->where('status', 'legacy_ambiguous')
+        ->take($limit)
+        ->map(fn (array $row) => [
+            'layer_id' => $row['id'],
+            'purchase_id' => $row['source_id'],
+            'product_id' => $row['product_id'],
+            'candidate_count' => $row['candidate_count'] ?? 0,
+        ])
+        ->values();
+
+    if ($ambiguousLayers->isNotEmpty()) {
+        $this->newLine();
+        $this->warn('Ambiguous purchase layer samples');
+        $this->table(['layer_id', 'purchase_id', 'product_id', 'candidate_count'], $ambiguousLayers->all());
+    }
+
+    $ambiguousReturns = collect($audit['purchase_return_items']['rows'])
+        ->where('status', 'legacy_ambiguous')
+        ->take($limit)
+        ->map(fn (array $row) => [
+            'purchase_return_item_id' => $row['purchase_return_item_id'],
+            'purchase_return_id' => $row['purchase_return_id'],
+            'purchase_id' => $row['purchase_id'],
+            'product_id' => $row['product_id'],
+            'candidate_count' => $row['candidate_count'] ?? 0,
+        ])
+        ->values();
+
+    if ($ambiguousReturns->isNotEmpty()) {
+        $this->newLine();
+        $this->warn('Ambiguous purchase return samples');
+        $this->table(['purchase_return_item_id', 'purchase_return_id', 'purchase_id', 'product_id', 'candidate_count'], $ambiguousReturns->all());
+    }
+})->purpose('Audit and optionally backfill legacy purchase inventory_layers.source_item_id without guessing ambiguous history');
 
 Artisan::command('inventory:rebuild-valuation {--tenant_id=} {--confirm=}', function () {
     $tenantId = (string) $this->option('tenant_id');
@@ -574,4 +680,3 @@ Schedule::job(new DetectInventoryInvariantJob())->hourly();
 Schedule::job(new DetectSupplierDebtDueJob())->dailyAt('08:00');
 Schedule::command('inventory:prune-valuation-reports')->dailyAt('02:15');
 Schedule::command('inventory:prune-valuation-cache')->dailyAt('02:25');
-

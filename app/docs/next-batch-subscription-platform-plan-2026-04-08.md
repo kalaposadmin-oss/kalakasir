@@ -105,5 +105,5 @@ Checklist:
 	2. subscription core + invoices selesai di `b0d8590`
 	3. inventory reporting selesai di `b7e6cec`
 	4. platform admin API selesai di `491f61b`
-	5. middleware dependency pass menjadi slice aktif berikutnya
-	6. commands/deploy workflow paling akhir
+	5. middleware dependency pass selesai di `05fdf5f`
+	6. commands/deploy workflow menjadi slice aktif terakhir

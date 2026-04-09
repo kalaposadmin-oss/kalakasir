@@ -1,0 +1,89 @@
+name: Deploy Staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run only (no deploy)'
+        required: true
+        default: 'true'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      DEPLOY_PATH: /var/www/kalakasir
+      APP_ENV: staging
+      APP_DEBUG: "false"
+      DEPLOY_SHA: ${{ github.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show plan
+        run: |
+          echo "Deploy staging workflow"
+          echo "Dry run: ${{ github.event.inputs.dry_run }}"
+
+      - name: Deploy via SSH
+        if: ${{ github.event.inputs.dry_run == 'false' }}
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          port: ${{ secrets.DEPLOY_PORT }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd "$DEPLOY_PATH"
+            export APP_ENV="$APP_ENV"
+            export APP_DEBUG="$APP_DEBUG"
+
+            PREVIOUS_COMMIT="$(git rev-parse HEAD)"
+            rollback() {
+              echo "Deploy gagal. Rollback code ke ${PREVIOUS_COMMIT}"
+              git reset --hard "$PREVIOUS_COMMIT"
+              composer install --no-dev --optimize-autoloader
+              if command -v npm >/dev/null 2>&1; then
+                npm ci
+                npm run build
+              fi
+              php artisan config:cache
+              php artisan route:cache
+              php artisan view:cache
+              php artisan queue:restart
+              php artisan optimize
+              php artisan up || true
+            }
+            trap rollback ERR
+
+            php artisan down --retry=60 || true
+            git fetch --all --prune
+            git checkout --force "$DEPLOY_SHA"
+            composer install --no-dev --optimize-autoloader
+            if command -v npm >/dev/null 2>&1; then
+              npm ci
+              npm run build
+            fi
+            php artisan config:cache
+            php artisan route:cache
+            php artisan view:cache
+            php artisan migrate --force
+            php artisan queue:restart
+            php artisan optimize
+
+            HEALTHCHECK_URL="${STAGING_HEALTHCHECK_URL:-http://127.0.0.1/up}"
+            curl -fsS "$HEALTHCHECK_URL" >/dev/null
+
+            BASE_URL="${STAGING_BASE_URL:-http://127.0.0.1}"
+            for path in /login /up; do
+              curl -fsS -I "${BASE_URL}${path}" >/dev/null
+            done
+
+            if ! pgrep -af "artisan queue:work|artisan horizon" >/dev/null 2>&1; then
+              echo "Queue worker aktif tidak terdeteksi"
+              exit 1
+            fi
+
+            php artisan up
+            trap - ERR
