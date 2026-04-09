@@ -7,6 +7,8 @@ use App\Models\Branch;
 use App\Models\Location;
 use App\Models\Payment;
 use App\Models\Sale;
+use App\Services\AnalyticsMetricsService;
+use App\Support\Decimal;
 use App\Support\TenantContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
@@ -30,45 +32,16 @@ class AnalyticsController extends Controller
         $yesterdayStart = $yesterdayLocal->setTimezone('UTC');
         $yesterdayEnd = $yesterdayLocal->endOfDay()->setTimezone('UTC');
 
-        $todayRevenue = (float) Sale::query()
-            ->where('status', 'completed')
-            ->where('tenant_id', $tenantId)
-            ->whereBetween('created_at', [$todayStart, $todayEnd])
-            ->sum('total');
+        $metricsService = app(AnalyticsMetricsService::class);
+        $todaySummary = $metricsService->summaryForBusinessDate($tenantId, $todayLocal->toDateString());
+        $yesterdaySummary = $metricsService->summaryForBusinessDate($tenantId, $yesterdayLocal->toDateString());
 
-        $yesterdayRevenue = (float) Sale::query()
-            ->where('status', 'completed')
-            ->where('tenant_id', $tenantId)
-            ->whereBetween('created_at', [$yesterdayStart, $yesterdayEnd])
-            ->sum('total');
-
-        $todayOrders = (int) Sale::query()
-            ->where('status', 'completed')
-            ->where('tenant_id', $tenantId)
-            ->whereBetween('created_at', [$todayStart, $todayEnd])
-            ->count();
-
-        $yesterdayOrders = (int) Sale::query()
-            ->where('status', 'completed')
-            ->where('tenant_id', $tenantId)
-            ->whereBetween('created_at', [$yesterdayStart, $yesterdayEnd])
-            ->count();
-
-        $todayProfit = (float) DB::table('sale_items')
-            ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
-            ->where('sales.status', 'completed')
-            ->where('sales.tenant_id', $tenantId)
-            ->where('sale_items.tenant_id', $tenantId)
-            ->whereBetween('sales.created_at', [$todayStart, $todayEnd])
-            ->sum(DB::raw('(sale_items.qty * sale_items.price) - sale_items.discount - (sale_items.qty * sale_items.hpp_snapshot)'));
-
-        $yesterdayProfit = (float) DB::table('sale_items')
-            ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
-            ->where('sales.status', 'completed')
-            ->where('sales.tenant_id', $tenantId)
-            ->where('sale_items.tenant_id', $tenantId)
-            ->whereBetween('sales.created_at', [$yesterdayStart, $yesterdayEnd])
-            ->sum(DB::raw('(sale_items.qty * sale_items.price) - sale_items.discount - (sale_items.qty * sale_items.hpp_snapshot)'));
+        $todayRevenue = Decimal::float($todaySummary['revenue'] ?? 0, Decimal::MONEY_SCALE);
+        $yesterdayRevenue = Decimal::float($yesterdaySummary['revenue'] ?? 0, Decimal::MONEY_SCALE);
+        $todayOrders = (int) ($todaySummary['orders'] ?? 0);
+        $yesterdayOrders = (int) ($yesterdaySummary['orders'] ?? 0);
+        $todayProfit = Decimal::float($todaySummary['profit'] ?? 0, Decimal::MONEY_SCALE);
+        $yesterdayProfit = Decimal::float($yesterdaySummary['profit'] ?? 0, Decimal::MONEY_SCALE);
 
         $hourExpr = match (DB::getDriverName()) {
             'mysql' => "DATE_FORMAT(created_at, '%H')",
@@ -80,6 +53,17 @@ class AnalyticsController extends Controller
             ->selectRaw($hourExpr . ' as hour')
             ->selectRaw('sum(total) as total')
             ->where('status', 'completed')
+            ->where('tenant_id', $tenantId)
+            ->whereBetween('created_at', [$todayStart, $todayEnd])
+            ->groupBy('hour')
+            ->orderBy('hour')
+            ->get();
+
+        $refundTrendRows = DB::table('refunds')
+            ->selectRaw($hourExpr . ' as hour')
+            ->selectRaw('sum(total) as total')
+            ->where('status', 'completed')
+            ->where('tenant_id', $tenantId)
             ->whereBetween('created_at', [$todayStart, $todayEnd])
             ->groupBy('hour')
             ->orderBy('hour')
@@ -88,6 +72,10 @@ class AnalyticsController extends Controller
         $trendMap = [];
         foreach ($trendRows as $row) {
             $trendMap[(int) $row->hour] = (float) $row->total;
+        }
+        foreach ($refundTrendRows as $row) {
+            $hour = (int) $row->hour;
+            $trendMap[$hour] = ($trendMap[$hour] ?? 0) - (float) $row->total;
         }
 
         $trendHours = [8, 12, 16, 20, 22];
@@ -99,9 +87,15 @@ class AnalyticsController extends Controller
             ];
         }
 
-        $topProducts = DB::table('sale_items')
-            ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
-            ->join('products', 'products.id', '=', 'sale_items.product_id')
+        $topSalesProducts = DB::table('sale_items')
+            ->join('sales', function ($join) {
+                $join->on('sales.id', '=', 'sale_items.sale_id')
+                    ->on('sales.tenant_id', '=', 'sale_items.tenant_id');
+            })
+            ->join('products', function ($join) {
+                $join->on('products.id', '=', 'sale_items.product_id')
+                    ->on('products.tenant_id', '=', 'sale_items.tenant_id');
+            })
             ->leftJoin('categories', function ($join) {
                 $join->on('categories.id', '=', 'products.category_id')
                     ->on('categories.tenant_id', '=', 'products.tenant_id');
@@ -123,11 +117,46 @@ class AnalyticsController extends Controller
             ->selectRaw('sum((sale_items.qty * sale_items.price) - sale_items.discount) as revenue')
             ->groupBy('products.id', 'products.name', 'products.image_url', 'categories.name')
             ->orderByDesc('revenue')
-            ->limit(5)
             ->get();
 
+        $topRefundProducts = DB::table('refund_items')
+            ->join('refunds', function ($join) {
+                $join->on('refunds.id', '=', 'refund_items.refund_id')
+                    ->on('refunds.tenant_id', '=', 'refund_items.tenant_id');
+            })
+            ->join('products', function ($join) {
+                $join->on('products.id', '=', 'refund_items.product_id')
+                    ->on('products.tenant_id', '=', 'refund_items.tenant_id');
+            })
+            ->leftJoin('categories', function ($join) {
+                $join->on('categories.id', '=', 'products.category_id')
+                    ->on('categories.tenant_id', '=', 'products.tenant_id');
+            })
+            ->where('refunds.status', 'completed')
+            ->where('refunds.tenant_id', $tenantId)
+            ->where('refund_items.tenant_id', $tenantId)
+            ->where('products.tenant_id', $tenantId)
+            ->where('refunds.created_at', '>=', $startUtc)
+            ->where('refunds.created_at', '<', $endExclusiveUtc)
+            ->where('products.sku', 'not like', 'FEE-%')
+            ->select([
+                'products.id',
+                'products.name',
+                'products.image_url',
+                'categories.name as category_name',
+            ])
+            ->selectRaw('sum(refund_items.qty) as qty')
+            ->selectRaw('sum(refund_items.gross_amount - refund_items.item_discount_amount - refund_items.transaction_discount_amount) as revenue')
+            ->groupBy('products.id', 'products.name', 'products.image_url', 'categories.name')
+            ->get();
+
+        $topProducts = $this->mergeTopProducts($topSalesProducts, $topRefundProducts);
+
         $paymentRows = Payment::query()
-            ->join('sales', 'sales.id', '=', 'payments.sale_id')
+            ->join('sales', function ($join) {
+                $join->on('sales.id', '=', 'payments.sale_id')
+                    ->on('sales.tenant_id', '=', 'payments.tenant_id');
+            })
             ->where('sales.status', 'completed')
             ->where('sales.tenant_id', $tenantId)
             ->where('payments.tenant_id', $tenantId)
@@ -138,18 +167,54 @@ class AnalyticsController extends Controller
             ->groupBy('payments.method')
             ->get();
 
-        $paymentTotal = (float) $paymentRows->sum('amount');
-        $payments = $paymentRows->map(function ($row) use ($paymentTotal) {
-            $amount = (float) $row->amount;
-            return [
-                'method' => $row->method,
-                'amount' => $amount,
-                'percent' => $paymentTotal > 0 ? round(($amount / $paymentTotal) * 100, 1) : 0,
-            ];
-        })->values();
+        $refundPaymentRows = DB::table('refund_payments')
+            ->join('refunds', function ($join) {
+                $join->on('refunds.id', '=', 'refund_payments.refund_id')
+                    ->on('refunds.tenant_id', '=', 'refund_payments.tenant_id');
+            })
+            ->where('refunds.status', 'completed')
+            ->where('refunds.tenant_id', $tenantId)
+            ->where('refund_payments.tenant_id', $tenantId)
+            ->where('refunds.created_at', '>=', $startUtc)
+            ->where('refunds.created_at', '<', $endExclusiveUtc)
+            ->select('refund_payments.method')
+            ->selectRaw('sum(refund_payments.amount) as amount')
+            ->groupBy('refund_payments.method')
+            ->get();
 
-        $daily = $this->buildDailySummary($tenantId, $startUtc, $endExclusiveUtc, $startLocal, $endLocal);
-        $rangeTotals = $this->summarizeDaily($daily);
+        $paymentMap = [];
+        foreach ($paymentRows as $row) {
+            $paymentMap[$row->method] = ($paymentMap[$row->method] ?? 0) + (float) $row->amount;
+        }
+        foreach ($refundPaymentRows as $row) {
+            $paymentMap[$row->method] = ($paymentMap[$row->method] ?? 0) - (float) $row->amount;
+        }
+
+        $paymentTotal = array_sum(array_filter($paymentMap, fn ($amount) => $amount > 0));
+        $payments = collect($paymentMap)
+            ->map(function ($amount, $method) use ($paymentTotal) {
+                $amount = (float) $amount;
+
+                return [
+                    'method' => $method,
+                    'amount' => $amount,
+                    'percent' => $paymentTotal > 0 && $amount > 0 ? round(($amount / $paymentTotal) * 100, 1) : 0,
+                ];
+            })
+            ->filter(fn (array $row) => abs($row['amount']) > 0.00001)
+            ->sortByDesc('amount')
+            ->values();
+
+        $daily = $metricsService->dailySummary($tenantId, $rangeMeta['start_date'], $rangeMeta['end_date']);
+        $rangeTotals = $metricsService->summaryForRange($tenantId, $rangeMeta['start_date'], $rangeMeta['end_date']);
+        $topProducts = $metricsService->topProducts($tenantId, $rangeMeta['start_date'], $rangeMeta['end_date']);
+        $payments = $metricsService->paymentMix($tenantId, $rangeMeta['start_date'], $rangeMeta['end_date']);
+        $trend = $metricsService->trendForEventDay(
+            $tenantId,
+            $todayLocal->toDateString(),
+            $todayStart->toDateTimeString(),
+            $todayEnd->toDateTimeString(),
+        );
 
         $location = Location::query()
             ->where('tenant_id', $tenantId)
@@ -273,7 +338,10 @@ class AnalyticsController extends Controller
             ->get();
 
         $itemRows = DB::table('sale_items')
-            ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
+            ->join('sales', function ($join) {
+                $join->on('sales.id', '=', 'sale_items.sale_id')
+                    ->on('sales.tenant_id', '=', 'sale_items.tenant_id');
+            })
             ->where('sales.tenant_id', $tenantId)
             ->where('sale_items.tenant_id', $tenantId)
             ->where('sales.status', 'completed')
@@ -285,8 +353,40 @@ class AnalyticsController extends Controller
             ->orderBy('date')
             ->get();
 
+        $refundRows = DB::table('refunds')
+            ->where('tenant_id', $tenantId)
+            ->where('status', 'completed')
+            ->where('created_at', '>=', $startUtc)
+            ->where('created_at', '<', $endExclusiveUtc)
+            ->selectRaw('DATE(created_at) as date')
+            ->selectRaw('sum(total) as revenue')
+            ->selectRaw('sum(tax_total) as tax')
+            ->selectRaw('sum(total - refunded_cost_total) as profit_impact')
+            ->groupBy('date')
+            ->orderBy('date')
+            ->get();
+
+        $refundItemRows = DB::table('refund_items')
+            ->join('refunds', function ($join) {
+                $join->on('refunds.id', '=', 'refund_items.refund_id')
+                    ->on('refunds.tenant_id', '=', 'refund_items.tenant_id');
+            })
+            ->where('refunds.tenant_id', $tenantId)
+            ->where('refund_items.tenant_id', $tenantId)
+            ->where('refunds.status', 'completed')
+            ->where('refunds.created_at', '>=', $startUtc)
+            ->where('refunds.created_at', '<', $endExclusiveUtc)
+            ->selectRaw('DATE(refunds.created_at) as date')
+            ->selectRaw('sum(refund_items.qty) as items')
+            ->groupBy('date')
+            ->orderBy('date')
+            ->get();
+
         $profitRows = DB::table('sale_items')
-            ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
+            ->join('sales', function ($join) {
+                $join->on('sales.id', '=', 'sale_items.sale_id')
+                    ->on('sales.tenant_id', '=', 'sale_items.tenant_id');
+            })
             ->where('sales.tenant_id', $tenantId)
             ->where('sale_items.tenant_id', $tenantId)
             ->where('sales.status', 'completed')
@@ -299,8 +399,14 @@ class AnalyticsController extends Controller
             ->get();
 
         $feeRows = DB::table('sale_items')
-            ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
-            ->join('products', 'products.id', '=', 'sale_items.product_id')
+            ->join('sales', function ($join) {
+                $join->on('sales.id', '=', 'sale_items.sale_id')
+                    ->on('sales.tenant_id', '=', 'sale_items.tenant_id');
+            })
+            ->join('products', function ($join) {
+                $join->on('products.id', '=', 'sale_items.product_id')
+                    ->on('products.tenant_id', '=', 'sale_items.tenant_id');
+            })
             ->where('sales.tenant_id', $tenantId)
             ->where('sale_items.tenant_id', $tenantId)
             ->where('products.tenant_id', $tenantId)
@@ -316,6 +422,8 @@ class AnalyticsController extends Controller
 
         $salesMap = $salesRows->keyBy('date');
         $itemsMap = $itemRows->keyBy('date');
+        $refundMap = $refundRows->keyBy('date');
+        $refundItemsMap = $refundItemRows->keyBy('date');
         $profitMap = $profitRows->keyBy('date');
         $feeMap = $feeRows->keyBy('date');
 
@@ -326,16 +434,18 @@ class AnalyticsController extends Controller
             $dateKey = $cursor->toDateString();
             $sales = $salesMap[$dateKey] ?? null;
             $items = $itemsMap[$dateKey] ?? null;
+            $refund = $refundMap[$dateKey] ?? null;
+            $refundedItems = $refundItemsMap[$dateKey] ?? null;
             $profit = $profitMap[$dateKey] ?? null;
             $fee = $feeMap[$dateKey] ?? null;
 
-            $revenue = (float) ($sales?->revenue ?? 0);
+            $revenue = (float) ($sales?->revenue ?? 0) - (float) ($refund?->revenue ?? 0);
             $orders = (int) ($sales?->orders ?? 0);
             $discount = (float) ($sales?->discount ?? 0);
-            $tax = (float) ($sales?->tax ?? 0);
-            $itemCount = (float) ($items?->items ?? 0);
+            $tax = (float) ($sales?->tax ?? 0) - (float) ($refund?->tax ?? 0);
+            $itemCount = (float) ($items?->items ?? 0) - (float) ($refundedItems?->items ?? 0);
             $feeTotal = (float) ($fee?->fee ?? 0);
-            $profitTotal = (float) ($profit?->profit ?? 0);
+            $profitTotal = (float) ($profit?->profit ?? 0) - (float) ($refund?->profit_impact ?? 0);
 
             $daily[] = [
                 'date' => $dateKey,
@@ -353,6 +463,62 @@ class AnalyticsController extends Controller
         }
 
         return $daily;
+    }
+
+    private function refundTotalBetween(string $tenantId, CarbonImmutable $start, CarbonImmutable $end): float
+    {
+        return (float) DB::table('refunds')
+            ->where('tenant_id', $tenantId)
+            ->where('status', 'completed')
+            ->whereBetween('created_at', [$start, $end])
+            ->sum('total');
+    }
+
+    private function refundProfitImpactBetween(string $tenantId, CarbonImmutable $start, CarbonImmutable $end): float
+    {
+        return (float) DB::table('refunds')
+            ->where('tenant_id', $tenantId)
+            ->where('status', 'completed')
+            ->whereBetween('created_at', [$start, $end])
+            ->sum(DB::raw('total - refunded_cost_total'));
+    }
+
+    private function mergeTopProducts($salesRows, $refundRows)
+    {
+        $products = [];
+
+        foreach ($salesRows as $row) {
+            $products[$row->id] = [
+                'id' => $row->id,
+                'name' => $row->name,
+                'image_url' => $row->image_url,
+                'category_name' => $row->category_name,
+                'qty' => (float) $row->qty,
+                'revenue' => (float) $row->revenue,
+            ];
+        }
+
+        foreach ($refundRows as $row) {
+            if (! array_key_exists($row->id, $products)) {
+                $products[$row->id] = [
+                    'id' => $row->id,
+                    'name' => $row->name,
+                    'image_url' => $row->image_url,
+                    'category_name' => $row->category_name,
+                    'qty' => 0.0,
+                    'revenue' => 0.0,
+                ];
+            }
+
+            $products[$row->id]['qty'] -= (float) $row->qty;
+            $products[$row->id]['revenue'] -= (float) $row->revenue;
+        }
+
+        return collect($products)
+            ->filter(fn (array $row) => $row['qty'] > 0 || abs($row['revenue']) > 0.00001)
+            ->sortByDesc('revenue')
+            ->take(5)
+            ->values();
     }
 
     private function summarizeDaily(array $daily): array

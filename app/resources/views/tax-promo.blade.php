@@ -1,5 +1,29 @@
 @extends('layouts.app')
 
+@php
+    $taxPromoTenant = \App\Support\TenantContext::get();
+    $taxPromoUser = auth()->user();
+    $taxPromoRole = null;
+
+    if (! $taxPromoTenant && filled($taxPromoUser?->tenant_id)) {
+        $taxPromoTenant = \App\Models\Tenant::query()->find($taxPromoUser->tenant_id);
+    }
+
+    if ($taxPromoTenant && $taxPromoUser) {
+        $taxPromoRole = app(\App\Services\UserRoleResolverService::class)
+            ->resolveNormalizedRole((string) $taxPromoTenant->id, (string) $taxPromoUser->id);
+
+        if (! $taxPromoRole && filled($taxPromoUser->role ?? null)) {
+            $taxPromoRole = app(\App\Services\UserRoleResolverService::class)
+                ->normalize((string) $taxPromoUser->role);
+        }
+    }
+
+    abort_unless(in_array($taxPromoRole, ['warehouse', 'supervisor', 'admin', 'owner', 'superadmin'], true), 403);
+
+    $canManageTaxPromo = in_array($taxPromoRole, ['admin', 'owner', 'superadmin'], true);
+@endphp
+
 @section('page_title', 'Pengaturan Pajak dan Promo')
 @section('body_class', 'bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display min-h-screen')
 @section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-white dark:bg-background-dark shadow-2xl')
@@ -18,7 +42,7 @@
 @endpush
 
 @section('header')
-        <x-page-header title="Pajak dan Promo" backUrl="/menu/settings">
+        <x-page-header title="Pajak dan Promo" backUrl="/backoffice/dashboard">
             <x-slot name="actions">
                 <button class="flex items-center justify-center size-10 rounded-full bg-slate-50 dark:bg-slate-800">
                     <span class="material-symbols-outlined text-slate-600 dark:text-slate-400">help_outline</span>
@@ -32,10 +56,12 @@
             <section class="p-4">
                 <div class="flex items-center justify-between mb-4">
                     <h2 class="text-sm font-bold text-slate-500 uppercase tracking-widest">Pengaturan Pajak</h2>
-                    <button class="text-primary text-sm font-bold flex items-center gap-1">
-                        <span class="material-symbols-outlined text-sm">add_circle</span>
-                        Tambah
-                    </button>
+                    @if ($canManageTaxPromo)
+                        <button class="text-primary text-sm font-bold flex items-center gap-1">
+                            <span class="material-symbols-outlined text-sm">add_circle</span>
+                            Tambah
+                        </button>
+                    @endif
                 </div>
                 <div class="space-y-3" id="tax-list"></div>
             </section>
@@ -43,21 +69,25 @@
             <section class="p-4">
                 <div class="flex items-center justify-between mb-4">
                     <h2 class="text-sm font-bold text-slate-500 uppercase tracking-widest">Manajemen Promo</h2>
-                    <button class="bg-primary/10 text-primary px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1">
-                        <span class="material-symbols-outlined text-sm">add</span>
-                        Buat Promo
-                    </button>
+                    @if ($canManageTaxPromo)
+                        <button class="bg-primary/10 text-primary px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1">
+                            <span class="material-symbols-outlined text-sm">add</span>
+                            Buat Promo
+                        </button>
+                    @endif
                 </div>
                 <div class="space-y-4" id="promo-list"></div>
             </section>
             <div class="h-8"></div>
         </div>
-        <div class="fixed bottom-[88px] left-1/2 -translate-x-1/2 w-full max-w-[430px] px-6 z-40">
-            <button class="w-full bg-primary text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-xl shadow-primary/30">
-                <span class="material-symbols-outlined">add_task</span>
-                Tambah Pajak Baru
-            </button>
-        </div>
+        @if ($canManageTaxPromo)
+            <div class="fixed bottom-[88px] left-1/2 -translate-x-1/2 w-full max-w-[430px] px-6 z-40">
+                <button class="w-full bg-primary text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-xl shadow-primary/30">
+                    <span class="material-symbols-outlined">add_task</span>
+                    Tambah Pajak Baru
+                </button>
+            </div>
+        @endif
 
         <script>
             (() => {
@@ -102,10 +132,14 @@
                                     <p class="text-[11px] text-slate-500">${tax.description || 'Pajak'}</p>
                                 </div>
                             </div>
-                            <div class="relative inline-block w-12 align-middle select-none transition duration-200 ease-in">
-                                <input class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-2 border-slate-200 appearance-none cursor-pointer right-6 checked:right-0 checked:border-primary transition-all duration-300" id="tax-${tax.id}" type="checkbox" ${tax.is_active ? 'checked' : ''} data-id="${tax.id}" />
-                                <label class="toggle-label block overflow-hidden h-6 rounded-full bg-slate-200 dark:bg-slate-700 cursor-pointer transition-colors duration-300" for="tax-${tax.id}"></label>
-                            </div>
+                            @if ($canManageTaxPromo)
+                                <div class="relative inline-block w-12 align-middle select-none transition duration-200 ease-in">
+                                    <input class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-2 border-slate-200 appearance-none cursor-pointer right-6 checked:right-0 checked:border-primary transition-all duration-300" id="tax-${tax.id}" type="checkbox" ${tax.is_active ? 'checked' : ''} data-id="${tax.id}" />
+                                    <label class="toggle-label block overflow-hidden h-6 rounded-full bg-slate-200 dark:bg-slate-700 cursor-pointer transition-colors duration-300" for="tax-${tax.id}"></label>
+                                </div>
+                            @else
+                                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${tax.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'} uppercase">${tax.is_active ? 'Aktif' : 'Nonaktif'}</span>
+                            @endif
                         `;
                         el.taxes.appendChild(row);
                     });
@@ -148,7 +182,9 @@
                                         <p class="text-[10px] text-slate-400 uppercase font-bold tracking-tight">${promo.code ? 'Kode Promo' : 'Kategori'}</p>
                                         <p class="text-xs font-bold">${promo.code || promo.category || '-'}</p>
                                     </div>
-                                    <button class="material-symbols-outlined text-slate-400">more_vert</button>
+                                    @if ($canManageTaxPromo)
+                                        <button class="material-symbols-outlined text-slate-400">more_vert</button>
+                                    @endif
                                 </div>
                             </div>
                         `;
@@ -156,6 +192,7 @@
                     });
                 };
 
+                @if ($canManageTaxPromo)
                 el.taxes.addEventListener('change', async (event) => {
                     const checkbox = event.target.closest('.toggle-checkbox');
                     if (!checkbox) {
@@ -175,6 +212,7 @@
                         checkbox.checked = !checkbox.checked;
                     }
                 });
+                @endif
 
                 (async () => {
                     const response = await fetch('/api/v1/settings/tax-promos', { headers });

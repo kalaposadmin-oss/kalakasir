@@ -3,13 +3,9 @@
 namespace App\Services;
 
 use App\Models\InventoryBalance;
-use App\Models\InventoryCostState;
-use App\Models\InventoryLayer;
 use App\Models\InventorySummary;
 use App\Models\Product;
-use App\Services\InventoryValuationService;
 use Carbon\CarbonImmutable;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class InventorySummaryService
@@ -19,53 +15,21 @@ class InventorySummaryService
         $products = Product::query()
             ->where('tenant_id', $tenantId)
             ->whereIn('id', $productIds)
-            ->get(['id', 'hpp_average']);
+            ->get(['id']);
 
         foreach ($products as $product) {
             $qty = (float) InventoryBalance::query()
                 ->where('tenant_id', $tenantId)
                 ->where('product_id', $product->id)
                 ->where('location_id', $locationId)
-                ->value('qty_on_hand');
+                ->sum('qty_on_hand');
 
-            $method = app(InventoryValuationService::class)->methodForTenant($tenantId);
-
-            if ($method === 'fifo') {
-                $fifoValue = (float) InventoryLayer::query()
-                    ->where('tenant_id', $tenantId)
-                    ->where('product_id', $product->id)
-                    ->where('location_id', $locationId)
-                    ->selectRaw('sum(qty_remaining * cost_per_unit) as total')
-                    ->value('total');
-
-                $value = $fifoValue;
-
-                if ($value <= 0 && $qty > 0) {
-                    $averageCost = (float) InventoryCostState::query()
-                        ->where('tenant_id', $tenantId)
-                        ->where('product_id', $product->id)
-                        ->where('location_id', $locationId)
-                        ->value('average_cost');
-
-                    if ($averageCost <= 0) {
-                        $averageCost = (float) $product->hpp_average;
-                    }
-
-                    $value = $qty * $averageCost;
-                }
-            } else {
-                $averageCost = (float) InventoryCostState::query()
-                    ->where('tenant_id', $tenantId)
-                    ->where('product_id', $product->id)
-                    ->where('location_id', $locationId)
-                    ->value('average_cost');
-
-                if ($averageCost <= 0) {
-                    $averageCost = (float) $product->hpp_average;
-                }
-
-                $value = $qty * $averageCost;
-            }
+            // Product-level cache rolls up variant buckets by summing their authoritative valuation rows.
+            $value = app(InventoryValuationService::class)->inventoryValueForScope(
+                tenantId: $tenantId,
+                locationId: $locationId,
+                productId: (string) $product->id
+            );
 
             $existing = InventorySummary::query()
                 ->where('tenant_id', $tenantId)

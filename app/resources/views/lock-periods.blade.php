@@ -1,5 +1,29 @@
 @extends('layouts.app')
 
+@php
+    $lockPeriodsTenant = \App\Support\TenantContext::get();
+    $lockPeriodsUser = auth()->user();
+    $lockPeriodsRole = null;
+
+    if (! $lockPeriodsTenant && filled($lockPeriodsUser?->tenant_id)) {
+        $lockPeriodsTenant = \App\Models\Tenant::query()->find($lockPeriodsUser->tenant_id);
+    }
+
+    if ($lockPeriodsTenant && $lockPeriodsUser) {
+        $lockPeriodsRole = app(\App\Services\UserRoleResolverService::class)
+            ->resolveNormalizedRole((string) $lockPeriodsTenant->id, (string) $lockPeriodsUser->id);
+
+        if (! $lockPeriodsRole && filled($lockPeriodsUser->role ?? null)) {
+            $lockPeriodsRole = app(\App\Services\UserRoleResolverService::class)
+                ->normalize((string) $lockPeriodsUser->role);
+        }
+    }
+
+    abort_unless(in_array($lockPeriodsRole, ['warehouse', 'supervisor', 'admin', 'owner', 'superadmin'], true), 403);
+
+    $canManageLockPeriods = in_array($lockPeriodsRole, ['admin', 'owner', 'superadmin'], true);
+@endphp
+
 @section('page_title', 'Penguncian Periode Akun')
 @section('body_class', 'bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display')
 @section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-background-light dark:bg-background-dark shadow-2xl')
@@ -17,7 +41,7 @@
 @endpush
 
 @section('header')
-        <x-page-header title="Penguncian Periode" backUrl="/menu/finance">
+        <x-page-header title="Penguncian Periode" backUrl="/backoffice/finance/summary">
             <x-slot name="actions">
                 <button class="flex items-center justify-center size-10 rounded-full bg-slate-100 dark:bg-slate-800">
                     <span class="material-symbols-outlined text-slate-600 dark:text-slate-400">info</span>
@@ -58,10 +82,12 @@
                         <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1.5 ml-1">Nama Periode</label>
                         <input id="period-name" class="w-full rounded-xl border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 py-3 px-4 text-sm" placeholder="Contoh: April 2024" type="text" />
                     </div>
-                    <button id="create-period" class="w-full bg-primary text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform">
-                        <span class="material-symbols-outlined text-lg">add_circle</span>
-                        Buat Periode Baru
-                    </button>
+                    @if ($canManageLockPeriods)
+                        <button id="create-period" class="w-full bg-primary text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform">
+                            <span class="material-symbols-outlined text-lg">add_circle</span>
+                            Buat Periode Baru
+                        </button>
+                    @endif
                 </div>
             </section>
             <section class="px-4 space-y-3">
@@ -125,12 +151,14 @@
                                 </div>
                             </div>
                             <div class="flex items-center">
-                                <div class="relative inline-block w-10 align-middle select-none">
-                                    <input class="toggle-checkbox hidden" id="toggle-${period.id}" type="checkbox" ${locked ? 'checked' : ''} data-id="${period.id}" />
-                                    <label class="toggle-label block overflow-hidden h-5 rounded-full bg-slate-200 cursor-pointer transition-colors duration-200" for="toggle-${period.id}">
-                                        <span class="toggle-dot block h-5 w-5 rounded-full bg-white shadow-md transform transition-transform duration-200 ${locked ? 'translate-x-5' : ''}"></span>
-                                    </label>
-                                </div>
+                                @if ($canManageLockPeriods)
+                                    <div class="relative inline-block w-10 align-middle select-none">
+                                        <input class="toggle-checkbox hidden" id="toggle-${period.id}" type="checkbox" ${locked ? 'checked' : ''} data-id="${period.id}" />
+                                        <label class="toggle-label block overflow-hidden h-5 rounded-full bg-slate-200 cursor-pointer transition-colors duration-200" for="toggle-${period.id}">
+                                            <span class="toggle-dot block h-5 w-5 rounded-full bg-white shadow-md transform transition-transform duration-200 ${locked ? 'translate-x-5' : ''}"></span>
+                                        </label>
+                                    </div>
+                                @endif
                             </div>
                         `;
                         el.list.appendChild(row);
@@ -146,6 +174,7 @@
                     return data.periods || [];
                 };
 
+                @if ($canManageLockPeriods)
                 el.create.addEventListener('click', async () => {
                     if (!el.start.value || !el.end.value) {
                         alert('Lengkapi tanggal periode.');
@@ -189,6 +218,7 @@
                         checkbox.checked = !checkbox.checked;
                     }
                 });
+                @endif
 
                 (async () => {
                     const periods = await loadPeriods();

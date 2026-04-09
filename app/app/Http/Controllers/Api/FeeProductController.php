@@ -25,9 +25,16 @@ class FeeProductController extends Controller
         $baseSku = 'FEE-' . strtoupper(Str::slug($name, '-'));
         $sku = $baseSku ?: 'FEE-' . strtoupper(Str::random(6));
 
-        $product = Product::query()->where('sku', $sku)->first();
+        $product = Product::query()
+            ->where('tenant_id', $tenantId)
+            ->where('sku', $sku)
+            ->first();
+
         if (! $product) {
-            $product = Product::query()->where('name', $name)->first();
+            $product = Product::query()
+                ->where('tenant_id', $tenantId)
+                ->where('name', $name)
+                ->first();
         }
 
         if (! $product) {

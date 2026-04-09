@@ -5,7 +5,7 @@
 @section('main_class', 'flex-1 overflow-y-auto p-4')
 
 @section('header')
-    <x-page-header title="Analytics" subtitle="Ringkasan performa penjualan" backUrl="/menu/reports" :showMenuButton="true" />
+    <x-page-header title="Analytics" subtitle="Ringkasan performa penjualan" backUrl="/backoffice/reports" :showMenuButton="true" />
 @endsection
 
 @section('content')

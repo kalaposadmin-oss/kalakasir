@@ -13,15 +13,18 @@ class ChartOfAccountsController extends Controller
 {
     public function __invoke(Request $request)
     {
+        $tenantId = TenantContext::id();
         $type = $request->query('type');
 
-        $query = ChartOfAccount::query()->select([
-            'id',
-            'code',
-            'name',
-            'type',
-            'parent_id',
-        ]);
+        $query = ChartOfAccount::query()
+            ->when($tenantId, fn ($builder) => $builder->where('tenant_id', $tenantId))
+            ->select([
+                'id',
+                'code',
+                'name',
+                'type',
+                'parent_id',
+            ]);
 
         if ($type && $type !== 'all') {
             $query->where('type', $type);
@@ -29,23 +32,28 @@ class ChartOfAccountsController extends Controller
 
         $accounts = $query->orderBy('code')->get();
 
-        $mapping = AccountMapping::query()->first([
-            'sale_account_id',
-            'cash_account_id',
-            'bank_account_id',
-            'inventory_account_id',
-            'cogs_account_id',
-            'payable_account_id',
-            'receivable_account_id',
-            'expense_adjustment_account_id',
-        ]);
+        $mapping = AccountMapping::query()
+            ->when($tenantId, fn ($builder) => $builder->where('tenant_id', $tenantId))
+            ->first([
+                'sale_account_id',
+                'cash_account_id',
+                'bank_account_id',
+                'inventory_account_id',
+                'cogs_account_id',
+                'payable_account_id',
+                'receivable_account_id',
+                'expense_adjustment_account_id',
+            ]);
 
         $mappingAccountIds = $mapping
             ? array_values(array_filter((array) $mapping->toArray()))
             : [];
 
         $mappingAccounts = $mappingAccountIds
-            ? ChartOfAccount::query()->whereIn('id', $mappingAccountIds)->get(['id', 'code', 'name'])
+            ? ChartOfAccount::query()
+                ->when($tenantId, fn ($builder) => $builder->where('tenant_id', $tenantId))
+                ->whereIn('id', $mappingAccountIds)
+                ->get(['id', 'code', 'name'])
             : collect();
 
         return response()->json([
@@ -57,6 +65,7 @@ class ChartOfAccountsController extends Controller
 
     public function store(Request $request)
     {
+        $tenantId = TenantContext::id();
         $payload = $request->validate([
             'code' => ['required', 'string', 'max:20', Rule::unique('chart_of_accounts')->where(function ($query) {
                 $tenantId = TenantContext::id();
@@ -64,12 +73,14 @@ class ChartOfAccountsController extends Controller
             })],
             'name' => ['required', 'string', 'max:255'],
             'type' => ['required', 'string', Rule::in(['asset', 'liability', 'equity', 'revenue', 'expense'])],
-            'parent_id' => ['nullable', 'string'],
+            'parent_id' => [
+                'nullable',
+                'uuid',
+                $tenantId
+                    ? Rule::exists('chart_of_accounts', 'id')->where('tenant_id', $tenantId)
+                    : 'exists:chart_of_accounts,id',
+            ],
         ]);
-
-        if (!empty($payload['parent_id'])) {
-            ChartOfAccount::query()->where('id', $payload['parent_id'])->firstOrFail();
-        }
 
         $account = ChartOfAccount::query()->create([
             'code' => $payload['code'],
@@ -92,6 +103,8 @@ class ChartOfAccountsController extends Controller
 
     public function update(Request $request, ChartOfAccount $account)
     {
+        $tenantId = TenantContext::id();
+
         if ($request->has('code') && $request->input('code') !== $account->code) {
             return response()->json([
                 'message' => 'Kode akun tidak bisa diubah.',
@@ -100,7 +113,13 @@ class ChartOfAccountsController extends Controller
 
         $payload = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'parent_id' => ['nullable', 'string'],
+            'parent_id' => [
+                'nullable',
+                'uuid',
+                $tenantId
+                    ? Rule::exists('chart_of_accounts', 'id')->where('tenant_id', $tenantId)
+                    : 'exists:chart_of_accounts,id',
+            ],
         ]);
 
         if (!empty($payload['parent_id'])) {
@@ -109,7 +128,6 @@ class ChartOfAccountsController extends Controller
                     'message' => 'Kelompok tidak boleh sama dengan akun itu sendiri.',
                 ], 422);
             }
-            ChartOfAccount::query()->where('id', $payload['parent_id'])->firstOrFail();
         }
 
         $account->update([

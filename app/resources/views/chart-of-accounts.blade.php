@@ -1,5 +1,27 @@
 @extends('layouts.app')
 
+@php
+    $coaTenant = \App\Support\TenantContext::get();
+    $coaUser = auth()->user();
+    $coaRole = null;
+
+    if (! $coaTenant && filled($coaUser?->tenant_id)) {
+        $coaTenant = \App\Models\Tenant::query()->find($coaUser->tenant_id);
+    }
+
+    if ($coaTenant && $coaUser) {
+        $coaRole = app(\App\Services\UserRoleResolverService::class)
+            ->resolveNormalizedRole((string) $coaTenant->id, (string) $coaUser->id);
+
+        if (! $coaRole && filled($coaUser->role ?? null)) {
+            $coaRole = app(\App\Services\UserRoleResolverService::class)
+                ->normalize((string) $coaUser->role);
+        }
+    }
+
+    abort_unless(in_array($coaRole, ['admin', 'owner', 'superadmin'], true), 403);
+@endphp
+
 @section('page_title', 'Akun Bank & Kas')
 @section('body_class', 'bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display')
 @section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-background-light dark:bg-background-dark shadow-2xl')
@@ -13,7 +35,7 @@
 @endpush
 
 @section('header')
-    <x-page-header title="Akun Bank & Kas" backUrl="/menu/settings">
+    <x-page-header title="Akun Bank & Kas" backUrl="/backoffice/dashboard">
         <x-slot name="actions">
             <button class="flex items-center justify-center size-9 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300" type="button">
                 <span class="material-symbols-outlined text-[20px]">search</span>
@@ -228,7 +250,7 @@
 
                     const renderRow = (account, level, index) => {
                         const row = document.createElement('a');
-                        row.href = `/settings/chart-of-accounts/${account.id}`;
+                        row.href = `/backoffice/settings/chart-of-accounts/${account.id}`;
                         row.className = `bg-white dark:bg-slate-900 px-4 py-4 ml-6 border-l border-slate-200 dark:border-slate-800 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/70 transition${index > 0 ? ' border-t border-slate-50 dark:border-slate-800/50' : ''}`;
                         row.style.paddingLeft = level > 0 ? `${16 + level * 12}px` : '';
                         row.innerHTML = `

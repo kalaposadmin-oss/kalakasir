@@ -1,12 +1,34 @@
 @extends('layouts.app')
 
+@php
+    $usersTenant = \App\Support\TenantContext::get();
+    $usersUser = auth()->user();
+    $usersRole = null;
+
+    if (! $usersTenant && filled($usersUser?->tenant_id)) {
+        $usersTenant = \App\Models\Tenant::query()->find($usersUser->tenant_id);
+    }
+
+    if ($usersTenant && $usersUser) {
+        $usersRole = app(\App\Services\UserRoleResolverService::class)
+            ->resolveNormalizedRole((string) $usersTenant->id, (string) $usersUser->id);
+
+        if (! $usersRole && filled($usersUser->role ?? null)) {
+            $usersRole = app(\App\Services\UserRoleResolverService::class)
+                ->normalize((string) $usersUser->role);
+        }
+    }
+
+    abort_unless(in_array($usersRole, ['admin', 'owner', 'superadmin'], true), 403);
+@endphp
+
 @section('page_title', 'Manajemen Pengguna dan Role')
 @section('body_class', 'bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display')
 @section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-background-light dark:bg-background-dark shadow-2xl')
 @section('main_class', 'flex-1 overflow-hidden p-0')
 
 @section('header')
-    <x-page-header title="Manajemen Pengguna" backUrl="/menu/settings">
+    <x-page-header title="Manajemen Pengguna" backUrl="/backoffice/dashboard">
         <x-slot name="actions">
             <button class="flex items-center justify-center size-10 rounded-full bg-slate-100 dark:bg-slate-800">
                 <span class="material-symbols-outlined text-slate-600 dark:text-slate-400">search</span>
@@ -24,6 +46,10 @@
             <button class="flex-1 py-3 text-sm font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-700">Role dan Hak Akses</button>
         </div>
         <div class="flex-1 overflow-y-auto pb-24">
+            <div class="mx-4 mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-relaxed text-amber-900">
+                <p class="font-bold">Panduan role toko</p>
+                <p class="mt-1">Owner dipakai untuk akun utama pemilik atau pengelola bisnis. Admin untuk operasional harian tingkat lanjut, Kasir untuk transaksi, dan Staf Gudang untuk stok.</p>
+            </div>
             <div class="grid grid-cols-2 gap-3 p-4">
                 <div class="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                     <p class="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Total Staf</p>
@@ -68,6 +94,7 @@
                     <div class="space-y-1.5">
                         <label class="text-xs font-bold text-slate-500 uppercase">Role</label>
                         <select id="edit-role" class="w-full px-4 py-3 rounded-lg border-slate-200 dark:border-slate-800 dark:bg-slate-950 focus:ring-primary focus:border-primary"></select>
+                        <p id="role-hint" class="text-xs text-slate-500">Pilih role sesuai tanggung jawab pengguna.</p>
                     </div>
                     <div class="flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-800 p-3">
                         <div>
@@ -101,6 +128,7 @@
                     editEmail: document.getElementById('edit-email'),
                     editPassword: document.getElementById('edit-password'),
                     editRole: document.getElementById('edit-role'),
+                    roleHint: document.getElementById('role-hint'),
                     toggleStatus: document.getElementById('toggle-status'),
                     form: document.getElementById('edit-form'),
                     cancel: document.getElementById('cancel-edit'),
@@ -108,6 +136,7 @@
                 };
 
                 const roleIconMap = {
+                    Owner: 'workspace_premium',
                     Kasir: 'account_circle',
                     Manager: 'admin_panel_settings',
                     'Staf Gudang': 'inventory',
@@ -115,10 +144,19 @@
                 };
 
                 const roleColorMap = {
+                    Owner: 'bg-amber-100 text-amber-700',
                     Kasir: 'bg-primary/10 text-primary',
                     Manager: 'bg-orange-100 text-orange-600',
                     'Staf Gudang': 'bg-purple-100 text-purple-600',
                     Admin: 'bg-blue-100 text-blue-600',
+                };
+
+                const roleHintMap = {
+                    Owner: 'Akses penuh untuk pengelolaan bisnis dan tim.',
+                    Admin: 'Kelola operasional harian, master data, dan pengaturan.',
+                    Manager: 'Monitor operasional dan bantu pengawasan tim.',
+                    Kasir: 'Fokus pada transaksi penjualan dan shift.',
+                    'Staf Gudang': 'Fokus pada stok, mutasi, dan penerimaan barang.',
                 };
 
                 const state = {
@@ -146,6 +184,11 @@
                         : 'px-3 py-1.5 rounded-full text-xs font-bold bg-slate-100 text-slate-500';
                 };
 
+                const updateRoleHint = () => {
+                    const selectedRole = state.roles.find((item) => item.id === el.editRole.value)?.name || '';
+                    el.roleHint.textContent = roleHintMap[selectedRole] || 'Pilih role sesuai tanggung jawab pengguna.';
+                };
+
                 const setSelectedUser = (user) => {
                     state.selectedUser = user;
                     if (!user) {
@@ -156,6 +199,7 @@
                         el.editRole.value = '';
                         state.status = 'active';
                         updateStatusButton();
+                        updateRoleHint();
                         return;
                     }
                     el.editId.textContent = `ID: ${String(user.id).slice(0, 8).toUpperCase()}`;
@@ -166,6 +210,7 @@
                     el.editRole.value = role?.id || '';
                     state.status = user.status || 'active';
                     updateStatusButton();
+                    updateRoleHint();
                 };
 
                 const renderStaff = (staff) => {
@@ -217,6 +262,7 @@
                         option.textContent = role.name;
                         el.editRole.appendChild(option);
                     });
+                    updateRoleHint();
                 };
 
                 const loadUsers = async () => {
@@ -254,6 +300,8 @@
                     state.status = state.status === 'active' ? 'inactive' : 'active';
                     updateStatusButton();
                 });
+
+                el.editRole.addEventListener('change', updateRoleHint);
 
                 el.form.addEventListener('submit', async (event) => {
                     event.preventDefault();
@@ -318,8 +366,6 @@
             })();
         </script>
     @endsection
-
-
 
 
 

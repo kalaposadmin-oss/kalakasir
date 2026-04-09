@@ -1,5 +1,30 @@
 @extends('layouts.app')
 
+@php
+    $financeSummaryTenant = \App\Support\TenantContext::get();
+    $financeSummaryUser = auth()->user();
+    $financeSummaryRole = null;
+
+    if (! $financeSummaryTenant && filled($financeSummaryUser?->tenant_id)) {
+        $financeSummaryTenant = \App\Models\Tenant::query()->find($financeSummaryUser->tenant_id);
+    }
+
+    if ($financeSummaryTenant && $financeSummaryUser) {
+        $financeSummaryRole = app(\App\Services\UserRoleResolverService::class)
+            ->resolveNormalizedRole((string) $financeSummaryTenant->id, (string) $financeSummaryUser->id);
+
+        if (! $financeSummaryRole && filled($financeSummaryUser->role ?? null)) {
+            $financeSummaryRole = app(\App\Services\UserRoleResolverService::class)
+                ->normalize((string) $financeSummaryUser->role);
+        }
+    }
+
+    $financeSummaryCanViewBalanceSheet = $financeSummaryTenant
+        && app(\App\Services\SubscriptionService::class)->canAccessFeature($financeSummaryTenant, 'finance.balance_sheet');
+
+    abort_unless(in_array($financeSummaryRole, ['warehouse', 'supervisor', 'admin', 'owner', 'superadmin'], true), 403);
+@endphp
+
 @section('page_title', 'Laporan Keuangan Ringkas')
 @section('body_class', 'bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display')
 @section('main_class', 'flex-1 overflow-y-auto pb-32')
@@ -18,7 +43,7 @@
 @endpush
 
 @section('header')
-    <x-page-header title="Laporan Keuangan" backUrl="/menu/finance" :showMenuButton="true">
+        <x-page-header title="Laporan Keuangan" backUrl="/backoffice/dashboard" :showMenuButton="true">
         <x-slot:actions>
             <button class="flex items-center justify-center size-10 rounded-full bg-slate-100 dark:bg-slate-800">
                 <span class="material-symbols-outlined text-slate-600 dark:text-slate-400">calendar_today</span>
@@ -31,7 +56,9 @@
     <div class="px-4 pb-4 pt-4">
         <div class="bg-slate-100 dark:bg-slate-800 p-1 rounded-xl flex items-center">
             <button id="tab-pl" class="flex-1 py-1.5 text-sm font-semibold rounded-lg segmented-control-active">Laba Rugi</button>
-            <button id="tab-balance" class="flex-1 py-1.5 text-sm font-semibold rounded-lg text-slate-500">Neraca</button>
+            @if ($financeSummaryCanViewBalanceSheet)
+                <button id="tab-balance" class="flex-1 py-1.5 text-sm font-semibold rounded-lg text-slate-500">Neraca</button>
+            @endif
         </div>
     </div>
     <div class="px-4 pb-2">
@@ -108,6 +135,7 @@
             (() => {
                 const tenantId = document.querySelector('meta[name="tenant-id"]').content;
                 const headers = tenantId ? { 'X-Tenant-Id': tenantId } : {};
+                const canViewBalanceSheet = @json($financeSummaryCanViewBalanceSheet);
 
                 const el = {
                     periodFilter: document.getElementById('finance-period'),
@@ -155,13 +183,17 @@
                     el.profitSection.classList.toggle('hidden', !isProfit);
                     el.balanceSection.classList.toggle('hidden', isProfit);
                     el.tabPl.classList.toggle('segmented-control-active', isProfit);
-                    el.tabBalance.classList.toggle('segmented-control-active', !isProfit);
                     el.tabPl.classList.toggle('text-slate-500', !isProfit);
-                    el.tabBalance.classList.toggle('text-slate-500', isProfit);
+                    if (el.tabBalance) {
+                        el.tabBalance.classList.toggle('segmented-control-active', !isProfit);
+                        el.tabBalance.classList.toggle('text-slate-500', isProfit);
+                    }
                 };
 
                 el.tabPl.addEventListener('click', () => setTab('pl'));
-                el.tabBalance.addEventListener('click', () => setTab('balance'));
+                if (el.tabBalance) {
+                    el.tabBalance.addEventListener('click', () => setTab('balance'));
+                }
 
                 const loadFinance = async () => {
                     const params = new URLSearchParams({
@@ -177,6 +209,7 @@
                 };
 
                 const renderFinance = (data) => {
+                    const hasBalanceSheet = Boolean(data.balance_sheet) && canViewBalanceSheet;
                     el.period.textContent = `Periode: ${data.period?.label || '-'}${data.period?.start_date ? ` (${data.period.start_date} - ${data.period.end_date})` : ''}`;
                     el.netProfit.textContent = formatCurrency(data.summary?.net_profit || 0);
                     el.revenueTotal.textContent = `+ ${formatCurrency(data.summary?.revenue || 0)}`;
@@ -185,9 +218,13 @@
 
                     renderRows(el.revenueList, data.revenue_breakdown || []);
                     renderRows(el.expenseList, data.expense_breakdown || []);
-                    renderRows(el.assetList, data.balance_sheet?.assets || []);
-                    renderRows(el.liabilityList, data.balance_sheet?.liabilities || []);
-                    renderRows(el.equityList, data.balance_sheet?.equity || []);
+                    renderRows(el.assetList, hasBalanceSheet ? (data.balance_sheet?.assets || []) : []);
+                    renderRows(el.liabilityList, hasBalanceSheet ? (data.balance_sheet?.liabilities || []) : []);
+                    renderRows(el.equityList, hasBalanceSheet ? (data.balance_sheet?.equity || []) : []);
+
+                    if (!hasBalanceSheet) {
+                        setTab('pl');
+                    }
                 };
 
                 const refresh = async () => {

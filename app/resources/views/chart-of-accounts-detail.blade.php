@@ -1,12 +1,34 @@
 @extends('layouts.app')
 
+@php
+    $coaDetailTenant = \App\Support\TenantContext::get();
+    $coaDetailUser = auth()->user();
+    $coaDetailRole = null;
+
+    if (! $coaDetailTenant && filled($coaDetailUser?->tenant_id)) {
+        $coaDetailTenant = \App\Models\Tenant::query()->find($coaDetailUser->tenant_id);
+    }
+
+    if ($coaDetailTenant && $coaDetailUser) {
+        $coaDetailRole = app(\App\Services\UserRoleResolverService::class)
+            ->resolveNormalizedRole((string) $coaDetailTenant->id, (string) $coaDetailUser->id);
+
+        if (! $coaDetailRole && filled($coaDetailUser->role ?? null)) {
+            $coaDetailRole = app(\App\Services\UserRoleResolverService::class)
+                ->normalize((string) $coaDetailUser->role);
+        }
+    }
+
+    abort_unless(in_array($coaDetailRole, ['admin', 'owner', 'superadmin'], true), 403);
+@endphp
+
 @section('page_title', 'Detail Akun')
 @section('body_class', 'bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display')
 @section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-background-light dark:bg-background-dark shadow-2xl')
 @section('main_class', 'flex-1 overflow-y-auto p-0')
 
 @section('header')
-    <x-page-header title="Detail Akun" backUrl="/settings/chart-of-accounts">
+    <x-page-header title="Detail Akun" backUrl="/backoffice/settings/chart-of-accounts">
         <x-slot name="actions">
             <button class="flex items-center justify-center size-9 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300" type="button">
                 <span class="material-symbols-outlined text-[20px]">more_vert</span>
@@ -150,7 +172,7 @@
                     return;
                 }
 
-                window.location.href = '/settings/chart-of-accounts';
+                window.location.href = '/backoffice/settings/chart-of-accounts';
             };
 
             const init = async () => {

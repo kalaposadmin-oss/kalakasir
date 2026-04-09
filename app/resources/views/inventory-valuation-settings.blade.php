@@ -1,5 +1,38 @@
 @extends('layouts.app')
 
+@php
+    $inventoryValuationTenant = \App\Support\TenantContext::get();
+    $inventoryValuationUser = auth()->user();
+    $inventoryValuationRole = null;
+
+    if (! $inventoryValuationTenant && filled($inventoryValuationUser?->tenant_id)) {
+        $inventoryValuationTenant = \App\Models\Tenant::query()->find($inventoryValuationUser->tenant_id);
+    }
+
+    if ($inventoryValuationTenant && $inventoryValuationUser) {
+        $inventoryValuationRole = app(\App\Services\UserRoleResolverService::class)
+            ->resolveNormalizedRole((string) $inventoryValuationTenant->id, (string) $inventoryValuationUser->id);
+
+        if (! $inventoryValuationRole && filled($inventoryValuationUser->role ?? null)) {
+            $inventoryValuationRole = app(\App\Services\UserRoleResolverService::class)
+                ->normalize((string) $inventoryValuationUser->role);
+        }
+    }
+
+    $inventoryValuationSubscription = app(\App\Services\SubscriptionService::class);
+    $inventoryValuationStatus = $inventoryValuationTenant
+        ? $inventoryValuationSubscription->currentStatus($inventoryValuationTenant)
+        : null;
+
+    abort_unless(in_array($inventoryValuationRole, ['admin', 'owner', 'superadmin'], true), 403);
+    abort_unless(
+        $inventoryValuationTenant
+        && $inventoryValuationSubscription->canAccessFeature($inventoryValuationTenant, 'settings.inventory_valuation')
+        && in_array($inventoryValuationStatus, ['active', 'trialing'], true),
+        403
+    );
+@endphp
+
 @section('page_title', 'Valuation Persediaan')
 @section('body_class', 'bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display min-h-screen')
 @section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-white dark:bg-background-dark shadow-2xl')
@@ -20,7 +53,7 @@
 @endpush
 
 @section('header')
-        <x-page-header title="Pengaturan Stok" backUrl="/menu/settings" />
+        <x-page-header title="Pengaturan Stok" backUrl="/backoffice/dashboard" />
 @endsection
 
 @section('content')
@@ -121,7 +154,7 @@
                 <div id="report-list" class="space-y-2 text-sm"></div>
             </section>
 
-            <a href="/settings/inventory-valuation-audit" class="mx-4 mt-4 block text-center rounded-xl border border-slate-200 dark:border-slate-800 p-3 text-sm font-semibold bg-white dark:bg-slate-900">Buka Dashboard Audit Valuation</a>
+            <a href="/backoffice/settings/inventory-valuation-audit" class="mx-4 mt-4 block text-center rounded-xl border border-slate-200 dark:border-slate-800 p-3 text-sm font-semibold bg-white dark:bg-slate-900">Buka Dashboard Audit Valuation</a>
 
             <p id="error-box" class="mx-4 mt-4 hidden rounded-lg p-3 text-sm bg-red-50 text-red-700"></p>
             <p id="toast-box" class="mx-4 mt-4 mb-8 hidden rounded-lg p-3 text-sm bg-emerald-50 text-emerald-700"></p>

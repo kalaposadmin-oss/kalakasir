@@ -1,12 +1,45 @@
 @extends('layouts.app')
 
+@php
+    $inventoryValuationAuditTenant = \App\Support\TenantContext::get();
+    $inventoryValuationAuditUser = auth()->user();
+    $inventoryValuationAuditRole = null;
+
+    if (! $inventoryValuationAuditTenant && filled($inventoryValuationAuditUser?->tenant_id)) {
+        $inventoryValuationAuditTenant = \App\Models\Tenant::query()->find($inventoryValuationAuditUser->tenant_id);
+    }
+
+    if ($inventoryValuationAuditTenant && $inventoryValuationAuditUser) {
+        $inventoryValuationAuditRole = app(\App\Services\UserRoleResolverService::class)
+            ->resolveNormalizedRole((string) $inventoryValuationAuditTenant->id, (string) $inventoryValuationAuditUser->id);
+
+        if (! $inventoryValuationAuditRole && filled($inventoryValuationAuditUser->role ?? null)) {
+            $inventoryValuationAuditRole = app(\App\Services\UserRoleResolverService::class)
+                ->normalize((string) $inventoryValuationAuditUser->role);
+        }
+    }
+
+    $inventoryValuationAuditSubscription = app(\App\Services\SubscriptionService::class);
+    $inventoryValuationAuditStatus = $inventoryValuationAuditTenant
+        ? $inventoryValuationAuditSubscription->currentStatus($inventoryValuationAuditTenant)
+        : null;
+
+    abort_unless(in_array($inventoryValuationAuditRole, ['admin', 'owner', 'superadmin'], true), 403);
+    abort_unless(
+        $inventoryValuationAuditTenant
+        && $inventoryValuationAuditSubscription->canAccessFeature($inventoryValuationAuditTenant, 'settings.inventory_valuation')
+        && in_array($inventoryValuationAuditStatus, ['active', 'trialing'], true),
+        403
+    );
+@endphp
+
 @section('page_title', 'Audit Valuation')
 @section('body_class', 'bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display min-h-screen')
 @section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-white dark:bg-background-dark shadow-2xl')
 @section('main_class', 'flex-1 overflow-hidden p-0')
 
 @section('header')
-        <x-page-header title="Audit Valuation" backUrl="/settings/inventory-valuation">
+        <x-page-header title="Audit Valuation" backUrl="/backoffice/settings/inventory-valuation">
             <x-slot name="actions">
                 <button id="btn-refresh" class="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-semibold">Refresh</button>
             </x-slot>
