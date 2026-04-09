@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Cache;
 use App\Models\Tenant;
 use App\Services\InventoryValuationService;
 use App\Services\AnomalyService;
+use App\Services\RefundLegacyAuditService;
 use App\Services\ValuationRebuildStateService;
 use App\Services\ValuationComparisonExportService;
 use App\Services\ValuationAuditService;
@@ -66,6 +67,186 @@ Artisan::command('transactions:backfill-transaction-date {--tenant_id=} {--confi
 
     $this->info("Total updated rows: {$updated}");
 })->purpose('Backfill transaction_date from created_at for historical rows');
+
+Artisan::command('refunds:audit-legacy-ambiguity {--tenant_id=} {--limit=10}', function () {
+    $tenantId = (string) $this->option('tenant_id');
+    $limit = max(1, (int) $this->option('limit'));
+    $service = app(RefundLegacyAuditService::class);
+    $rows = $service->rows($tenantId);
+
+    $scope = $tenantId !== '' ? $tenantId : 'ALL';
+    $resolvable = $rows->filter(fn ($row) => $service->classify($row) === 'resolvable_single_match')->values();
+    $ambiguous = $rows->filter(fn ($row) => $service->classify($row) === 'ambiguous_multi_match')->values();
+    $orphan = $rows->filter(fn ($row) => $service->classify($row) === 'orphan_no_match')->values();
+
+    $this->info('Legacy refund audit scope: '.$scope);
+    $this->line('legacy_missing_sale_item_id: '.$rows->count());
+    $this->line('resolvable_single_match: '.$resolvable->count());
+    $this->line('ambiguous_multi_match: '.$ambiguous->count());
+    $this->line('orphan_no_match: '.$orphan->count());
+
+    if ($tenantId === '' && $rows->isNotEmpty()) {
+        $this->newLine();
+        $this->info('Tenant summary');
+        $this->table(
+            ['tenant_id', 'legacy_missing_sale_item_id', 'resolvable_single_match', 'ambiguous_multi_match', 'orphan_no_match'],
+            $service->tenantSummary($rows)->take($limit)->all()
+        );
+    }
+
+    if ($ambiguous->isNotEmpty()) {
+        $this->newLine();
+        $this->warn('Ambiguous samples');
+        $this->table(
+            ['refund_item_id', 'refund_id', 'sale_id', 'product_id', 'qty', 'sale_item_match_count'],
+            $ambiguous->take($limit)->map(fn ($row) => [
+                'refund_item_id' => $row->refund_item_id,
+                'refund_id' => $row->refund_id,
+                'sale_id' => $row->sale_id,
+                'product_id' => $row->product_id,
+                'qty' => (float) $row->qty,
+                'sale_item_match_count' => (int) $row->sale_item_match_count,
+            ])->all()
+        );
+    }
+
+    if ($orphan->isNotEmpty()) {
+        $this->newLine();
+        $this->warn('Orphan samples');
+        $this->table(
+            ['refund_item_id', 'refund_id', 'sale_id', 'product_id', 'qty', 'sale_item_match_count'],
+            $orphan->take($limit)->map(fn ($row) => [
+                'refund_item_id' => $row->refund_item_id,
+                'refund_id' => $row->refund_id,
+                'sale_id' => $row->sale_id,
+                'product_id' => $row->product_id,
+                'qty' => (float) $row->qty,
+                'sale_item_match_count' => (int) $row->sale_item_match_count,
+            ])->all()
+        );
+    }
+})->purpose('Audit historical refund_items without sale_item_id and classify whether they are resolvable, ambiguous, or orphaned');
+
+Artisan::command('refunds:export-legacy-ambiguity {--tenant_id=} {--path=} ', function () {
+    $tenantId = (string) $this->option('tenant_id');
+    $path = trim((string) $this->option('path'));
+    $service = app(RefundLegacyAuditService::class);
+
+    if ($path === '') {
+        $suffix = $tenantId !== '' ? $tenantId : 'all';
+        $path = storage_path('app/audits/refunds/refund-legacy-audit-'.$suffix.'.csv');
+    }
+
+    $rows = $service->rows($tenantId)->map(function ($row) use ($service) {
+        return [
+            'tenant_id' => $row->tenant_id,
+            'refund_id' => $row->refund_id,
+            'refund_item_id' => $row->refund_item_id,
+            'sale_id' => $row->sale_id,
+            'product_id' => $row->product_id,
+            'qty' => (float) $row->qty,
+            'amount' => (float) ($row->amount ?? 0),
+            'sale_item_match_count' => (int) $row->sale_item_match_count,
+            'classification' => $service->classify($row),
+            'refund_created_at' => $row->refund_created_at,
+        ];
+    });
+
+    if (! is_dir(dirname($path))) {
+        mkdir(dirname($path), 0777, true);
+    }
+
+    $handle = fopen($path, 'wb');
+    if ($handle === false) {
+        $this->error('Gagal membuka path export: '.$path);
+        return 1;
+    }
+
+    fputcsv($handle, [
+        'tenant_id',
+        'refund_id',
+        'refund_item_id',
+        'sale_id',
+        'product_id',
+        'qty',
+        'amount',
+        'sale_item_match_count',
+        'classification',
+        'refund_created_at',
+    ]);
+
+    foreach ($rows as $row) {
+        fputcsv($handle, $row);
+    }
+
+    fclose($handle);
+
+    $summaryPath = preg_replace('/\.csv$/', '-summary.csv', $path) ?: ($path.'-summary.csv');
+    $summaryRows = $service->tenantSummary($service->rows($tenantId));
+    $summaryHandle = fopen($summaryPath, 'wb');
+    if ($summaryHandle !== false) {
+        fputcsv($summaryHandle, [
+            'tenant_id',
+            'legacy_missing_sale_item_id',
+            'resolvable_single_match',
+            'ambiguous_multi_match',
+            'orphan_no_match',
+        ]);
+
+        foreach ($summaryRows as $summaryRow) {
+            fputcsv($summaryHandle, $summaryRow);
+        }
+
+        fclose($summaryHandle);
+    }
+
+    $this->info('Legacy refund audit CSV exported: '.$path);
+    $this->line('summary_path: '.$summaryPath);
+    $this->line('rows: '.$rows->count());
+})->purpose('Export historical refund_items without sale_item_id to CSV with ambiguity classification');
+
+Artisan::command('refunds:remediate-legacy-sale-item {--tenant_id=} {--limit=1000} {--confirm=}', function () {
+    $tenantId = (string) $this->option('tenant_id');
+    $limit = max(1, (int) $this->option('limit'));
+    $confirm = (string) $this->option('confirm');
+    $service = app(RefundLegacyAuditService::class);
+
+    if ($tenantId === '') {
+        $this->warn('Wajib isi --tenant_id untuk remediation refund legacy.');
+        return;
+    }
+
+    $preview = $service->remediate($tenantId, [], [], $limit, false);
+
+    if (($preview['matched_resolvable'] ?? 0) === 0) {
+        $this->info('Tidak ada refund legacy resolvable untuk tenant ini.');
+        return;
+    }
+
+    $this->info('Tenant: '.$tenantId);
+    $this->line('resolvable_rows: '.$preview['matched_resolvable']);
+    $this->line('limit: '.$limit);
+
+    if ($confirm !== 'REMEDIATE_ACK') {
+        $this->warn('Dry run only. Isi --confirm=REMEDIATE_ACK untuk menjalankan update.');
+        $this->table(
+            ['refund_item_id', 'refund_id', 'sale_id', 'product_id', 'qty'],
+            collect($preview['preview'] ?? [])->take(10)->map(fn ($row) => [
+                'refund_item_id' => $row['refund_item_id'],
+                'refund_id' => $row['refund_id'],
+                'sale_id' => $row['sale_id'],
+                'product_id' => $row['product_id'],
+                'qty' => (float) $row['qty'],
+            ])->all()
+        );
+        return;
+    }
+
+    $result = $service->remediate($tenantId, [], [], $limit, true);
+
+    $this->info('Updated rows: '.$result['updated']);
+    $this->line('Skipped rows: '.$result['skipped']);
+})->purpose('Backfill sale_item_id and economic snapshots for resolvable historical refund_items within a tenant');
 
 Artisan::command('inventory:rebuild-valuation {--tenant_id=} {--confirm=}', function () {
     $tenantId = (string) $this->option('tenant_id');
@@ -393,3 +574,4 @@ Schedule::job(new DetectInventoryInvariantJob())->hourly();
 Schedule::job(new DetectSupplierDebtDueJob())->dailyAt('08:00');
 Schedule::command('inventory:prune-valuation-reports')->dailyAt('02:15');
 Schedule::command('inventory:prune-valuation-cache')->dailyAt('02:25');
+

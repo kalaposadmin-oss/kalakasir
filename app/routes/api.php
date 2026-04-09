@@ -22,6 +22,7 @@ use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\ProductionBatchController;
 use App\Http\Controllers\Api\PurchaseReturnController;
 use App\Http\Controllers\Api\RefundController;
+use App\Http\Controllers\Api\RefundLegacyAuditController;
 use App\Http\Controllers\Api\SaleDetailController;
 use App\Http\Controllers\Api\SalesHistoryController;
 use App\Http\Controllers\Api\SettingsController;
@@ -72,6 +73,11 @@ Route::prefix('v1')
         Route::get('production-batches/{batch}', [ProductionBatchController::class, 'show']);
         Route::get('refunds', [RefundController::class, 'index'])->middleware('role:cashier,supervisor,admin,owner');
         Route::get('refunds/{refund}', [RefundController::class, 'show'])->middleware('role:cashier,supervisor,admin,owner');
+        Route::get('settings/refund-legacy-audit', [RefundLegacyAuditController::class, 'index'])->middleware('role:admin,owner');
+        Route::get('settings/refund-legacy-audit/history', [RefundLegacyAuditController::class, 'history'])->middleware('role:admin,owner');
+        Route::get('settings/refund-legacy-audit/history/export', [RefundLegacyAuditController::class, 'exportHistory'])->middleware('role:admin,owner');
+        Route::get('settings/refund-legacy-audit/export', [RefundLegacyAuditController::class, 'export'])->middleware('role:admin,owner');
+        Route::post('settings/refund-legacy-audit/remediate', [RefundLegacyAuditController::class, 'remediate'])->middleware('role:admin,owner');
         Route::get('sales/{sale}', SaleDetailController::class);
         Route::get('sales-history', [SalesHistoryController::class, 'index']);
         Route::get('shifts/opening', [ShiftController::class, 'openingData']);
@@ -137,4 +143,5 @@ Route::prefix('v1')
         Route::post('sales/{sale}/void', VoidSaleController::class)->middleware('role:cashier,supervisor,admin,owner');
         Route::put('branches/{branch}', [BranchController::class, 'update'])->middleware('role:admin');
     });
+
 
