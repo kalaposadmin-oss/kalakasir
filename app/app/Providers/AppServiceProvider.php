@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Listeners\SetCurrentTenantOnLogin;
 use App\Events\AdjustmentPosted;
 use App\Events\PurchaseReceived;
 use App\Events\PurchaseReturned;
@@ -23,8 +24,11 @@ use App\Listeners\RefreshInventorySummaryFromPurchase;
 use App\Listeners\RefreshInventorySummaryFromReturn;
 use App\Listeners\RefreshInventorySummaryFromTransferReceive;
 use App\Listeners\RefreshInventorySummaryFromTransferShip;
+use Illuminate\Auth\Events\Login;
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -50,6 +54,18 @@ class AppServiceProvider extends ServiceProvider
             ]);
         }
 
+        RateLimiter::for('platform-danger', static function ($request) {
+            $actorId = $request->user()?->id ?: $request->ip();
+
+            return Limit::perHour(10)->by((string) $actorId)->response(static function () {
+                return response()->json([
+                    'code' => 'RATE_LIMITED',
+                    'message' => 'Terlalu banyak permintaan aksi berbahaya.',
+                    'details' => [],
+                ], 429);
+            });
+        });
+
         Event::listen(SaleCompleted::class, [AuditSaleCompleted::class, 'handle']);
         Event::listen(SaleCompleted::class, [AggregateDailySales::class, 'handle']);
         Event::listen(SaleVoided::class, [AuditSaleVoided::class, 'handle']);
@@ -64,5 +80,6 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(TransferReceived::class, [RefreshInventorySummaryFromTransferReceive::class, 'handle']);
         Event::listen(AdjustmentPosted::class, [AuditAdjustmentPosted::class, 'handle']);
         Event::listen(AdjustmentPosted::class, [RefreshInventorySummaryFromAdjustment::class, 'handle']);
+        Event::listen(Login::class, [SetCurrentTenantOnLogin::class, 'handle']);
     }
 }
