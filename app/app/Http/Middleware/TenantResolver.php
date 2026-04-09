@@ -55,10 +55,6 @@ class TenantResolver
             ], 400);
         }
 
-        if (! $tenant && ! $requiresTenant && app()->environment('local')) {
-            return $next($request);
-        }
-
         if (! $tenant) {
             return $next($request);
         }
@@ -97,27 +93,6 @@ class TenantResolver
 
             if ($subdomain) {
                 return Tenant::query()->where('subdomain', $subdomain)->first();
-            }
-        }
-
-        if (app()->environment('local')) {
-            try {
-                $tenant = Tenant::query()->first();
-                if ($tenant) {
-                    return $tenant;
-                }
-
-                return Tenant::query()->create([
-                    'id' => (string) Str::uuid(),
-                    'name' => 'Toko Utama',
-                    'timezone' => 'Asia/Jakarta',
-                    'inventory_valuation_method' => 'average',
-                    'domain' => null,
-                    'subdomain' => null,
-                    'logo_url' => null,
-                ]);
-            } catch (Throwable) {
-                return null;
             }
         }
 

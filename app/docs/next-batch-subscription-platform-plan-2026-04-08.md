@@ -104,6 +104,6 @@ Checklist:
 	1. refund legacy audit selesai di `7bc4553`
 	2. subscription core + invoices selesai di `b0d8590`
 	3. inventory reporting selesai di `b7e6cec`
-	4. platform admin API menjadi slice aktif berikutnya
-	5. middleware dependency pass sesudah platform
+	4. platform admin API selesai di `491f61b`
+	5. middleware dependency pass menjadi slice aktif berikutnya
 	6. commands/deploy workflow paling akhir

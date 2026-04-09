@@ -219,6 +219,12 @@ Langkah saat dilanjutkan:
 2. pastikan alias middleware dan bootstrap wiring konsisten
 3. siapkan smoke tests untuk access denial, tenant mismatch, dan CSP impact
 
+Status eksekusi terbaru:
+
+- platform admin API sudah di-commit: `491f61b` `feat(api): add platform admin endpoints`
+- middleware dependency slice sudah tervalidasi fokus pada CSP, portal access, onboarding host config, subscription gating, valuation authorization, dan tenant scoping
+- commands/deploy workflow sekarang menjadi batch operasional tersisa setelah middleware dipisah
+
 ## 5. PR Subscription / Refund / Platform Surface
 
 Status:
@@ -271,6 +277,12 @@ Prioritas risiko:
 
 - workflow deploy menyentuh SSH, migrate, cache, healthcheck, rollback, dan queue worker detection
 - command audit/backfill/remediation tidak layak ikut PR sempit tanpa review operasional
+
+Dokumen referensi tambahan:
+
+- `docs/pr-summary-middleware-access-gates-2026-04-09.md`
+- `docs/pr-ready-middleware-access-gates-2026-04-09.md`
+- `docs/commit-message-middleware-access-gates-2026-04-09.md`
 
 Langkah saat dilanjutkan:
 

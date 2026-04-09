@@ -11,4 +11,14 @@ return [
     'idempotency_lock_seconds' => (int) env('PLATFORM_IDEMPOTENCY_LOCK_SECONDS', 10),
     'auto_consume_on_sell_enabled_default' => filter_var(env('AUTO_CONSUME_ON_SELL_ENABLED_DEFAULT', false), FILTER_VALIDATE_BOOL),
     'allow_negative_raw_material_stock_default' => filter_var(env('ALLOW_NEGATIVE_RAW_MATERIAL_STOCK_DEFAULT', false), FILTER_VALIDATE_BOOL),
+    'portals' => [
+        'pos_hosts' => array_values(array_filter(array_map(
+            static fn (string $host): string => trim(strtolower($host)),
+            explode(',', (string) env('POS_PORTAL_HOSTS', ''))
+        ))),
+        'backoffice_hosts' => array_values(array_filter(array_map(
+            static fn (string $host): string => trim(strtolower($host)),
+            explode(',', (string) env('BACKOFFICE_PORTAL_HOSTS', ''))
+        ))),
+    ],
 ];

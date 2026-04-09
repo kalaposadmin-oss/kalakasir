@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\Concerns\BootsApiTenantUser;
 use Tests\TestCase;
@@ -103,6 +104,7 @@ class ValuationAuthorizationTest extends TestCase
     public function test_owner_can_access_valuation_rebuild_status(): void
     {
         [$this->tenant, $this->user] = $this->bootApiActor('owner', 'owner-valuation@example.com', 'Owner Valuation');
+        $this->enableValuationAccess($this->tenant->id);
 
         $response = $this->withHeaders($this->tenantHeaders($this->tenant->id))
             ->getJson('/api/v1/settings/valuation-rebuild-status');
@@ -125,6 +127,7 @@ class ValuationAuthorizationTest extends TestCase
     public function test_admin_can_access_valuation_rebuild_status(): void
     {
         [$this->tenant, $this->user] = $this->bootApiActor('admin', 'admin-valuation@example.com', 'Admin Valuation');
+        $this->enableValuationAccess($this->tenant->id);
 
         $response = $this->withHeaders($this->tenantHeaders($this->tenant->id))
             ->getJson('/api/v1/settings/valuation-rebuild-status');
@@ -141,6 +144,7 @@ class ValuationAuthorizationTest extends TestCase
         public function test_owner_can_access_valuation_reports_and_reconciliation(): void
         {
             [$this->tenant, $this->user] = $this->bootApiActor('owner', 'owner-valuation2@example.com', 'Owner Valuation 2');
+            $this->enableValuationAccess($this->tenant->id);
 
             $headers = $this->tenantHeaders($this->tenant->id);
 
@@ -174,6 +178,7 @@ class ValuationAuthorizationTest extends TestCase
         public function test_admin_can_access_valuation_reports_and_reconciliation(): void
         {
             [$this->tenant, $this->user] = $this->bootApiActor('admin', 'admin-valuation2@example.com', 'Admin Valuation 2');
+            $this->enableValuationAccess($this->tenant->id);
 
             $headers = $this->tenantHeaders($this->tenant->id);
 
@@ -199,4 +204,22 @@ class ValuationAuthorizationTest extends TestCase
                     'count',
                 ]);
         }
+
+    private function enableValuationAccess(string $tenantId): void
+    {
+        DB::table('tenants')->where('id', $tenantId)->update(['plan' => 'P']);
+        DB::table('subscriptions')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $tenantId,
+            'plan' => 'P',
+            'status' => 'active',
+            'started_at' => now('UTC')->subMonth(),
+            'expires_at' => now('UTC')->addMonth(),
+            'current_period_start' => now('UTC')->subMonth(),
+            'current_period_end' => now('UTC')->addMonth(),
+            'is_current' => true,
+            'created_at' => now('UTC')->subMonth(),
+            'updated_at' => now('UTC'),
+        ]);
+    }
 }
