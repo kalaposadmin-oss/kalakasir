@@ -7,7 +7,9 @@ use App\Jobs\RunValuationRebuildJob;
 use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Str;
 use Tests\Concerns\BootsApiTenantUser;
 use Tests\TestCase;
 
@@ -23,6 +25,20 @@ class ValuationAsyncOperationsTest extends TestCase
         parent::setUp();
 
         [$this->tenant, $this->user] = $this->bootApiActor('admin', 'admin-async-valuation@example.com', 'Admin Async Valuation');
+        DB::table('tenants')->where('id', $this->tenant->id)->update(['plan' => 'P']);
+        DB::table('subscriptions')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->id,
+            'plan' => 'P',
+            'status' => 'active',
+            'started_at' => now('UTC')->subMonth(),
+            'expires_at' => now('UTC')->addMonth(),
+            'current_period_start' => now('UTC')->subMonth(),
+            'current_period_end' => now('UTC')->addMonth(),
+            'is_current' => true,
+            'created_at' => now('UTC')->subMonth(),
+            'updated_at' => now('UTC'),
+        ]);
     }
 
     protected function tearDown(): void

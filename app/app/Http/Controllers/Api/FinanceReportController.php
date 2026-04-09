@@ -5,8 +5,11 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Sale;
 use App\Models\SaleItem;
+use App\Services\SubscriptionService;
+use App\Support\Decimal;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use App\Support\TenantContext;
 
 class FinanceReportController extends Controller
@@ -14,6 +17,7 @@ class FinanceReportController extends Controller
     public function index(Request $request)
     {
         $tenantId = TenantContext::id();
+        $tenant = TenantContext::get();
         if (! $tenantId) {
             return response()->json([
                 'message' => 'Tenant tidak ditemukan.',
@@ -39,45 +43,65 @@ class FinanceReportController extends Controller
             ->get(['id', 'total']);
 
         $saleIds = $sales->pluck('id')->all();
-        $revenue = (float) $sales->sum('total');
+        $grossRevenue = Decimal::money($sales->sum('total'));
 
-        $cogs = 0.0;
+        $refunds = DB::table('refunds')
+            ->where('tenant_id', $tenantId)
+            ->where('status', 'completed')
+            ->where('created_at', '>=', $startUtc)
+            ->where('created_at', '<', $endExclusiveUtc)
+            ->selectRaw('COALESCE(SUM(total), 0) as total')
+            ->selectRaw('COALESCE(SUM(refunded_cost_total), 0) as refunded_cost_total')
+            ->first();
+
+        $refundRevenue = Decimal::money($refunds?->total ?? 0);
+        $refundedCostTotal = Decimal::money($refunds?->refunded_cost_total ?? 0);
+        $revenue = Decimal::subtract($grossRevenue, $refundRevenue, Decimal::MONEY_SCALE);
+
+        $cogs = Decimal::money(0);
         if ($saleIds) {
-            $cogs = (float) SaleItem::query()
+            $cogs = Decimal::money(SaleItem::query()
                 ->where('tenant_id', $tenantId)
                 ->whereIn('sale_id', $saleIds)
                 ->selectRaw('sum(qty * hpp_snapshot) as total')
-                ->value('total');
+                ->value('total'));
         }
 
+        $netCogs = Decimal::subtract($cogs, $refundedCostTotal, Decimal::MONEY_SCALE);
+
         $expenses = [
-            ['label' => 'HPP (Harga Pokok Penjualan)', 'amount' => $cogs],
+            ['label' => 'HPP (Harga Pokok Penjualan)', 'amount' => Decimal::float($netCogs, Decimal::MONEY_SCALE)],
             ['label' => 'Gaji Karyawan', 'amount' => 0],
             ['label' => 'Sewa dan Utilitas', 'amount' => 0],
             ['label' => 'Pemasaran', 'amount' => 0],
             ['label' => 'Operasional Lainnya', 'amount' => 0],
         ];
 
-        $totalExpenses = array_reduce($expenses, function ($carry, $row) {
-            return $carry + $row['amount'];
-        }, 0.0);
+        $totalExpenses = collect($expenses)
+            ->reduce(fn (string $carry, array $row) => Decimal::add($carry, $row['amount'], Decimal::MONEY_SCALE), Decimal::money(0));
 
-        $netProfit = $revenue - $totalExpenses;
+        $netProfit = Decimal::subtract($revenue, $totalExpenses, Decimal::MONEY_SCALE);
+        $subscription = app(SubscriptionService::class);
+        $canViewBalanceSheet = $tenant ? $subscription->canAccessFeature($tenant, 'finance.balance_sheet') : false;
 
-        return response()->json([
+        $payload = [
             'period' => $rangeMeta,
             'summary' => [
-                'net_profit' => $netProfit,
-                'revenue' => $revenue,
-                'expenses' => $totalExpenses,
+                'net_profit' => Decimal::float($netProfit, Decimal::MONEY_SCALE),
+                'revenue' => Decimal::float($revenue, Decimal::MONEY_SCALE),
+                'expenses' => Decimal::float($totalExpenses, Decimal::MONEY_SCALE),
                 'tax' => 0,
             ],
             'revenue_breakdown' => [
-                ['label' => 'Penjualan POS', 'amount' => $revenue],
+                ['label' => 'Penjualan POS', 'amount' => Decimal::float($grossRevenue, Decimal::MONEY_SCALE)],
+                ['label' => 'Retur Penjualan', 'amount' => Decimal::float(Decimal::subtract(0, $refundRevenue, Decimal::MONEY_SCALE), Decimal::MONEY_SCALE)],
                 ['label' => 'Pendapatan Lainnya', 'amount' => 0],
             ],
             'expense_breakdown' => $expenses,
-            'balance_sheet' => [
+        ];
+
+        if ($canViewBalanceSheet) {
+            $payload['balance_sheet'] = [
                 'assets' => [
                     ['label' => 'Kas dan Bank', 'amount' => $revenue],
                 ],
@@ -85,10 +109,12 @@ class FinanceReportController extends Controller
                     ['label' => 'Hutang Usaha', 'amount' => 0],
                 ],
                 'equity' => [
-                    ['label' => 'Modal Bersih', 'amount' => $netProfit],
+                    ['label' => 'Modal Bersih', 'amount' => Decimal::float($netProfit, Decimal::MONEY_SCALE)],
                 ],
-            ],
-        ]);
+            ];
+        }
+
+        return response()->json($payload);
     }
 
     private function resolveRange(string $preset, ?string $startDate, ?string $endDate): array

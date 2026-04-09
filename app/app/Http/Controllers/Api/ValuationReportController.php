@@ -60,6 +60,7 @@ class ValuationReportController extends Controller
     {
         $tenantId = TenantContext::id();
         if (! $tenantId) {
+            // Keep 404 concealment for tenant-bound report filenames when context is missing.
             abort(404);
         }
 
@@ -179,6 +180,15 @@ class ValuationReportController extends Controller
             ], 422);
         }
 
+        $tenantId = TenantContext::id();
+        if (! $tenantId) {
+            return response()->json([
+                'code' => 'TENANT_NOT_RESOLVED',
+                'message' => 'Tenant tidak ditemukan.',
+                'details' => [],
+            ], 400);
+        }
+
         $key = 'valuation:export:request:'.$requestId;
         $status = Cache::get($key);
 
@@ -190,7 +200,7 @@ class ValuationReportController extends Controller
             ], 404);
         }
 
-        if (($status['tenant_id'] ?? null) !== TenantContext::id()) {
+        if (($status['tenant_id'] ?? null) !== $tenantId) {
             return response()->json([
                 'code' => 'FORBIDDEN',
                 'message' => 'Request export bukan milik tenant ini.',

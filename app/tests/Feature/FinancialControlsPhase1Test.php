@@ -36,6 +36,7 @@ class FinancialControlsPhase1Test extends TestCase
         $branchId = (string) Str::uuid();
         $locationId = (string) Str::uuid();
         $supplierId = (string) Str::uuid();
+        $productId = (string) Str::uuid();
 
         \DB::table('branches')->insert([
             'id' => $branchId,
@@ -59,6 +60,23 @@ class FinancialControlsPhase1Test extends TestCase
             'created_at' => now('UTC'),
         ]);
 
+        \DB::table('products')->insert([
+            'id' => $productId,
+            'tenant_id' => $this->tenant->id,
+            'sku' => 'PUR-CASH-001',
+            'name' => 'Produk Purchase Cash',
+            'price' => 15000,
+            'hpp_average' => 5000,
+            'image_url' => null,
+            'is_active' => true,
+            'track_stock' => true,
+            'created_by' => $this->user->id,
+            'updated_by' => $this->user->id,
+            'created_at' => now('UTC'),
+            'updated_at' => now('UTC'),
+            'deleted_at' => null,
+        ]);
+
         \DB::table('shifts')->insert([
             'id' => (string) Str::uuid(),
             'tenant_id' => $this->tenant->id,
@@ -79,7 +97,7 @@ class FinancialControlsPhase1Test extends TestCase
                 'payment_method' => 'tunai',
                 'items' => [
                     [
-                        'product_id' => (string) Str::uuid(),
+                        'product_id' => $productId,
                         'qty' => 1,
                         'price' => 15000,
                     ],

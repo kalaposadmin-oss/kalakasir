@@ -14,6 +14,11 @@ class LockPeriodController extends Controller
     public function index()
     {
         $tenantId = TenantContext::id();
+        if (! $tenantId) {
+            return response()->json([
+                'message' => 'Tenant tidak ditemukan.',
+            ], 400);
+        }
 
         $periods = DB::table('lock_periods')
             ->where('tenant_id', $tenantId)
@@ -28,6 +33,11 @@ class LockPeriodController extends Controller
     public function store(Request $request)
     {
         $tenantId = TenantContext::id();
+        if (! $tenantId) {
+            return response()->json([
+                'message' => 'Tenant tidak ditemukan.',
+            ], 400);
+        }
 
         $validated = $request->validate([
             'start_date' => ['required', 'date'],
@@ -55,10 +65,26 @@ class LockPeriodController extends Controller
     public function toggle(Request $request, string $period)
     {
         $tenantId = TenantContext::id();
+        if (! $tenantId) {
+            return response()->json([
+                'message' => 'Tenant tidak ditemukan.',
+            ], 400);
+        }
 
         $validated = $request->validate([
             'is_locked' => ['required', 'boolean'],
         ]);
+
+        $periodRow = DB::table('lock_periods')
+            ->where('tenant_id', $tenantId)
+            ->where('id', $period)
+            ->first(['id']);
+
+        if (! $periodRow) {
+            return response()->json([
+                'message' => 'Periode lock tidak ditemukan.',
+            ], 404);
+        }
 
         $data = [
             'is_locked' => $validated['is_locked'],
@@ -71,7 +97,7 @@ class LockPeriodController extends Controller
 
         DB::table('lock_periods')
             ->where('tenant_id', $tenantId)
-            ->where('id', $period)
+            ->where('id', $periodRow->id)
             ->update($data);
 
         return response()->json([
