@@ -1,0 +1,854 @@
+{
+    "schemaVersion":  1,
+    "planEnum":  [
+                     "S",
+                     "M",
+                     "P"
+                 ],
+    "planLabels":  {
+                       "S":  "Starter",
+                       "M":  "Medium",
+                       "P":  "Pro"
+                   },
+    "featureFlags":  [
+                         {
+                             "key":  "onboarding.flow",
+                             "module":  "global",
+                             "uiType":  "flow",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "S",
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "search.global",
+                             "module":  "global",
+                             "uiType":  "action",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "notification.list",
+                             "module":  "global",
+                             "uiType":  "widget",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "help.center",
+                             "module":  "global",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "S",
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "dash.overview",
+                             "module":  "dashboard",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "S",
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "dash.insights",
+                             "module":  "dashboard",
+                             "uiType":  "section",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "S",
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "dash.control",
+                             "module":  "dashboard",
+                             "uiType":  "section",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "pos.checkout",
+                             "module":  "pos",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "S",
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "pos.customer",
+                             "module":  "pos",
+                             "uiType":  "section",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "pos.hold_bill",
+                             "module":  "pos",
+                             "uiType":  "action",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "S",
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "pos.split_payment",
+                             "module":  "pos",
+                             "uiType":  "action",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "S",
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "pos.refund",
+                             "module":  "pos",
+                             "uiType":  "action",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "S",
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "pos.void",
+                             "module":  "pos",
+                             "uiType":  "action",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "S",
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "shift.open",
+                             "module":  "shift",
+                             "uiType":  "action",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "S",
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "shift.close",
+                             "module":  "shift",
+                             "uiType":  "action",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "S",
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "shift.history",
+                             "module":  "shift",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "S",
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "shift.print_summary",
+                             "module":  "shift",
+                             "uiType":  "action",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "history.sales",
+                             "module":  "history",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "S",
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "history.payments",
+                             "module":  "history",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "S",
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "history.stock",
+                             "module":  "history",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "S",
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "history.audit_log",
+                             "module":  "history",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "reports.summary",
+                             "module":  "reports",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "S",
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                        {
+                            "key":  "reports.analytics_products",
+                            "module":  "reports",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "S",
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "reports.analytics_payments",
+                             "module":  "reports",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "reports.purchases_view",
+                             "module":  "reports",
+                             "location":  "Riwayat\u003eLaporan",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "notes":  "Laporan pembelian (PO/Receiving/Retur) ringkas",
+                             "plans":  [
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "reports.inventory_view",
+                             "module":  "reports",
+                             "location":  "Riwayat\u003eLaporan",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "notes":  "Laporan persediaan ringkas (stok rendah, nilai stok ringkas)",
+                             "plans":  [
+                                           "S",
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "reports.inventory_stock_card",
+                             "module":  "reports",
+                             "location":  "Riwayat\u003eLaporan",
+                             "uiType":  "page",
+                             "minPlan":  "P",
+                             "defaultVisible":  true,
+                             "notes":  "Kartu stok / ledger persediaan",
+                             "plans":  [
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "reports.inventory_fifo_layers",
+                             "module":  "reports",
+                             "location":  "Riwayat\u003eLaporan",
+                             "uiType":  "page",
+                             "minPlan":  "P",
+                             "defaultVisible":  true,
+                             "notes":  "FIFO layers / valuation detail",
+                             "plans":  [
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "reports.download_pdf",
+                             "module":  "reports",
+                             "uiType":  "action",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "reports.export_csv",
+                             "module":  "reports",
+                             "uiType":  "action",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "finance.profit_loss",
+                             "module":  "finance",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "S",
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "finance.balance_sheet",
+                             "module":  "finance",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "finance.cash_flow",
+                             "module":  "finance",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "finance.lock_period",
+                             "module":  "finance",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "product.list",
+                             "module":  "product",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "S",
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "product.category",
+                             "module":  "product",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "S",
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "product.materials",
+                             "module":  "product",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "product.pricing",
+                             "module":  "product",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "S",
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "product.valuation",
+                             "module":  "product",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "inventory.stock",
+                             "module":  "inventory",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "S",
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "inventory.adjustment",
+                             "module":  "inventory",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "S",
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "inventory.transfer",
+                             "module":  "inventory",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "S",
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "purchase.order",
+                             "module":  "purchase",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "S",
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "purchase.receive",
+                             "module":  "purchase",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "S",
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "purchase.return",
+                             "module":  "purchase",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "purchase.stock_purchase",
+                             "module":  "purchase",
+                             "uiType":  "action",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "S",
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "supplier.manage",
+                             "module":  "supplier",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "S",
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "customer.manage",
+                             "module":  "customer",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "loyalty.program",
+                             "module":  "loyalty",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "settings.store_profile",
+                             "module":  "settings",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "S",
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "settings.printer_receipt",
+                             "module":  "settings",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "S",
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "settings.devices",
+                             "module":  "settings",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "S",
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "settings.payments",
+                             "module":  "settings",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "S",
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "settings.subscription_billing",
+                             "module":  "settings",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "S",
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "settings.tax",
+                             "module":  "settings",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "settings.promo_default",
+                             "module":  "settings",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "settings.staff_basic",
+                             "module":  "settings",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "settings.branches_manage",
+                             "module":  "settings",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "settings.coa",
+                             "module":  "settings",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "settings.notifications",
+                             "module":  "settings",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "M",
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "settings.roles_permissions",
+                             "module":  "settings",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "settings.multi_branch",
+                             "module":  "settings",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "settings.inventory_valuation",
+                             "module":  "settings",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "P"
+                                       ]
+                         },
+                        {
+                            "key":  "settings.observability",
+                            "module":  "settings",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "P"
+                                       ]
+                         },
+                         {
+                             "key":  "settings.integrations",
+                             "module":  "settings",
+                             "uiType":  "page",
+                             "defaultVisible":  true,
+                             "plans":  [
+                                           "P"
+                                       ]
+                         }
+                     ],
+    "planMapping":  {
+                        "S":  [
+                                  "onboarding.flow",
+                                  "help.center",
+                                  "dash.overview",
+                                  "dash.insights",
+                                  "pos.checkout",
+                                  "pos.hold_bill",
+                                  "pos.split_payment",
+                                  "pos.refund",
+                                  "pos.void",
+                                  "shift.open",
+                                  "shift.close",
+                                  "shift.history",
+                                  "history.sales",
+                                  "history.payments",
+                                  "history.stock",
+                                  "reports.summary",
+                                  "reports.analytics_products",
+                                  "reports.inventory_view",
+                                  "finance.profit_loss",
+                                  "product.list",
+                                  "product.category",
+                                  "product.pricing",
+                                  "inventory.stock",
+                                  "inventory.adjustment",
+                                  "inventory.transfer",
+                                  "purchase.order",
+                                  "purchase.receive",
+                                  "purchase.stock_purchase",
+                                  "supplier.manage",
+                                  "settings.store_profile",
+                                  "settings.printer_receipt",
+                                  "settings.devices",
+                                  "settings.payments",
+                                  "settings.subscription_billing"
+                              ],
+                        "M":  [
+                                  "onboarding.flow",
+                                  "search.global",
+                                  "notification.list",
+                                  "help.center",
+                                  "dash.overview",
+                                  "dash.insights",
+                                  "pos.checkout",
+                                  "pos.customer",
+                                  "pos.hold_bill",
+                                  "pos.split_payment",
+                                  "pos.refund",
+                                  "pos.void",
+                                  "shift.open",
+                                  "shift.close",
+                                  "shift.history",
+                                  "shift.print_summary",
+                                  "history.sales",
+                                  "history.payments",
+                                  "history.stock",
+                                  "reports.summary",
+                                  "reports.analytics_products",
+                                  "reports.analytics_payments",
+                                  "reports.purchases_view",
+                                  "reports.inventory_view",
+                                  "reports.download_pdf",
+                                  "reports.export_csv",
+                                  "finance.profit_loss",
+                                  "product.list",
+                                  "product.category",
+                                  "product.materials",
+                                  "product.pricing",
+                                  "inventory.stock",
+                                  "inventory.adjustment",
+                                  "inventory.transfer",
+                                  "purchase.order",
+                                  "purchase.receive",
+                                  "purchase.return",
+                                  "purchase.stock_purchase",
+                                  "supplier.manage",
+                                  "customer.manage",
+                                  "loyalty.program",
+                                  "settings.store_profile",
+                                  "settings.printer_receipt",
+                                  "settings.devices",
+                                  "settings.payments",
+                                  "settings.subscription_billing",
+                                  "settings.tax",
+                                  "settings.promo_default",
+                                  "settings.staff_basic",
+                                  "settings.branches_manage",
+                                  "settings.notifications"
+                              ],
+                        "P":  [
+                                  "onboarding.flow",
+                                  "search.global",
+                                  "notification.list",
+                                  "help.center",
+                                  "dash.overview",
+                                  "dash.insights",
+                                  "dash.control",
+                                  "pos.checkout",
+                                  "pos.customer",
+                                  "pos.hold_bill",
+                                  "pos.split_payment",
+                                  "pos.refund",
+                                  "pos.void",
+                                  "shift.open",
+                                  "shift.close",
+                                  "shift.history",
+                                  "shift.print_summary",
+                                  "history.sales",
+                                  "history.payments",
+                                  "history.stock",
+                                  "history.audit_log",
+                                  "reports.summary",
+                                  "reports.analytics_products",
+                                  "reports.analytics_payments",
+                                  "reports.purchases_view",
+                                  "reports.inventory_view",
+                                  "reports.inventory_stock_card",
+                                  "reports.inventory_fifo_layers",
+                                  "reports.download_pdf",
+                                  "reports.export_csv",
+                                  "finance.profit_loss",
+                                  "finance.balance_sheet",
+                                  "finance.cash_flow",
+                                  "finance.lock_period",
+                                  "product.list",
+                                  "product.category",
+                                  "product.materials",
+                                  "product.pricing",
+                                  "product.valuation",
+                                  "inventory.stock",
+                                  "inventory.adjustment",
+                                  "inventory.transfer",
+                                  "purchase.order",
+                                  "purchase.receive",
+                                  "purchase.return",
+                                  "purchase.stock_purchase",
+                                  "supplier.manage",
+                                  "customer.manage",
+                                  "loyalty.program",
+                                  "settings.store_profile",
+                                  "settings.printer_receipt",
+                                  "settings.devices",
+                                  "settings.payments",
+                                  "settings.subscription_billing",
+                                  "settings.tax",
+                                  "settings.promo_default",
+                                  "settings.staff_basic",
+                                  "settings.branches_manage",
+                                  "settings.coa",
+                                  "settings.notifications",
+                                  "settings.roles_permissions",
+                                  "settings.multi_branch",
+                                  "settings.inventory_valuation",
+                                  "settings.observability",
+                                  "settings.integrations"
+                              ]
+                    }
+}
+

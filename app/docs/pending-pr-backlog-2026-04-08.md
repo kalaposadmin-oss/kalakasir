@@ -227,6 +227,9 @@ Scope utama:
 Dokumen referensi:
 
 - `docs/next-batch-subscription-platform-plan-2026-04-08.md`
+- `docs/pr-summary-subscription-core-invoices-2026-04-09.md`
+- `docs/pr-ready-subscription-core-invoices-2026-04-09.md`
+- `docs/commit-message-subscription-core-invoices-2026-04-09.md`
 
 Langkah saat dilanjutkan:
 

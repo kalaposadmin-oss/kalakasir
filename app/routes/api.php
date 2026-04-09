@@ -31,6 +31,8 @@ use App\Http\Controllers\Api\StockTransferController;
 use App\Http\Controllers\Api\StockAdjustmentController;
 use App\Http\Controllers\Api\StockCardController;
 use App\Http\Controllers\Api\SupplierController;
+use App\Http\Controllers\Api\SubscriptionController;
+use App\Http\Controllers\Api\SubscriptionInvoiceController;
 use App\Http\Controllers\Api\UserManagementController;
 use App\Http\Controllers\Api\VoidSaleController;
 use App\Http\Controllers\Api\ValuationReportController;
@@ -85,6 +87,14 @@ Route::prefix('v1')
         Route::get('shifts/close-summary', [ShiftController::class, 'closeSummary']);
         Route::get('shifts/closed', [ShiftController::class, 'closedHistory']);
         Route::get('settings/tax-promos', [SettingsController::class, 'index']);
+        Route::get('subscription/current', [SubscriptionController::class, 'current'])->middleware('role:warehouse,supervisor,admin,owner,superadmin');
+        Route::get('subscription/entitlements', [SubscriptionController::class, 'entitlements'])->middleware('role:warehouse,supervisor,admin,owner,superadmin');
+        Route::get('subscription/impact-preview', [SubscriptionController::class, 'impactPreview'])->middleware('role:admin,owner,superadmin');
+        Route::get('subscription/audit-logs', [SubscriptionController::class, 'auditLogs'])->middleware('role:admin,owner,superadmin');
+        Route::get('subscription/audit-logs/export', [SubscriptionController::class, 'exportAuditLogsCsv'])->middleware('role:admin,owner,superadmin');
+        Route::get('subscription/invoices', [SubscriptionInvoiceController::class, 'index'])->middleware('role:warehouse,supervisor,admin,owner,superadmin');
+        Route::get('subscription/invoices/{invoice}', [SubscriptionInvoiceController::class, 'show'])->middleware('role:warehouse,supervisor,admin,owner,superadmin');
+        Route::get('subscription/invoices/{invoice}/download', [SubscriptionInvoiceController::class, 'download'])->middleware('role:warehouse,supervisor,admin,owner,superadmin');
         Route::get('settings/valuation-reports', [ValuationReportController::class, 'index'])->middleware('role:owner,admin');
         Route::get('settings/valuation-reports/{filename}', [ValuationReportController::class, 'download'])->middleware('role:owner,admin');
         Route::post('settings/valuation-reports/export', [ValuationReportController::class, 'export'])->middleware('role:owner,admin');
@@ -114,6 +124,8 @@ Route::prefix('v1')
         Route::post('production-batches', [ProductionBatchController::class, 'store'])->middleware('role:admin,owner');
         Route::post('production-batches/{batch}/post', [ProductionBatchController::class, 'post'])->middleware('role:admin,owner');
         Route::post('refunds', [RefundController::class, 'store'])->middleware('role:cashier,supervisor,admin,owner');
+        Route::patch('subscription/plan', [SubscriptionController::class, 'updatePlan'])->middleware('role:admin,owner,superadmin');
+        Route::post('subscription/invoices/{invoice}/mark-paid', [SubscriptionInvoiceController::class, 'markPaid'])->middleware('role:admin,owner,superadmin');
         Route::post('users', [UserManagementController::class, 'store'])->middleware('role:admin');
         Route::post('shifts/open', [ShiftController::class, 'open'])->middleware('role:cashier,supervisor,admin');
         Route::post('shifts/close', [ShiftController::class, 'close'])->middleware('role:cashier,supervisor,admin');
@@ -143,5 +155,6 @@ Route::prefix('v1')
         Route::post('sales/{sale}/void', VoidSaleController::class)->middleware('role:cashier,supervisor,admin,owner');
         Route::put('branches/{branch}', [BranchController::class, 'update'])->middleware('role:admin');
     });
+
 
 
