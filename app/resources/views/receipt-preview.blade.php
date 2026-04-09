@@ -24,8 +24,13 @@
         </style>
 @endpush
 
+@php
+    $receiptSaleId = (string) ($saleId ?? request()->query('sale_id', ''));
+    $receiptBackUrl = $backUrl ?? ($receiptSaleId !== '' ? '/pos/sales/'.$receiptSaleId : '/pos/payment-method');
+@endphp
+
 @section('header')
-        <x-page-header title="Selesai" backUrl="/menu" :showMenuButton="false">
+        <x-page-header title="Selesai" :backUrl="$receiptBackUrl" :showMenuButton="false">
             <x-slot name="actions">
                 <div class="flex items-center gap-2">
                     <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
@@ -102,7 +107,7 @@
                         WhatsApp
                     </button>
                 </div>
-                <a class="w-full flex items-center justify-center gap-2 py-4 px-6 bg-primary text-white rounded-xl font-black text-base shadow-lg shadow-primary/20 active:scale-[0.98] transition-all" href="/kasir">
+                <a class="w-full flex items-center justify-center gap-2 py-4 px-6 bg-primary text-white rounded-xl font-black text-base shadow-lg shadow-primary/20 active:scale-[0.98] transition-all" href="/pos/checkout">
                     <span class="material-symbols-outlined font-bold">add</span>
                     TRANSAKSI BARU
                 </a>
@@ -209,7 +214,7 @@
                 };
 
                 const init = async () => {
-                    const saleId = new URLSearchParams(window.location.search).get('sale_id');
+                    const saleId = @json($receiptSaleId) || new URLSearchParams(window.location.search).get('sale_id');
                     if (saleId) {
                         try {
                             const data = await loadSale(saleId);

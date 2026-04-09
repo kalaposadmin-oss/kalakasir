@@ -26,8 +26,11 @@
     <div class="px-4 pt-4 pb-2">
         <h3 class="text-slate-900 dark:text-slate-100 tracking-tight text-2xl font-bold leading-tight">Buat Akun Anda</h3>
         <p class="text-slate-600 dark:text-slate-400 text-base font-normal leading-normal mt-2">
-            Lengkapi data pengguna utama untuk memulai onboarding POS.
+            Lengkapi data pemilik atau pengelola utama toko. Akun pertama ini otomatis menjadi Owner agar bisa mengatur produk, stok, kas, dan tim.
         </p>
+        <div class="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-relaxed text-amber-900">
+            Kasir dan staff lain ditambahkan nanti dari menu pengaturan pengguna setelah onboarding selesai.
+        </div>
     </div>
 
     @if ($errors->any())
@@ -65,17 +68,22 @@
         <label class="flex flex-col gap-2">
             <span class="text-slate-900 dark:text-slate-100 text-sm font-semibold leading-normal">Kata Sandi</span>
             <div class="relative">
-                <input name="password" class="form-input flex w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 h-14 p-[15px] pl-12 pr-12 text-base placeholder:text-slate-400" placeholder="Minimal 8 karakter" type="password" required />
+                <input id="password" name="password" class="form-input flex w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 h-14 p-[15px] pl-12 pr-12 text-base placeholder:text-slate-400" placeholder="Minimal 8 karakter" type="password" required />
                 <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">lock</span>
-                <span class="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-slate-400">visibility</span>
+                <button id="toggle-password" class="absolute inset-y-0 right-0 px-4 flex items-center" type="button" aria-label="Tampilkan kata sandi">
+                    <span class="material-symbols-outlined text-slate-400">visibility_off</span>
+                </button>
             </div>
         </label>
 
         <label class="flex flex-col gap-2">
             <span class="text-slate-900 dark:text-slate-100 text-sm font-semibold leading-normal">Konfirmasi Kata Sandi</span>
             <div class="relative">
-                <input name="password_confirmation" class="form-input flex w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 h-14 p-[15px] pl-12 text-base placeholder:text-slate-400" placeholder="Ulangi kata sandi" type="password" required />
+                <input id="password-confirmation" name="password_confirmation" class="form-input flex w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 h-14 p-[15px] pl-12 pr-12 text-base placeholder:text-slate-400" placeholder="Ulangi kata sandi" type="password" required />
                 <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">verified_user</span>
+                <button id="toggle-password-confirmation" class="absolute inset-y-0 right-0 px-4 flex items-center" type="button" aria-label="Tampilkan konfirmasi kata sandi">
+                    <span class="material-symbols-outlined text-slate-400">visibility_off</span>
+                </button>
             </div>
         </label>
 
@@ -93,4 +101,25 @@
             <span class="material-symbols-outlined text-xl">chevron_right</span>
         </button>
     </div>
+
+    <script>
+        (() => {
+            const bindPasswordToggle = (toggleId, inputId) => {
+                const toggle = document.getElementById(toggleId);
+                const input = document.getElementById(inputId);
+                if (!toggle || !input) {
+                    return;
+                }
+
+                toggle.addEventListener('click', () => {
+                    const isPassword = input.type === 'password';
+                    input.type = isPassword ? 'text' : 'password';
+                    toggle.querySelector('span').textContent = isPassword ? 'visibility' : 'visibility_off';
+                });
+            };
+
+            bindPasswordToggle('toggle-password', 'password');
+            bindPasswordToggle('toggle-password-confirmation', 'password-confirmation');
+        })();
+    </script>
 @endsection

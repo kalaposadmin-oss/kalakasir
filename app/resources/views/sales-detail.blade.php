@@ -1,7 +1,7 @@
 @extends('layouts.app')
 
 @section('page_title', 'Detail Transaksi & Void')
-@section('body_class', 'bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display')
+@section('body_class', 'bg-background-light dark:bg-background-dark text-slate-800 dark:text-slate-100 font-display')
 @section('main_class', 'flex-1 overflow-y-auto pb-32')
 
 @push('head')
@@ -10,10 +10,22 @@
                 @apply bg-red-50 text-red-600 border border-red-100;
             }
         </style>
+        <style>
+            .ios-shadow { box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.05); }
+        </style>
 @endpush
 
+@php
+    $detailPortal = $portal ?? 'pos';
+    $detailCurrentPath = $currentPath ?? '/'.$detailPortal.'/sales/'.((string) ($saleId ?? request()->query('sale_id', '')));
+    $detailBackUrl = $backUrl ?? ($detailPortal === 'backoffice' ? '/backoffice/reports/sales' : '/pos/history');
+    $allowVoidRefundAction = (bool) ($showVoidRefundAction ?? ($detailPortal === 'pos'));
+    $detailVoidRefundUrl = $voidRefundUrl ?? ($allowVoidRefundAction ? '/pos/void-refund' : null);
+    $detailSaleId = (string) ($saleId ?? request()->query('sale_id', ''));
+@endphp
+
 @section('header')
-    <x-page-header title="Detail Transaksi" backUrl="/menu/sales" :showMenuButton="true">
+    <x-page-header title="Detail Transaksi" :backUrl="$detailBackUrl" :showMenuButton="true">
         <x-slot:actions>
             <button class="flex items-center justify-center size-10 rounded-full bg-slate-100 dark:bg-slate-800">
                 <span class="material-symbols-outlined text-slate-600 dark:text-slate-400">print</span>
@@ -26,25 +38,20 @@
 @endsection
 
 @section('content')
-    <div id="void-banner" class="m-4 p-4 rounded-xl bg-red-50 border border-red-100 dark:bg-red-900/20 dark:border-red-900/30 hidden">
-        <div class="flex items-center gap-2 text-red-700 dark:text-red-400 mb-2">
-            <span class="material-symbols-outlined text-[20px]">error</span>
-            <span class="text-sm font-bold uppercase tracking-wider">Transaksi Dibatalkan (Void)</span>
+    <div id="void-banner" class="m-4 flex items-center gap-3 rounded-2xl bg-rose-50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/30 p-4 hidden">
+        <div class="flex size-10 shrink-0 items-center justify-center rounded-full bg-rose-100 dark:bg-rose-900/40 text-rose-500">
+            <span class="material-symbols-outlined font-bold">cancel</span>
         </div>
-        <div class="space-y-1">
-            <p class="text-xs text-red-600/80 dark:text-red-400/80 leading-relaxed">
-                <span class="font-semibold">Alasan:</span> <span id="void-reason">-</span>
-            </p>
-            <p class="text-xs text-red-600/80 dark:text-red-400/80">
-                <span class="font-semibold">Disetujui:</span> <span id="void-approver">-</span>
-            </p>
+        <div>
+            <p class="text-sm font-bold text-rose-600 dark:text-rose-400">Transaksi ini telah dibatalkan</p>
+            <p class="text-[11px] text-rose-500/80">Alasan: <span id="void-reason">-</span> • Disetujui: <span id="void-approver">-</span></p>
         </div>
     </div>
-    <div class="mx-4 mb-6 bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm">
-        <div class="flex justify-between items-start mb-4">
-            <div>
-                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Nomor Struk</p>
-                <h2 class="text-lg font-bold" id="sale-invoice">-</h2>
+    <div class="mx-4 mb-6 bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 ios-shadow">
+        <div class="flex justify-between items-start mb-6">
+            <div class="flex flex-col gap-1">
+                <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Nomor Struk</span>
+                <p class="text-base font-bold" id="sale-invoice">-</p>
             </div>
             <span id="sale-status" class="text-[10px] font-bold px-2 py-1 rounded-md bg-slate-100 text-slate-600 uppercase">-</span>
         </div>
@@ -66,6 +73,13 @@
                 <p class="text-xs font-medium" id="sale-payment">-</p>
             </div>
         </div>
+    </div>
+    <div class="px-4 mb-6">
+        @include('partials.owner-pos-panel', [
+            'compact' => true,
+            'title' => 'Mode Owner',
+            'subtitle' => 'Butuh tindakan manajemen tanpa keluar dari detail transaksi.',
+        ])
     </div>
     <div class="px-4 mb-6">
         <h3 class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3 px-1" id="item-count">Daftar Item (0)</h3>
@@ -92,21 +106,29 @@
         </div>
     </div>
     <div class="px-4">
-        <button id="void-button" class="w-full bg-white dark:bg-slate-900 border-2 border-red-500/20 text-red-600 py-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-red-50 transition-colors">
+        @if ($allowVoidRefundAction)
+        <button id="void-button" class="w-full bg-white dark:bg-slate-900 border-2 border-red-500/20 text-red-600 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-red-50 transition-colors">
             <span class="material-symbols-outlined">cancel</span>
             Void Transaksi
         </button>
-        <a id="void-refund-link" class="mt-3 w-full bg-slate-100 dark:bg-slate-800 text-slate-600 py-3 rounded-xl font-semibold flex items-center justify-center gap-2" href="/sales-void-refund">
+        @if ($detailVoidRefundUrl)
+        <a id="void-refund-link" class="mt-3 w-full bg-slate-100 dark:bg-slate-800 text-slate-600 py-3 rounded-xl font-semibold flex items-center justify-center gap-2" href="{{ $detailVoidRefundUrl }}">
             <span class="material-symbols-outlined text-base">assignment_return</span>
             Proses Void/Refund
         </a>
+        @endif
         <p class="text-[10px] text-center text-slate-400 mt-3 px-8 leading-tight uppercase tracking-widest">Pembatalan transaksi memerlukan persetujuan Manager</p>
+        @endif
     </div>
 
         <script>
             (() => {
                 const tenantId = document.querySelector('meta[name="tenant-id"]').content;
                 const headers = tenantId ? { 'X-Tenant-Id': tenantId } : {};
+                const currentFrom = new URLSearchParams(window.location.search).get('from');
+                const detailPortal = @json($detailPortal);
+                const initialSaleId = @json($detailSaleId);
+                const detailVoidRefundBaseUrl = @json($detailVoidRefundUrl);
 
                 const el = {
                     voidBanner: document.getElementById('void-banner'),
@@ -205,9 +227,11 @@
                     el.voidBanner.classList.toggle('hidden', !isVoid);
                     el.voidReason.textContent = sale.void_reason || 'Tidak ada alasan.';
                     el.voidApprover.textContent = sale.voided_by_name || '-';
-                    el.voidButton.disabled = isVoid;
-                    el.voidButton.classList.toggle('opacity-60', isVoid);
-                    el.voidButton.classList.toggle('cursor-not-allowed', isVoid);
+                    if (el.voidButton) {
+                        el.voidButton.disabled = isVoid;
+                        el.voidButton.classList.toggle('opacity-60', isVoid);
+                        el.voidButton.classList.toggle('cursor-not-allowed', isVoid);
+                    }
                     el.status.textContent = isVoid ? 'Void' : 'Selesai';
                     el.status.className = isVoid
                         ? 'text-[10px] font-bold px-2 py-1 rounded-md bg-red-100 text-red-600 uppercase'
@@ -217,7 +241,7 @@
                 const getParam = (key) => new URLSearchParams(window.location.search).get(key);
 
                 const init = async () => {
-                    const saleId = getParam('sale_id');
+                    const saleId = initialSaleId || getParam('sale_id');
                     if (!saleId) {
                         el.list.innerHTML = '<div class="p-4 text-sm text-slate-400">ID transaksi tidak ditemukan.</div>';
                         return;
@@ -226,7 +250,15 @@
                     try {
                         const data = await loadSale(saleId);
                         const sale = data.sale;
-                        el.voidRefundLink.href = `/sales-void-refund?sale_id=${saleId}`;
+                        if (el.voidRefundLink && detailVoidRefundBaseUrl) {
+                            const voidParams = new URLSearchParams();
+                            if (currentFrom) {
+                                voidParams.set('from', currentFrom);
+                            } else {
+                                voidParams.set('from', @json($detailCurrentPath));
+                            }
+                            el.voidRefundLink.href = `${detailVoidRefundBaseUrl}?${voidParams.toString()}`;
+                        }
                         el.invoice.textContent = formatInvoice(sale);
                         el.time.textContent = formatDateTime(sale.created_at);
                         el.cashier.textContent = sale.cashier_name || '-';
@@ -239,26 +271,28 @@
                         setVoidState(sale);
                         renderItems(data.items || []);
 
-                        el.voidButton.addEventListener('click', async () => {
-                            if (sale.status === 'void') {
-                                return;
-                            }
-                            const reason = prompt('Alasan void transaksi?') || '';
-                            const response = await fetch(`/api/v1/sales/${saleId}/void`, {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    ...headers,
-                                },
-                                body: JSON.stringify({ reason }),
+                        if (el.voidButton) {
+                            el.voidButton.addEventListener('click', async () => {
+                                if (sale.status === 'void') {
+                                    return;
+                                }
+                                const reason = prompt('Alasan void transaksi?') || '';
+                                const response = await fetch(`/api/v1/sales/${saleId}/void`, {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        ...headers,
+                                    },
+                                    body: JSON.stringify({ reason }),
+                                });
+                                if (!response.ok) {
+                                    alert('Gagal melakukan void.');
+                                    return;
+                                }
+                                const refreshed = await loadSale(saleId);
+                                setVoidState(refreshed.sale);
                             });
-                            if (!response.ok) {
-                                alert('Gagal melakukan void.');
-                                return;
-                            }
-                            const refreshed = await loadSale(saleId);
-                            setVoidState(refreshed.sale);
-                        });
+                        }
                     } catch (error) {
                         el.list.innerHTML = `<div class="p-4 text-sm text-red-500">${error.message}</div>`;
                     }

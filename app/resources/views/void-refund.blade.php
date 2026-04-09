@@ -1,8 +1,8 @@
 @extends('layouts.app')
 
 @section('page_title', 'Void & Refund Transaksi')
-@section('body_class', 'font-display text-slate-900')
-@section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-slate-50 shadow-2xl')
+@section('body_class', 'bg-background-light dark:bg-background-dark font-display text-slate-800 dark:text-slate-100')
+@section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-background-light dark:bg-background-dark shadow-2xl')
 @section('main_class', 'flex-1 overflow-hidden p-0')
 
 @push('head')
@@ -15,8 +15,25 @@
         </style>
 @endpush
 
+@php
+    $voidRefundSaleId = (string) ($saleId ?? request()->query('sale_id', ''));
+    $voidRefundCurrentPath = $currentPath ?? ($voidRefundSaleId !== '' ? '/pos/sales/'.$voidRefundSaleId.'/void-refund' : '/pos/void-refund');
+    $submenuBackUrl = $backUrl ?? ($voidRefundSaleId !== '' ? '/pos/sales/'.$voidRefundSaleId : '/pos/history');
+    $detailUrl = $detailUrl ?? ($voidRefundSaleId !== '' ? '/pos/sales/'.$voidRefundSaleId : '/pos/history');
+    $salesHistoryHref = $historyUrl ?? '/pos/history';
+    $voidRefundDashboardHref = '/pos/dashboard';
+    $voidRefundBackofficeHref = static function (string $targetPath) use ($voidRefundCurrentPath): string {
+        $separator = str_contains($targetPath, '?') ? '&' : '?';
+
+        return '/portal/switch/backoffice?next='.rawurlencode($targetPath.$separator.'from='.rawurlencode($voidRefundCurrentPath));
+    };
+    if ($submenuBackUrl !== $salesHistoryHref && str_starts_with($submenuBackUrl, '/pos/')) {
+        $salesHistoryHref .= '?from='.urlencode($submenuBackUrl);
+    }
+@endphp
+
 @section('header')
-        <x-page-header title="Void &amp; Refund" subtitle="INV/20231024/0042" backUrl="/menu/sales" :showMenuButton="false">
+        <x-page-header title="Void & Refund" subtitle="INV/20231024/0042" :backUrl="$submenuBackUrl" :showMenuButton="true">
             <x-slot name="actions">
                 <span class="px-2 py-1 bg-slate-100 text-slate-600 rounded text-[10px] font-bold">MEJA 08</span>
             </x-slot>
@@ -30,9 +47,14 @@
                     <div class="bg-blue-50 border border-blue-100 p-3 rounded-xl flex gap-3">
                         <span class="material-symbols-outlined text-primary text-xl">info</span>
                         <p class="text-xs text-blue-800 leading-relaxed">
-                            Pilih item yang ingin dibatalkan atau dikembalikan. Masukkan alasan dan otorisasi manajer untuk melanjutkan.
+                            Pilih item yang ingin di-refund. Nominal refund dihitung per line item, dan payout akan mengikuti alokasi metode pembayaran transaksi asal.
                         </p>
                     </div>
+                    @include('partials.owner-pos-panel', [
+                        'compact' => true,
+                        'title' => 'Mode Owner',
+                        'subtitle' => 'Tetap proses void di POS, lalu buka laporan atau stok bila butuh investigasi.',
+                    ])
                     <div class="space-y-3">
                         <h2 class="text-xs font-bold text-slate-500 uppercase tracking-widest px-1">Daftar Item Transaksi</h2>
                         <div id="refund-items" class="space-y-3"></div>
@@ -51,12 +73,13 @@
                             <textarea id="refund-note" class="w-full px-4 py-3 rounded-xl border-slate-200 bg-white text-sm focus:ring-primary focus:border-primary ios-input-shadow mt-2 h-20" placeholder="Keterangan tambahan (wajib jika pilih V99)"></textarea>
                         </div>
                         <div class="space-y-2">
-                            <label class="text-xs font-bold text-slate-500 uppercase tracking-widest px-1">Manager Approval PIN</label>
-                            <div class="relative">
-                                <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">lock</span>
-                                <input id="refund-pin" class="w-full pl-12 pr-4 py-3 rounded-xl border-slate-200 bg-white text-sm focus:ring-primary focus:border-primary ios-input-shadow" maxlength="6" placeholder="Masukkan 6 digit PIN Manajer" type="password" />
+                            <label class="text-xs font-bold text-slate-500 uppercase tracking-widest px-1">Alokasi Payout Refund</label>
+                            <div id="refund-payments" class="space-y-2"></div>
+                            <div class="flex items-center justify-between px-1">
+                                <p class="text-[10px] text-slate-400 italic">Untuk transaksi multi-payment, payout refund akan dibagi mengikuti metode pembayaran asal. Nilai ini bisa diubah manual.</p>
+                                <button id="refund-payment-reset" type="button" class="text-[10px] font-semibold text-primary">Reset Otomatis</button>
                             </div>
-                            <p class="text-[10px] text-slate-400 px-1 italic">Void memerlukan otorisasi level supervisor/manajer.</p>
+                            <p id="refund-payment-warning" class="hidden px-1 text-[10px] font-semibold text-red-500"></p>
                         </div>
                     </div>
                 </div>
@@ -77,7 +100,7 @@
                         </div>
                     </div>
                     <div class="flex gap-3 pb-4">
-                        <button class="flex-1 h-14 bg-white border border-slate-200 text-slate-600 font-bold rounded-2xl flex items-center justify-center active:bg-slate-50 transition-colors" onclick="location.href='/menu/sales'">
+                        <button class="flex-1 h-14 bg-white border border-slate-200 text-slate-600 font-bold rounded-2xl flex items-center justify-center active:bg-slate-50 transition-colors" onclick="location.href='{{ $submenuBackUrl }}'">
                             BATAL
                         </button>
                         <button id="process-refund" class="flex-[2] h-14 bg-red-500 text-white font-black px-6 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-red-500/20 active:scale-95 transition-transform">
@@ -87,19 +110,19 @@
                     </div>
                     <nav class="border-t border-slate-200 pt-3">
                         <div class="flex justify-around items-center">
-                            <a class="flex flex-col items-center gap-1 text-slate-400" href="/">
+                            <a class="flex flex-col items-center gap-1 text-slate-400" href="{{ $voidRefundDashboardHref }}">
                                 <span class="material-symbols-outlined">home</span>
                                 <span class="text-[10px] font-medium">Beranda</span>
                             </a>
-                            <a class="flex flex-col items-center gap-1 text-slate-400" href="/inventory">
+                            <a class="flex flex-col items-center gap-1 text-slate-400" href="{{ $voidRefundBackofficeHref('/backoffice/inventory') }}">
                                 <span class="material-symbols-outlined">inventory</span>
                                 <span class="text-[10px] font-medium">Stok</span>
                             </a>
-                            <a class="flex flex-col items-center gap-1 text-primary" href="/sales-history">
+                            <a class="flex flex-col items-center gap-1 text-primary" href="{{ $salesHistoryHref }}">
                                 <span class="material-symbols-outlined">receipt</span>
                                 <span class="text-[10px] font-bold">Transaksi</span>
                             </a>
-                            <a class="flex flex-col items-center gap-1 text-slate-400" href="/finance-summary">
+                            <a class="flex flex-col items-center gap-1 text-slate-400" href="{{ $voidRefundBackofficeHref('/backoffice/finance/summary') }}">
                                 <span class="material-symbols-outlined">monitoring</span>
                                 <span class="text-[10px] font-medium">Laporan</span>
                             </a>
@@ -124,9 +147,13 @@
                     count: document.getElementById('refund-count'),
                     reason: document.getElementById('refund-reason'),
                     note: document.getElementById('refund-note'),
-                    pin: document.getElementById('refund-pin'),
+                    payments: document.getElementById('refund-payments'),
+                    paymentWarning: document.getElementById('refund-payment-warning'),
+                    paymentReset: document.getElementById('refund-payment-reset'),
                     process: document.getElementById('process-refund'),
                 };
+
+                const roundCurrency = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
 
                 const formatCurrency = (value) => new Intl.NumberFormat('id-ID', {
                     style: 'currency',
@@ -135,8 +162,12 @@
                 }).format(value || 0);
 
                 const state = {
-                    saleId: new URLSearchParams(window.location.search).get('sale_id'),
+                    saleId: @json($voidRefundSaleId),
+                    sale: null,
                     items: [],
+                    payments: [],
+                    paymentDrafts: [],
+                    paymentManualOverride: false,
                 };
 
                 const loadSale = async () => {
@@ -148,12 +179,122 @@
                     return response.json();
                 };
 
+                const allocationBasisTotal = () => state.items.reduce((sum, item) => sum + Math.max((item.price * item.maxQty) - item.lineDiscount, 0), 0);
+
+                const estimatedLineRefund = (item) => {
+                    const allocationBasis = allocationBasisTotal();
+                    const saleDiscount = Number(state.sale?.discount || 0);
+                    const saleTax = Number(state.sale?.tax || 0);
+                    const grossAmount = item.refundQty * item.price;
+                    const itemDiscountAmount = item.maxQty > 0 ? (item.lineDiscount * (item.refundQty / item.maxQty)) : 0;
+                    const lineNetBeforeTransactionDiscount = Math.max((item.price * item.maxQty) - item.lineDiscount, 0);
+                    const fullLineTransactionDiscount = allocationBasis > 0
+                        ? saleDiscount * (lineNetBeforeTransactionDiscount / allocationBasis)
+                        : 0;
+                    const transactionDiscountAmount = item.maxQty > 0
+                        ? fullLineTransactionDiscount * (item.refundQty / item.maxQty)
+                        : 0;
+                    const saleNetBeforeTax = Math.max(allocationBasis - saleDiscount, 0);
+                    const fullLineTax = saleNetBeforeTax > 0
+                        ? saleTax * (Math.max(lineNetBeforeTransactionDiscount - fullLineTransactionDiscount, 0) / saleNetBeforeTax)
+                        : 0;
+                    const taxAmount = item.maxQty > 0 ? fullLineTax * (item.refundQty / item.maxQty) : 0;
+
+                    return roundCurrency(grossAmount - itemDiscountAmount - transactionDiscountAmount + taxAmount);
+                };
+
+                const defaultPaymentAllocations = (refundTotal) => {
+                    let remaining = roundCurrency(refundTotal);
+
+                    return state.payments.map((payment) => {
+                        const allocated = roundCurrency(Math.min(remaining, Number(payment.amount || 0)));
+                        remaining = roundCurrency(Math.max(remaining - allocated, 0));
+
+                        return {
+                            sale_payment_id: payment.id,
+                            account_id: payment.account_id,
+                            payment_method_id: payment.payment_method_id,
+                            method: payment.method,
+                            amount: allocated,
+                        };
+                    }).filter((payment) => payment.amount > 0);
+                };
+
+                const normalizePaymentDrafts = (refundTotal) => {
+                    if (!state.paymentManualOverride) {
+                        state.paymentDrafts = defaultPaymentAllocations(refundTotal);
+                        return;
+                    }
+
+                    const draftMap = new Map(state.paymentDrafts.map((payment) => [payment.sale_payment_id || payment.method, payment]));
+                    state.paymentDrafts = defaultPaymentAllocations(refundTotal).map((payment) => {
+                        const key = payment.sale_payment_id || payment.method;
+                        const draft = draftMap.get(key);
+
+                        return {
+                            ...payment,
+                            amount: roundCurrency(draft ? draft.amount : payment.amount),
+                        };
+                    });
+                };
+
+                const buildPaymentAllocations = () => state.paymentDrafts
+                    .map((payment) => ({
+                        sale_payment_id: payment.sale_payment_id,
+                        account_id: payment.account_id,
+                        payment_method_id: payment.payment_method_id,
+                        method: payment.method,
+                        amount: roundCurrency(payment.amount),
+                    }))
+                    .filter((payment) => payment.amount > 0);
+
+                const paymentDraftTotal = () => roundCurrency(state.paymentDrafts.reduce((sum, payment) => sum + Number(payment.amount || 0), 0));
+
+                const updatePaymentWarning = (refundTotal) => {
+                    const allocatedTotal = paymentDraftTotal();
+                    if (allocatedTotal === refundTotal) {
+                        els.paymentWarning.classList.add('hidden');
+                        els.paymentWarning.textContent = '';
+                        return;
+                    }
+
+                    els.paymentWarning.classList.remove('hidden');
+                    els.paymentWarning.textContent = `Total payout ${formatCurrency(allocatedTotal)} harus sama dengan total refund ${formatCurrency(refundTotal)}.`;
+                };
+
+                const renderPayments = (refundTotal) => {
+                    normalizePaymentDrafts(refundTotal);
+                    const allocations = state.paymentDrafts;
+
+                    if (!allocations.length) {
+                        els.payments.innerHTML = '<div class="text-sm text-slate-400">Payout refund akan mengikuti transaksi asal bila data pembayaran tersedia.</div>';
+                        els.paymentWarning.classList.add('hidden');
+                        return;
+                    }
+
+                    els.payments.innerHTML = allocations.map((payment) => `
+                        <div class="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm">
+                            <div>
+                                <div class="font-semibold text-slate-700">${String(payment.method || '').toUpperCase()}</div>
+                                <div class="text-xs text-slate-400">Payout refund ${state.paymentManualOverride ? 'manual' : 'otomatis'}</div>
+                            </div>
+                            <label class="flex items-center gap-2">
+                                <span class="text-xs text-slate-400">Rp</span>
+                                <input data-payment-index="${index}" class="w-28 rounded-lg border border-slate-200 px-3 py-2 text-right font-bold text-slate-900" type="number" min="0" step="0.01" value="${payment.amount}" />
+                            </label>
+                        </div>
+                    `).join('');
+
+                    updatePaymentWarning(refundTotal);
+                };
+
                 const setTotals = () => {
                     const selectedItems = state.items.filter((item) => item.selected);
-                    const total = selectedItems.reduce((sum, item) => sum + item.refundQty * item.price, 0);
+                    const total = roundCurrency(selectedItems.reduce((sum, item) => sum + estimatedLineRefund(item), 0));
                     const count = selectedItems.reduce((sum, item) => sum + item.refundQty, 0);
                     els.total.textContent = new Intl.NumberFormat('id-ID').format(total);
                     els.count.textContent = count;
+                    renderPayments(total);
                 };
 
                 const renderItems = () => {
@@ -173,6 +314,7 @@
                                 <div class="flex-1">
                                     <h3 class="text-sm font-bold text-slate-800">${item.name}</h3>
                                     <p class="text-xs text-slate-500">Harga: ${formatCurrency(item.price)}</p>
+                                    <p class="text-xs text-slate-400">Estimasi refund: ${formatCurrency(estimatedLineRefund(item))}</p>
                                 </div>
                                 <button class="toggle-item flex items-center justify-center w-6 h-6 rounded-full ${item.selected ? 'bg-primary text-white' : 'border-2 border-slate-300 text-slate-400'}">
                                     <span class="material-symbols-outlined text-lg">${item.selected ? 'check' : 'remove'}</span>
@@ -234,6 +376,27 @@
                     }
                 });
 
+                els.payments.addEventListener('input', (event) => {
+                    const input = event.target.closest('[data-payment-index]');
+                    if (!input) {
+                        return;
+                    }
+
+                    const index = Number(input.dataset.paymentIndex);
+                    if (Number.isNaN(index) || !state.paymentDrafts[index]) {
+                        return;
+                    }
+
+                    state.paymentManualOverride = true;
+                    state.paymentDrafts[index].amount = roundCurrency(Math.max(Number(input.value || 0), 0));
+                    updatePaymentWarning(roundCurrency(state.items.filter((item) => item.selected).reduce((sum, item) => sum + estimatedLineRefund(item), 0)));
+                });
+
+                els.paymentReset.addEventListener('click', () => {
+                    state.paymentManualOverride = false;
+                    setTotals();
+                });
+
                 els.process.addEventListener('click', async () => {
                     if (!state.saleId) {
                         alert('ID transaksi tidak ditemukan.');
@@ -244,7 +407,7 @@
                         alert('Pilih item untuk diproses.');
                         return;
                     }
-                    const totalRefund = selectedItems.reduce((sum, item) => sum + (item.refundQty * item.price), 0);
+                    const totalRefund = roundCurrency(selectedItems.reduce((sum, item) => sum + estimatedLineRefund(item), 0));
                     const totalItems = selectedItems.reduce((sum, item) => sum + item.refundQty, 0);
                     const reasonCode = (els.reason.value || '').trim();
                     const reasonNote = els.note.value.trim();
@@ -256,14 +419,23 @@
                         alert('Untuk kode V99, catatan minimal 20 karakter wajib diisi.');
                         return;
                     }
-                    if (!els.pin.value || els.pin.value.trim().length < 6) {
-                        alert('PIN manajer wajib diisi 6 digit.');
+                    if (!state.sale?.register_id) {
+                        alert('Register transaksi tidak ditemukan.');
                         return;
                     }
 
+                    const paymentAllocations = buildPaymentAllocations();
+                    if (paymentAllocations.length > 0) {
+                        const allocatedTotal = roundCurrency(paymentAllocations.reduce((sum, payment) => sum + payment.amount, 0));
+                        if (allocatedTotal !== totalRefund) {
+                            alert('Alokasi payout refund tidak seimbang dengan estimasi total refund.');
+                            return;
+                        }
+                    }
+
                     const allowed = window.PosUi.confirmRiskAction({
-                        title: 'Konfirmasi Void/Refund',
-                        message: `Item: ${totalItems}\nTotal: ${formatCurrency(totalRefund)}\nAksi ini akan tercatat di audit log. Lanjutkan?`,
+                        title: 'Konfirmasi Refund',
+                        message: `Item: ${totalItems}\nTotal: ${formatCurrency(totalRefund)}\nRefund akan tercatat di audit log dan reversal finance. Lanjutkan?`,
                     });
                     if (!allowed) {
                         return;
@@ -271,31 +443,49 @@
 
                     await window.PosUi.runWithSubmitGuard(els.process, async () => {
                         try {
-                            const response = await window.PosUi.fetchWithTimeout(`/api/v1/sales/${state.saleId}/void`, {
+                            const body = {
+                                sale_id: state.saleId,
+                                register_id: state.sale.register_id,
+                                shift_id: state.sale.shift_id || null,
+                                reason: reasonCode + (reasonNote ? ` - ${reasonNote}` : ''),
+                                items: selectedItems.map((item) => ({
+                                    sale_item_id: item.id,
+                                    qty: item.refundQty,
+                                })),
+                            };
+
+                            if (paymentAllocations.length > 0) {
+                                body.payments = paymentAllocations;
+                            }
+
+                            const response = await window.PosUi.fetchWithTimeout('/api/v1/refunds', {
                                 method: 'POST',
                                 headers: {
                                     'Content-Type': 'application/json',
                                     ...headers,
                                 },
-                                body: JSON.stringify({
-                                    reason_code: reasonCode,
-                                    reason_note: reasonNote || null,
-                                    reason: reasonCode + (reasonNote ? ` - ${reasonNote}` : ''),
-                                    manager_pin: els.pin.value.trim(),
-                                }),
+                                body: JSON.stringify(body),
                             }, 15000);
                             if (!response.ok) {
-                                const mapped = await window.PosUi.mapApiError(response, 'Gagal memproses void/refund.');
+                                const mapped = await window.PosUi.mapApiError(response, 'Gagal memproses refund.');
                                 alert(mapped.message);
                                 return;
                             }
-                            window.location.href = `/sales-detail?sale_id=${state.saleId}`;
+                            const detailTarget = @json($detailUrl);
+                            const detailParams = new URLSearchParams();
+                            const currentFrom = new URLSearchParams(window.location.search).get('from');
+                            if (currentFrom) {
+                                detailParams.set('from', currentFrom);
+                            } else if (detailTarget.startsWith('/pos/sales/')) {
+                                detailParams.set('from', @json($voidRefundCurrentPath));
+                            }
+                            window.location.href = `${detailTarget}?${detailParams.toString()}`;
                         } catch (error) {
                             if (error?.name === 'AbortError') {
-                                alert('Permintaan timeout. Cek riwayat penjualan sebelum mengulang void.');
+                                alert('Permintaan timeout. Cek daftar refund sebelum mengulang proses.');
                                 return;
                             }
-                            alert(error?.message || 'Gagal memproses void/refund.');
+                            alert(error?.message || 'Gagal memproses refund.');
                         }
                     });
                 });
@@ -307,10 +497,15 @@
                     }
                     try {
                         const data = await loadSale();
+                        state.sale = data.sale || null;
+                        state.payments = data.payments || [];
+                        state.paymentDrafts = [];
+                        state.paymentManualOverride = false;
                         state.items = (data.items || []).map((item) => ({
                             id: item.id,
                             name: item.product_name,
-                            price: item.price,
+                            price: Number(item.price || 0),
+                            lineDiscount: Number(item.discount || 0),
                             maxQty: item.qty,
                             refundQty: item.qty,
                             selected: true,

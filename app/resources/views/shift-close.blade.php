@@ -5,7 +5,7 @@
 @section('main_class', 'flex-1 overflow-hidden p-0')
 
 @section('header')
-        <x-page-header title="Tutup Shift" backUrl="/menu/shift" />
+        <x-page-header title="Tutup Shift" backUrl="/pos/dashboard" />
 @endsection
 
 @section('content')
@@ -16,10 +16,15 @@
                     <p class="text-slate-500 dark:text-slate-400 text-sm mt-1">Pastikan jumlah uang tunai di laci sesuai dengan catatan sistem.</p>
                     <p class="text-xs text-slate-500 mt-2" id="shift-info">Shift: -</p>
                 </div>
+                <div class="px-4 pb-4">
+                    @include('partials.owner-pos-panel', [
+                        'subtitle' => 'Selesaikan tutup shift, lalu gunakan jalur cepat ke katalog, stok, atau pengaturan toko.',
+                    ])
+                </div>
                 <div id="shift-closed-banner" class="mx-4 mb-4 hidden rounded-xl border border-amber-200 bg-amber-50 p-4">
                     <p class="text-sm font-semibold text-amber-800">Shift belum dibuka atau sudah ditutup.</p>
                     <p class="text-xs text-amber-700 mt-1">Silakan buka shift dulu sebelum menutup.</p>
-                    <a href="/shift/open" class="mt-3 inline-flex items-center gap-1 rounded-lg bg-amber-100 px-3 py-1.5 text-xs font-bold text-amber-800">
+                    <a href="/pos/shifts/open" class="mt-3 inline-flex items-center gap-1 rounded-lg bg-amber-100 px-3 py-1.5 text-xs font-bold text-amber-800">
                         <span class="material-symbols-outlined text-sm">lock_open</span>
                         Buka Shift
                     </a>
@@ -37,6 +42,7 @@
                                 <input id="closing-cash" class="flex w-full rounded-xl text-slate-900 dark:text-slate-100 border border-primary bg-primary/5 focus:ring-2 focus:ring-primary h-16 pl-12 pr-4 text-2xl font-bold" type="text" inputmode="numeric" value="0" />
                             </div>
                         </label>
+                        <div id="closing-cash-quick" class="flex gap-2 overflow-x-auto no-scrollbar pt-1"></div>
                     </div>
                     <div id="difference-card" class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
                         <div class="flex justify-between items-center">
@@ -76,6 +82,7 @@
                             <span class="material-symbols-outlined">task_alt</span>
                             Konfirmasi dan Tutup Shift
                         </button>
+                        <p id="close-shift-caption" class="mt-3 text-center text-xs font-medium text-slate-500">Samakan kas aktual dengan fisik laci sebelum menutup shift.</p>
                     </div>
                 </div>
             </div>
@@ -84,6 +91,7 @@
         <script>
             (() => {
                 const tenantId = document.querySelector('meta[name="tenant-id"]').content;
+                const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
                 const headers = tenantId ? { 'X-Tenant-Id': tenantId } : {};
 
                 const el = {
@@ -98,6 +106,8 @@
                     close: document.getElementById('close-shift'),
                     banner: document.getElementById('shift-closed-banner'),
                     info: document.getElementById('shift-info'),
+                    quickCash: document.getElementById('closing-cash-quick'),
+                    caption: document.getElementById('close-shift-caption'),
                 };
 
                 let expectedCash = 0;
@@ -136,6 +146,35 @@
                     const closingValue = parseFloat(inputValue || '0');
                     el.closing.value = new Intl.NumberFormat('id-ID').format(closingValue);
                     updateDifference();
+                    const diff = closingValue - expectedCash;
+                    el.caption.textContent = diff === 0
+                        ? 'Kas sudah sesuai. Shift siap ditutup.'
+                        : diff < 0
+                            ? 'Kas akhir lebih kecil dari ekspektasi. Tambahkan catatan bila perlu.'
+                            : 'Kas akhir lebih besar dari ekspektasi. Tambahkan catatan bila perlu.';
+                };
+
+                const renderQuickCash = () => {
+                    const values = [
+                        Math.max(0, Math.floor(expectedCash || 0)),
+                        Math.max(0, Math.floor((expectedCash || 0) - 5000)),
+                        Math.max(0, Math.floor((expectedCash || 0) + 5000)),
+                    ];
+                    const unique = [...new Set(values)];
+                    el.quickCash.innerHTML = '';
+                    unique.forEach((amount, index) => {
+                        const button = document.createElement('button');
+                        button.type = 'button';
+                        button.className = `whitespace-nowrap rounded-full border px-4 py-2 text-xs font-bold ${index === 0 ? 'border-primary/20 bg-primary/10 text-primary' : 'border-slate-200 bg-white text-slate-600'}`;
+                        button.textContent = index === 0
+                            ? 'Sesuai Sistem'
+                            : new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(amount);
+                        button.addEventListener('click', () => {
+                            inputValue = String(amount);
+                            updateDisplay();
+                        });
+                        el.quickCash.appendChild(button);
+                    });
                 };
 
                 const loadSummary = async () => {
@@ -160,6 +199,7 @@
                     el.diffValue.textContent = 'Rp 0';
                     el.diffIcon.textContent = 'error';
                     el.keypad.classList.add('hidden');
+                    el.caption.textContent = message || 'Shift belum tersedia.';
                 };
 
                 const keypadEl = document.getElementById('keypad');
@@ -211,8 +251,12 @@
                     }
                     const response = await fetch('/api/v1/shifts/close', {
                         method: 'POST',
+                        credentials: 'same-origin',
                         headers: {
                             'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest',
+                            ...(csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}),
                             ...headers,
                         },
                         body: JSON.stringify({
@@ -229,7 +273,9 @@
                     el.close.disabled = true;
                     el.close.classList.add('opacity-70', 'cursor-not-allowed');
                     setTimeout(() => {
-                        window.location.href = shiftId ? `/shift/close-summary?shift_id=${shiftId}` : '/shift/close-summary';
+                        window.location.href = shiftId
+                            ? `/pos/shifts/${encodeURIComponent(shiftId)}/summary?from=${encodeURIComponent('/pos/dashboard')}`
+                            : '/pos/shifts/summary';
                     }, 600);
                 });
 
@@ -252,6 +298,7 @@
                         }
                         el.expected.textContent = formatCurrency(expectedCash);
                         inputValue = String(Math.floor(expectedCash));
+                        renderQuickCash();
                         updateDisplay();
                     } catch (error) {
                         setBlocked('Shift belum dibuka atau sudah ditutup.');
@@ -260,8 +307,4 @@
             })();
         </script>
     @endsection
-
-
-
-
 

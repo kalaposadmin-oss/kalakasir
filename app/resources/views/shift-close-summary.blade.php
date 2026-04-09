@@ -1,3 +1,9 @@
+@php
+    $resolvedShiftId = (string) ($shiftId ?? request()->query('shift_id', ''));
+    $shiftSummaryCurrentPath = $currentPath ?? ($resolvedShiftId !== '' ? '/pos/shifts/'.$resolvedShiftId.'/summary' : '/pos/shifts/summary');
+    $shiftSummaryBackUrl = $backUrl ?? ($resolvedShiftId !== '' ? '/pos/shifts/summary' : '/pos/dashboard');
+@endphp
+
 @extends('layouts.app')
 
 @section('page_title', 'Ringkasan Tutup Shift Kasir')
@@ -17,13 +23,16 @@
 @endpush
 
 @section('header')
-        <x-page-header title="Ringkasan Tutup Shift" :breadcrumbs="['Laporan Audit']" backUrl="/menu/shift" :showMenuButton="false" />
+    <x-page-header title="Ringkasan Tutup Shift" :breadcrumbs="['Laporan Audit']" :backUrl="$shiftSummaryBackUrl" :showMenuButton="true" />
 @endsection
 
 @section('content')
         <div class="relative flex h-full flex-col">
             <div class="flex-1 overflow-y-auto pb-32">
                 <div class="px-4 py-6">
+                    @include('partials.owner-pos-panel', [
+                        'subtitle' => 'Audit shift tetap di POS, dengan akses cepat ke alat manajemen saat dibutuhkan.',
+                    ])
                     <div id="history-view" class="hidden">
                         <h2 class="text-base font-bold text-slate-800 mb-3">Riwayat Shift</h2>
                         <div id="history-list" class="space-y-3"></div>
@@ -94,7 +103,7 @@
                     <button class="w-14 h-14 rounded-2xl border border-slate-200 flex items-center justify-center text-slate-600 active:bg-slate-100">
                         <span class="material-symbols-outlined">print</span>
                     </button>
-                    <button class="flex-1 h-14 bg-primary text-white font-bold rounded-2xl shadow-lg shadow-primary/30 flex items-center justify-center gap-2 active:scale-[0.98] transition-transform" onclick="location.href='/menu/shift'">
+                    <button class="flex-1 h-14 bg-primary text-white font-bold rounded-2xl shadow-lg shadow-primary/30 flex items-center justify-center gap-2 active:scale-[0.98] transition-transform" onclick="location.href=@js($shiftSummaryBackUrl)">
                         <span class="material-symbols-outlined font-bold">done</span>
                         SELESAI
                     </button>
@@ -105,6 +114,8 @@
             (() => {
                 const tenantId = document.querySelector('meta[name="tenant-id"]').content;
                 const headers = tenantId ? { 'X-Tenant-Id': tenantId } : {};
+                const shiftId = @json($resolvedShiftId) || new URLSearchParams(window.location.search).get('shift_id');
+                const currentPath = @json($shiftSummaryCurrentPath);
 
                 const el = {
                     historyView: document.getElementById('history-view'),
@@ -241,7 +252,6 @@
                 };
 
                 const loadSummary = async () => {
-                    const shiftId = new URLSearchParams(window.location.search).get('shift_id');
                     const url = shiftId ? `/api/v1/shifts/close-summary?shift_id=${shiftId}` : '/api/v1/shifts/close-summary';
                     const response = await fetch(url, { headers });
                     if (!response.ok) {
@@ -270,7 +280,7 @@
                         const opened = formatDateTime(row.opened_at);
                         const closed = formatDateTime(row.closed_at);
                         const card = document.createElement('a');
-                        card.href = `/shift/close-summary?shift_id=${row.id}`;
+                        card.href = `/pos/shifts/${encodeURIComponent(row.id)}/summary?from=${encodeURIComponent(currentPath)}`;
                         card.className = 'block bg-white rounded-2xl border border-slate-200 p-4 shadow-sm';
                         card.innerHTML = `
                             <div class="flex items-center justify-between">
@@ -294,8 +304,6 @@
                 };
 
                 (async () => {
-                    const shiftId = new URLSearchParams(window.location.search).get('shift_id');
-
                     if (!shiftId) {
                         el.detailView.classList.add('hidden');
                         el.historyView.classList.remove('hidden');
@@ -335,6 +343,4 @@
             })();
         </script>
     @endsection
-
-
 

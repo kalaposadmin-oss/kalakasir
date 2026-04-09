@@ -60,36 +60,6 @@
         </div>
 
         <input type="hidden" name="timezone" value="Asia/Jakarta" />
-
-        <div class="mt-2">
-            <div class="flex items-center justify-between mb-3">
-                <label class="text-sm font-semibold leading-normal">Metode Inventaris Awal</label>
-                <span class="material-symbols-outlined text-primary text-xl">help</span>
-            </div>
-            <div class="grid grid-cols-1 gap-3">
-                <div class="relative flex items-start p-4 border-2 border-primary bg-primary/5 rounded-xl cursor-pointer">
-                    <div class="flex-1">
-                        <div class="flex items-center gap-2 mb-1">
-                            <h4 class="font-bold">FIFO</h4>
-                            <span class="bg-primary text-[10px] text-white font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">Rekomendasi</span>
-                        </div>
-                        <p class="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">Barang yang pertama masuk adalah yang pertama dijual.</p>
-                    </div>
-                    <div class="ml-3 flex h-5 items-center">
-                        <div class="w-5 h-5 rounded-full border-4 border-primary bg-white"></div>
-                    </div>
-                </div>
-                <div class="relative flex items-start p-4 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl cursor-pointer">
-                    <div class="flex-1">
-                        <h4 class="font-bold mb-1">Average</h4>
-                        <p class="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">Harga pokok dihitung rata-rata tertimbang.</p>
-                    </div>
-                    <div class="ml-3 flex h-5 items-center">
-                        <div class="w-5 h-5 rounded-full border border-slate-300 dark:border-slate-600 bg-transparent"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
     </form>
 
     <div class="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] p-4 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800">

@@ -13,7 +13,7 @@
 @endpush
 
 @section('header')
-    <x-page-header title="Buka Shift" backUrl="/menu/shift" :showMenuButton="true">
+    <x-page-header title="Buka Shift" backUrl="/pos/dashboard" :showMenuButton="true">
         <x-slot:actions>
             <div id="shift-badge" class="text-xs font-semibold text-primary bg-primary/10 px-3 py-1 rounded-full">Shift #01</div>
         </x-slot:actions>
@@ -29,25 +29,36 @@
         <p class="text-slate-500 text-sm mt-1">Silakan isi informasi modal awal untuk memulai shift Anda hari ini.</p>
     </div>
     <div class="space-y-6">
+        @include('partials.owner-pos-panel', [
+            'subtitle' => 'Buka shift dulu, lalu tetap punya jalur cepat ke katalog, stok, dan pengaturan toko.',
+        ])
         <div id="cash-drawer-guard" class="hidden rounded-2xl border border-amber-200 bg-amber-50 p-4">
-            <p class="text-sm font-semibold text-amber-800">Cash drawer belum disiapkan.</p>
-            <p class="text-xs text-amber-700 mt-1">Buat akun kas warung terlebih dahulu sebelum membuka shift.</p>
-            <a href="/settings/chart-of-accounts" class="mt-3 inline-flex items-center gap-1 rounded-lg bg-amber-100 px-3 py-1.5 text-xs font-bold text-amber-800">
+            <p class="text-sm font-semibold text-amber-800">Akun kas default sedang belum siap.</p>
+            <p class="text-xs text-amber-700 mt-1">Normalnya akun Kas dibuat otomatis saat toko didaftarkan. Muat ulang halaman dulu. Jika tetap muncul, baru cek pengaturan akun kas di Backoffice.</p>
+            <a href="/backoffice/settings/chart-of-accounts" class="mt-3 inline-flex items-center gap-1 rounded-lg bg-amber-100 px-3 py-1.5 text-xs font-bold text-amber-800">
                 <span class="material-symbols-outlined text-sm">account_balance</span>
-                Buat Akun Kas
+                Cek Akun Kas
             </a>
         </div>
         <div class="space-y-2">
-            <label class="block text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Lokasi Cabang</label>
-            <div class="relative">
+            <label id="branch-label" class="block text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Cabang Operasional</label>
+            <div id="branch-select-wrap" class="relative">
                 <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                     <span class="material-symbols-outlined text-slate-400 text-xl">store</span>
                 </div>
                 <select id="branch-select" class="w-full bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 rounded-2xl py-4 pl-12 pr-10 text-sm font-medium focus:ring-primary focus:border-primary appearance-none ios-shadow"></select>
-                <div class="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
+                <div id="branch-chevron" class="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
                     <span class="material-symbols-outlined text-slate-400">expand_more</span>
                 </div>
             </div>
+            <div id="branch-fixed-card" class="hidden items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm font-semibold text-slate-700 ios-shadow">
+                <span class="material-symbols-outlined text-slate-400">storefront</span>
+                <div class="min-w-0">
+                    <p class="text-[11px] font-bold uppercase tracking-widest text-slate-400">Cabang yang Dipakai</p>
+                    <p id="branch-fixed-name" class="truncate text-sm font-semibold text-slate-800">Cabang Utama</p>
+                </div>
+            </div>
+            <p id="branch-helper" class="ml-1 text-xs leading-relaxed text-slate-500">Saat pertama daftar, sistem biasanya membuat 1 cabang utama otomatis untuk toko Anda.</p>
         </div>
         <div class="space-y-2">
             <label class="block text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Modal Awal (Kas)</label>
@@ -57,15 +68,17 @@
                 </div>
                 <input id="opening-cash" class="w-full bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 rounded-2xl py-4 pl-12 pr-4 text-xl font-bold focus:ring-primary focus:border-primary ios-shadow" placeholder="0" type="number" value="0" />
             </div>
+            <div id="opening-cash-quick" class="flex gap-2 overflow-x-auto no-scrollbar pt-1"></div>
             <p class="text-[11px] text-slate-400 italic ml-1">*Pastikan jumlah uang di laci sesuai dengan input.</p>
         </div>
         <div class="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-2xl border border-blue-100 dark:border-blue-800/50 flex gap-3">
             <span class="material-symbols-outlined text-blue-500">info</span>
-            <div class="text-xs text-blue-700 dark:text-blue-300 leading-relaxed" id="shift-info">Data shift akan tercatat otomatis.</div>
+            <div class="text-xs text-blue-700 dark:text-blue-300 leading-relaxed" id="shift-info">Saat shift dibuka, sistem otomatis menyimpan nama petugas, waktu buka, dan akun kas yang dipakai.</div>
         </div>
     </div>
     <footer class="mt-8 p-6 bg-white/80 dark:bg-background-dark/80 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 pb-10">
         <button id="open-shift" class="w-full bg-primary text-white py-4 rounded-2xl font-bold text-lg shadow-lg shadow-primary/30 active:scale-[0.98] transition-transform">Buka Shift Sekarang</button>
+        <p id="open-shift-caption" class="mt-3 text-center text-xs font-medium text-slate-500">Pilih cabang dan isi modal awal sebelum membuka shift.</p>
         <div class="mt-6 flex justify-center">
             <div class="w-32 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full"></div>
         </div>
@@ -76,15 +89,24 @@
         <script>
             (() => {
                 const tenantId = document.querySelector('meta[name="tenant-id"]').content;
+                const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
                 const headers = tenantId ? { 'X-Tenant-Id': tenantId } : {};
 
                 const el = {
                     branch: document.getElementById('branch-select'),
+                    branchWrap: document.getElementById('branch-select-wrap'),
+                    branchLabel: document.getElementById('branch-label'),
+                    branchHelper: document.getElementById('branch-helper'),
+                    branchChevron: document.getElementById('branch-chevron'),
+                    branchFixedCard: document.getElementById('branch-fixed-card'),
+                    branchFixedName: document.getElementById('branch-fixed-name'),
                     cash: document.getElementById('opening-cash'),
                     info: document.getElementById('shift-info'),
                     badge: document.getElementById('shift-badge'),
                     button: document.getElementById('open-shift'),
                     guard: document.getElementById('cash-drawer-guard'),
+                    quickCash: document.getElementById('opening-cash-quick'),
+                    caption: document.getElementById('open-shift-caption'),
                 };
 
                 let shiftOpened = false;
@@ -105,24 +127,105 @@
 
                 const renderBranches = (branches) => {
                     el.branch.innerHTML = '';
+                    el.branch.disabled = false;
+                    el.branch.classList.remove('hidden');
+                    el.branchWrap.classList.remove('hidden');
+                    el.branch.classList.remove('bg-slate-50', 'text-slate-500', 'cursor-not-allowed');
+                    el.branchChevron.classList.remove('hidden');
+                    el.branchFixedCard.classList.add('hidden');
+                    el.branchFixedCard.classList.remove('flex');
+
                     if (!branches.length) {
                         const option = document.createElement('option');
                         option.value = '';
                         option.textContent = 'Belum ada cabang';
                         el.branch.appendChild(option);
+                        el.branch.disabled = true;
                         return;
                     }
+
+                    if (branches.length > 1) {
+                        const placeholder = document.createElement('option');
+                        placeholder.value = '';
+                        placeholder.textContent = 'Pilih cabang';
+                        placeholder.selected = true;
+                        el.branch.appendChild(placeholder);
+                    }
+
                     branches.forEach((branch) => {
                         const option = document.createElement('option');
                         option.value = branch.id;
                         option.textContent = branch.name;
+                        option.selected = branches.length === 1;
                         el.branch.appendChild(option);
                     });
+
+                    if (branches.length === 1) {
+                        el.branch.disabled = true;
+                        el.branch.classList.add('bg-slate-50', 'text-slate-500', 'cursor-not-allowed');
+                        el.branch.classList.add('hidden');
+                        el.branchWrap.classList.add('hidden');
+                        el.branchChevron.classList.add('hidden');
+                        el.branchFixedCard.classList.remove('hidden');
+                        el.branchFixedCard.classList.add('flex');
+                        el.branchFixedName.textContent = branches[0].name || 'Cabang Utama';
+                    }
+                };
+
+                const syncBranchCopy = (branches) => {
+                    if (!branches.length) {
+                        el.branchLabel.textContent = 'Cabang Operasional';
+                        el.branchHelper.textContent = 'Sistem belum menemukan cabang aktif. Tambahkan cabang dari Backoffice sebelum membuka shift.';
+                        return;
+                    }
+
+                    if (branches.length === 1) {
+                        el.branchLabel.textContent = 'Cabang Aktif';
+                        el.branchHelper.textContent = 'Cabang utama dibuat otomatis saat pendaftaran, jadi Anda bisa langsung lanjut buka shift tanpa memilih lagi.';
+                        return;
+                    }
+
+                    el.branchLabel.textContent = 'Pilih Cabang Operasional';
+                    el.branchHelper.textContent = 'Pilih cabang tempat kasir ini sedang beroperasi.';
+                };
+
+                const renderQuickCash = () => {
+                    const presets = [0, 50000, 100000, 200000];
+                    el.quickCash.innerHTML = '';
+                    presets.forEach((amount) => {
+                        const button = document.createElement('button');
+                        button.type = 'button';
+                        button.className = 'whitespace-nowrap rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-600 ios-shadow';
+                        button.textContent = amount === 0 ? 'Tanpa Modal' : new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(amount);
+                        button.addEventListener('click', () => {
+                            el.cash.value = String(amount);
+                            updateButtonState();
+                        });
+                        el.quickCash.appendChild(button);
+                    });
+                };
+
+                const updateButtonState = () => {
+                    const hasBranch = Boolean(el.branch.value);
+                    const isSingleBranchAutoSelected = el.branch.disabled && hasBranch;
+                    const blocked = el.button.hasAttribute('data-hard-blocked');
+                    const openingCash = Math.max(0, parseFloat(el.cash.value || '0'));
+                    const disabled = blocked || !hasBranch;
+                    el.button.disabled = disabled;
+                    el.button.classList.toggle('opacity-60', disabled);
+                    el.button.classList.toggle('cursor-not-allowed', disabled);
+                    el.caption.textContent = blocked
+                        ? 'Akun kas belum siap. Selesaikan setup kas terlebih dahulu.'
+                        : !hasBranch
+                            ? 'Pilih cabang terlebih dahulu.'
+                            : isSingleBranchAutoSelected
+                                ? `Cabang utama dipakai otomatis. Shift akan dibuka dengan modal awal ${new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(openingCash)}.`
+                            : `Shift akan dibuka dengan modal awal ${new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(openingCash)}.`;
                 };
 
                 el.button.addEventListener('click', async () => {
                     if (shiftOpened) {
-                        location.href = '/kasir';
+                        location.href = '/pos/checkout';
                         return;
                     }
 
@@ -134,8 +237,12 @@
                     const openingCash = parseFloat(el.cash.value || '0');
                     const response = await fetch('/api/v1/shifts/open', {
                         method: 'POST',
+                        credentials: 'same-origin',
                         headers: {
                             'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest',
+                            ...(csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}),
                             ...headers,
                         },
                         body: JSON.stringify({
@@ -158,7 +265,11 @@
                     }
                     shiftOpened = true;
                     el.button.textContent = 'Lanjut ke Kasir';
+                    el.caption.textContent = 'Shift berhasil dibuka. Lanjut ke checkout untuk mulai transaksi.';
                 });
+
+                el.branch.addEventListener('change', updateButtonState);
+                el.cash.addEventListener('input', updateButtonState);
 
                 (async () => {
                     const data = await loadOpeningData();
@@ -168,21 +279,20 @@
                     }
                     if (!data.cash_drawer) {
                         el.guard.classList.remove('hidden');
-                        el.button.disabled = true;
-                        el.button.classList.add('opacity-60', 'cursor-not-allowed');
+                        el.button.setAttribute('data-hard-blocked', 'true');
                     }
+                    renderQuickCash();
                     renderBranches(data.branches || []);
+                    syncBranchCopy(data.branches || []);
                     el.badge.textContent = `Shift #${String(data.shift_number || 1).padStart(2, '0')}`;
                     const cashierName = data.cashier?.name || 'Kasir';
                     const openedAt = data.opened_at ? formatTime(data.opened_at) : '-';
                     const cashDrawerName = data.cash_drawer?.name || 'Kas Warung';
-                    el.info.innerHTML = `Data shift akan tercatat otomatis atas nama <strong>Kasir: ${cashierName}</strong> pada pukul <strong>${openedAt}</strong> menggunakan akun kas <strong>${cashDrawerName}</strong>.`;
+                    el.info.innerHTML = `Saat shift dibuka, sistem akan otomatis mencatat <strong>petugas: ${cashierName}</strong>, <strong>waktu buka: ${openedAt}</strong>, dan <strong>akun kas: ${cashDrawerName}</strong>.`;
+                    updateButtonState();
                 })();
             })();
         </script>
     @endsection
-
-
-
 
 

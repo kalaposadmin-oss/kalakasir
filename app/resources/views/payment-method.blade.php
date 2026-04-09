@@ -27,8 +27,14 @@
         </style>
 @endpush
 
+@php
+    $paymentBackUrl = $backUrl ?? '/pos/checkout';
+    $paymentCurrentPath = $currentPath ?? '/pos/payment-method';
+    $paymentReceiptFallbackUrl = $receiptFallbackUrl ?? '/pos/receipt-preview';
+@endphp
+
 @section('header')
-        <x-page-header title="Pilih Pembayaran" backUrl="/kasir" :showMenuButton="false">
+        <x-page-header title="Pilih Pembayaran" :backUrl="$paymentBackUrl" :showMenuButton="true">
             <x-slot name="actions">
                 <button class="px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-bold">SPLIT BILL</button>
             </x-slot>
@@ -45,8 +51,32 @@
                         <span id="payment-status" class="px-3 py-1 rounded-full bg-orange-100 text-orange-600 text-[10px] font-bold">BELUM LUNAS</span>
                         <p class="text-xs text-slate-500">Sisa: <span id="remaining-amount" class="font-bold">Rp 209.790</span></p>
                     </div>
+                    <p id="payment-hint" class="mt-3 text-xs font-medium text-slate-500">Pilih metode lalu isi nominal bayar.</p>
+                    <div id="payment-discount-summary" class="hidden mt-4 rounded-2xl border border-slate-200 bg-white/80 p-3 text-left">
+                        <div class="flex items-center justify-between text-xs text-slate-500">
+                            <span>Diskon Item</span>
+                            <span id="payment-item-discount" class="font-semibold text-slate-700">Rp 0</span>
+                        </div>
+                        <div class="mt-1 flex items-center justify-between text-xs text-slate-500">
+                            <span>Diskon Transaksi</span>
+                            <span id="payment-transaction-discount" class="font-semibold text-slate-700">Rp 0</span>
+                        </div>
+                    </div>
+                    <div id="payment-snapshot-guard" class="hidden mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-left">
+                        <p class="text-sm font-semibold text-amber-800">Data pembayaran tidak ditemukan.</p>
+                        <p class="mt-1 text-xs text-amber-700">Kembali ke checkout lalu pilih bayar lagi.</p>
+                        <a href="{{ $paymentBackUrl }}" class="mt-3 inline-flex items-center gap-2 rounded-xl bg-amber-100 px-3 py-2 text-xs font-bold text-amber-800">
+                            <span class="material-symbols-outlined text-sm">arrow_back</span>
+                            Kembali ke Checkout
+                        </a>
+                    </div>
                 </div>
                 <div class="p-4 space-y-3">
+                    @include('partials.owner-pos-panel', [
+                        'compact' => true,
+                        'title' => 'Mode Owner',
+                        'subtitle' => 'Akses cepat ke katalog, stok, laporan, dan preferensi saat pembayaran berjalan.',
+                    ])
                     <p class="text-xs font-bold text-slate-400 uppercase ml-1">Metode Pembayaran</p>
                     <div class="border-2 border-slate-200 rounded-2xl overflow-hidden" data-payment-method="cash">
                         <div class="flex items-center justify-between p-4 bg-white">
@@ -143,6 +173,7 @@
                     <span class="material-symbols-outlined font-bold">check_circle</span>
                     KONFIRMASI PEMBAYARAN
                 </button>
+                <p id="confirm-caption" class="mt-3 text-center text-xs font-medium text-slate-500">Masukkan nominal yang diterima kasir.</p>
                 <div class="mt-4 flex justify-around">
                     <div class="flex flex-col items-center gap-1 opacity-40">
                         <span class="material-symbols-outlined">receipt</span>
@@ -170,9 +201,15 @@
                     pay: document.getElementById('pay-amount'),
                     change: document.getElementById('change-amount'),
                     status: document.getElementById('payment-status'),
+                    hint: document.getElementById('payment-hint'),
+                    discountSummary: document.getElementById('payment-discount-summary'),
+                    itemDiscount: document.getElementById('payment-item-discount'),
+                    transactionDiscount: document.getElementById('payment-transaction-discount'),
+                    snapshotGuard: document.getElementById('payment-snapshot-guard'),
                     reset: document.getElementById('reset-pay'),
                     error: document.getElementById('payment-error'),
                     confirm: document.getElementById('confirm-payment'),
+                    confirmCaption: document.getElementById('confirm-caption'),
                     quickAmounts: document.getElementById('quick-amount-list'),
                     bankPicker: document.getElementById('bank-account-picker'),
                     bankList: document.getElementById('bank-account-list'),
@@ -228,6 +265,12 @@
                         icon.classList.toggle('hidden', icon.dataset.methodInactive === method);
                     });
                     els.bankPicker.classList.toggle('hidden', method !== 'bank');
+                    els.hint.textContent = method === 'cash'
+                        ? 'Gunakan angka cepat atau numpad untuk mempercepat pembayaran tunai.'
+                        : method === 'bank'
+                            ? 'Pilih akun bank/EDC lalu konfirmasi nominal yang dibayar.'
+                            : 'QRIS belum aktif, gunakan tunai atau bank untuk sementara.';
+                    updateAmounts();
                 };
 
                 const loadBankAccounts = async () => {
@@ -283,6 +326,7 @@
                         button.addEventListener('click', () => {
                             state.selectedBankId = account.id;
                             renderBankAccounts();
+                            updateAmounts();
                         });
                         els.bankList.appendChild(button);
                     });
@@ -296,6 +340,7 @@
                     }
                     els.error.textContent = message;
                     els.error.classList.remove('hidden');
+                    els.error.scrollIntoView({ block: 'nearest' });
                 };
 
                 const setStatus = (isPaid) => {
@@ -318,19 +363,49 @@
                     els.pay.textContent = formatCurrency(paid);
                     els.change.textContent = formatCurrency(change);
                     setStatus(paid >= total && total > 0);
+                    const hasEnoughAmount = paid >= total && total > 0;
+                    const methodBlocked = state.method === 'qris'
+                        || (state.method === 'bank' && !state.selectedBankId && !state.bankAccounts.length);
+                    const disabled = !hasEnoughAmount || methodBlocked;
+                    els.confirm.disabled = disabled;
+                    els.confirm.classList.toggle('opacity-60', disabled);
+                    els.confirm.classList.toggle('cursor-not-allowed', disabled);
+                    els.confirm.innerHTML = `${disabled ? '<span class="material-symbols-outlined font-bold">check_circle</span> KONFIRMASI PEMBAYARAN' : `<span class="material-symbols-outlined font-bold">check_circle</span> BAYAR ${formatCurrency(total)}`}`;
+                    els.confirmCaption.textContent = disabled
+                        ? (state.method === 'qris'
+                            ? 'QRIS belum aktif. Pilih tunai atau bank.'
+                            : !hasEnoughAmount
+                                ? 'Nominal bayar harus cukup sebelum konfirmasi.'
+                                : 'Pilih akun bank terlebih dahulu.')
+                        : `Siap konfirmasi ${state.method === 'cash' ? 'pembayaran tunai' : 'pembayaran non-tunai'}.`;
+                };
+
+                const renderDiscountSummary = () => {
+                    const itemDiscountTotal = Number(snapshot?.item_discount_total || 0);
+                    const transactionDiscountTotal = Number(snapshot?.transaction_discount_total || 0);
+                    const visible = itemDiscountTotal > 0 || transactionDiscountTotal > 0;
+                    els.discountSummary.classList.toggle('hidden', !visible);
+                    if (!visible) {
+                        return;
+                    }
+                    els.itemDiscount.textContent = formatCurrency(itemDiscountTotal);
+                    els.transactionDiscount.textContent = formatCurrency(transactionDiscountTotal);
                 };
 
                 const appendDigit = (value) => {
+                    showError('');
                     state.paidInput = `${state.paidInput}${value}`.replace(/^0+(\d)/, '$1');
                     updateAmounts();
                 };
 
                 const backspace = () => {
+                    showError('');
                     state.paidInput = state.paidInput.slice(0, -1);
                     updateAmounts();
                 };
 
                 const setPaid = (value) => {
+                    showError('');
                     state.paidInput = String(Math.max(0, Math.floor(value)));
                     updateAmounts();
                 };
@@ -350,6 +425,9 @@
                 const renderQuickAmounts = () => {
                     const total = Math.max(0, Math.floor(state.total || 0));
                     const candidates = [
+                        total,
+                        total + 5000,
+                        total + 10000,
                         50000,
                         100000,
                         200000,
@@ -385,10 +463,13 @@
                 if (snapshot) {
                     setPaid(state.total);
                 } else {
+                    els.snapshotGuard.classList.remove('hidden');
+                    els.hint.textContent = 'Data checkout belum tersedia. Kembali ke checkout untuk melanjutkan.';
                     updateAmounts();
                 }
 
                 renderQuickAmounts();
+                renderDiscountSummary();
 
                 document.querySelectorAll('[data-payment-method]').forEach((card) => {
                     card.addEventListener('click', () => {
@@ -485,12 +566,14 @@
                         idempotency_key: snapshot.idempotency_key || `${Date.now()}-${Math.random()}`,
                         branch_id: snapshot.branch_id,
                         shift_id: snapshot.shift_id,
+                        register_id: snapshot.register_id,
                         customer_id: snapshot.customer_id || null,
                         subtotal: snapshot.subtotal,
                         discount: snapshot.discount || 0,
                         tax: snapshot.tax,
                         total: snapshot.total,
                         items: snapshot.checkout_items || [],
+                        transaction_discounts: snapshot.transaction_discounts || [],
                         payments: [{
                             account_id: accountId,
                             method: selectedConfig.method,
@@ -526,7 +609,12 @@
                             };
                             sessionStorage.setItem('pos_receipt', JSON.stringify(receipt));
                             sessionStorage.removeItem('pos_payment');
-                            window.location.href = saleId ? `/receipt-preview?sale_id=${saleId}` : '/receipt-preview';
+                            const receiptParams = new URLSearchParams({
+                                from: @json($paymentCurrentPath),
+                            });
+                            window.location.href = saleId
+                                ? `/pos/sales/${saleId}/receipt?${receiptParams.toString()}`
+                                : `${@json($paymentReceiptFallbackUrl)}?${receiptParams.toString()}`;
                         } catch (error) {
                             if (error?.name === 'AbortError') {
                                 showError('Permintaan timeout. Cek riwayat transaksi sebelum ulang checkout.');
