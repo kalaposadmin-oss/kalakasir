@@ -3,6 +3,8 @@
 namespace App\Jobs;
 
 use App\Models\DailySalesSummary;
+use App\Models\Sale;
+use App\Support\Decimal;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -22,36 +24,36 @@ class RepairDailySalesSummaryJob implements ShouldQueue
     public function handle(): void
     {
         $summary = [
-            'total_sales' => (float) DB::table('sales')
+            'total_sales' => Decimal::float(Decimal::money(DB::table('sales')
                 ->where('tenant_id', $this->tenantId)
-                ->where('status', 'completed')
+                ->where('status', Sale::STATUS_COMPLETED)
                 ->whereRaw('COALESCE(transaction_date, DATE(created_at)) = ?', [$this->date])
-                ->sum('total'),
-            'total_tax' => (float) DB::table('sales')
+                ->sum('total')), Decimal::MONEY_SCALE),
+            'total_tax' => Decimal::float(Decimal::money(DB::table('sales')
                 ->where('tenant_id', $this->tenantId)
-                ->where('status', 'completed')
+                ->where('status', Sale::STATUS_COMPLETED)
                 ->whereRaw('COALESCE(transaction_date, DATE(created_at)) = ?', [$this->date])
-                ->sum('tax'),
-            'total_discount' => (float) DB::table('sales')
+                ->sum('tax')), Decimal::MONEY_SCALE),
+            'total_discount' => Decimal::float(Decimal::money(DB::table('sales')
                 ->where('tenant_id', $this->tenantId)
-                ->where('status', 'completed')
+                ->where('status', Sale::STATUS_COMPLETED)
                 ->whereRaw('COALESCE(transaction_date, DATE(created_at)) = ?', [$this->date])
-                ->sum('discount'),
+                ->sum('discount')), Decimal::MONEY_SCALE),
             'transaction_count' => (int) DB::table('sales')
                 ->where('tenant_id', $this->tenantId)
-                ->where('status', 'completed')
+                ->where('status', Sale::STATUS_COMPLETED)
                 ->whereRaw('COALESCE(transaction_date, DATE(created_at)) = ?', [$this->date])
                 ->count(),
-            'total_cost' => (float) DB::table('sale_items')
+            'total_cost' => Decimal::float(Decimal::money(DB::table('sale_items')
                 ->join('sales', function ($join) {
                     $join->on('sale_items.sale_id', '=', 'sales.id')
                         ->on('sale_items.tenant_id', '=', 'sales.tenant_id');
                 })
                 ->where('sales.tenant_id', $this->tenantId)
-                ->where('sales.status', 'completed')
+                ->where('sales.status', Sale::STATUS_COMPLETED)
                 ->whereRaw('COALESCE(sales.transaction_date, DATE(sales.created_at)) = ?', [$this->date])
                 ->selectRaw('sum(sale_items.qty * sale_items.hpp_snapshot) as total')
-                ->value('total'),
+                ->value('total')), Decimal::MONEY_SCALE),
             'updated_at' => CarbonImmutable::now('UTC'),
         ];
 

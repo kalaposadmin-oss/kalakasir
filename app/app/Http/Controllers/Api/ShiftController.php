@@ -10,29 +10,45 @@ use App\Models\Payment;
 use App\Models\Sale;
 use App\Models\Shift;
 use App\Models\User;
+use App\Services\TenantDefaultAccountingSetupService;
 use App\Services\DailyFinanceControlService;
+use App\Support\Decimal;
 use App\Support\TenantContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class ShiftController extends Controller
 {
     public function openingData(Request $request)
     {
         $tenant = TenantContext::get();
+        $tenantId = $tenant?->id;
         $timezone = $tenant?->timezone ?? 'UTC';
 
-        $branches = Branch::query()->orderBy('name')->get(['id', 'name']);
+        if ($tenantId) {
+            app(TenantDefaultAccountingSetupService::class)->ensure($tenantId, $request->user()?->id);
+        }
+
+        $branches = Branch::query()
+            ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
+            ->orderBy('name')
+            ->get(['id', 'name']);
         $cashier = $this->resolveShiftActor($request)?->only(['id', 'name']);
-        $openCount = Shift::query()->where('status', 'open')->count();
-        $mapping = $tenant?->id
-            ? AccountMapping::query()->where('tenant_id', $tenant->id)->first(['cash_account_id'])
+        $openCount = Shift::query()
+            ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
+            ->where('status', 'open')
+            ->count();
+        $mapping = $tenantId
+            ? AccountMapping::query()->where('tenant_id', $tenantId)->first(['cash_account_id'])
             : null;
         $cashDrawer = $mapping?->cash_account_id
-            ? ChartOfAccount::query()->where('id', $mapping->cash_account_id)->first(['id', 'name'])
+            ? ChartOfAccount::query()
+                ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
+                ->where('id', $mapping->cash_account_id)
+                ->first(['id', 'name'])
             : null;
 
         return response()->json([
@@ -51,8 +67,14 @@ class ShiftController extends Controller
     {
         $tenantId = TenantContext::id();
 
+        if ($tenantId) {
+            app(TenantDefaultAccountingSetupService::class)->ensure($tenantId, $request->user()?->id);
+        }
+
         $validated = $request->validate([
-            'branch_id' => ['required', 'uuid'],
+            'branch_id' => ['required', 'uuid', $tenantId
+                ? Rule::exists('branches', 'id')->where('tenant_id', $tenantId)
+                : 'exists:branches,id'],
             'opening_cash' => ['nullable', 'numeric', 'min:0'],
         ]);
 
@@ -94,28 +116,35 @@ class ShiftController extends Controller
     public function summary(Request $request)
     {
         $tenant = TenantContext::get();
+        $tenantId = $tenant?->id;
         $timezone = $tenant?->timezone ?? 'UTC';
         $shiftId = $request->query('shift_id');
 
         $shift = Shift::query()
+            ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
             ->where('status', 'open')
             ->when($shiftId, fn ($query) => $query->where('id', $shiftId))
             ->orderByDesc('opened_at')
             ->firstOrFail();
 
-        $cashier = User::query()->where('id', $shift->user_id)->first(['id', 'name']);
+        $cashier = User::query()
+            ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
+            ->where('id', $shift->user_id)
+            ->first(['id', 'name']);
 
         $saleIds = Sale::query()
+            ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
             ->where('shift_id', $shift->id)
             ->where('status', 'completed')
             ->pluck('id');
 
-        $cashTotal = 0.0;
+        $cashTotal = Decimal::money('0');
         if ($saleIds->isNotEmpty()) {
-            $cashTotal = (float) Payment::query()
+            $cashTotal = Decimal::money(Payment::query()
+                ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
                 ->whereIn('sale_id', $saleIds)
                 ->where('method', 'cash')
-                ->sum('amount');
+                ->sum('amount'));
         }
 
         return response()->json([
@@ -131,7 +160,7 @@ class ShiftController extends Controller
                 'id' => $cashier->id,
                 'name' => $cashier->name,
             ] : null,
-            'expected_cash' => $cashTotal,
+            'expected_cash' => Decimal::float($cashTotal, Decimal::MONEY_SCALE),
         ]);
     }
 
@@ -140,35 +169,40 @@ class ShiftController extends Controller
         $tenantId = TenantContext::id();
 
         $validated = $request->validate([
-            'shift_id' => ['required', 'uuid'],
+            'shift_id' => ['required', 'uuid', $tenantId
+                ? Rule::exists('shifts', 'id')->where('tenant_id', $tenantId)
+                : 'exists:shifts,id'],
             'closing_cash' => ['required', 'numeric', 'min:0'],
             'close_note' => ['nullable', 'string', 'max:500'],
         ]);
 
         $shift = Shift::query()
+            ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
             ->where('id', $validated['shift_id'])
             ->where('status', 'open')
             ->firstOrFail();
 
         $saleIds = Sale::query()
+            ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
             ->where('shift_id', $shift->id)
             ->where('status', 'completed')
             ->pluck('id');
 
-        $cashTotal = 0.0;
+        $cashTotal = Decimal::money('0');
         if ($saleIds->isNotEmpty()) {
-            $cashTotal = (float) Payment::query()
+            $cashTotal = Decimal::money(Payment::query()
+                ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
                 ->whereIn('sale_id', $saleIds)
                 ->where('method', 'cash')
-                ->sum('amount');
+                ->sum('amount'));
         }
 
-        $difference = (float) $validated['closing_cash'] - $cashTotal;
+        $difference = Decimal::subtract(Decimal::money($validated['closing_cash']), $cashTotal, Decimal::MONEY_SCALE);
 
         $shift->update([
             'closing_cash' => $validated['closing_cash'],
-            'system_cash_total' => $cashTotal,
-            'difference' => $difference,
+            'system_cash_total' => Decimal::float($cashTotal, Decimal::MONEY_SCALE),
+            'difference' => Decimal::float($difference, Decimal::MONEY_SCALE),
             'close_note' => $validated['close_note'] ?? null,
             'closed_at' => CarbonImmutable::now('UTC'),
             'status' => 'closed',
@@ -183,50 +217,62 @@ class ShiftController extends Controller
 
         return response()->json([
             'status' => 'closed',
-            'difference' => $difference,
+            'difference' => Decimal::float($difference, Decimal::MONEY_SCALE),
         ]);
     }
 
     public function closeSummary(Request $request)
     {
         $tenant = TenantContext::get();
+        $tenantId = $tenant?->id;
         $timezone = $tenant?->timezone ?? 'UTC';
         $shiftId = $request->query('shift_id');
 
         $shift = Shift::query()
+            ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
             ->where('status', 'closed')
             ->when($shiftId, fn ($query) => $query->where('id', $shiftId))
             ->orderByDesc('closed_at')
             ->firstOrFail();
 
-        $cashier = User::query()->where('id', $shift->user_id)->first(['id', 'name']);
-        $branch = Branch::query()->where('id', $shift->branch_id)->first(['id', 'name']);
+        $cashier = User::query()
+            ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
+            ->where('id', $shift->user_id)
+            ->first(['id', 'name']);
+        $branch = Branch::query()
+            ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
+            ->where('id', $shift->branch_id)
+            ->first(['id', 'name']);
 
         $saleIds = Sale::query()
+            ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
             ->where('shift_id', $shift->id)
             ->where('status', 'completed')
             ->pluck('id');
 
-        $salesTotal = 0.0;
+        $salesTotal = Decimal::money('0');
         $salesCount = 0;
         $payments = [];
 
         if ($saleIds->isNotEmpty()) {
-            $salesTotal = (float) Sale::query()
+            $salesTotal = Decimal::money(Sale::query()
+                ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
                 ->whereIn('id', $saleIds)
-                ->sum('total');
+                ->sum('total'));
             $salesCount = (int) Sale::query()
+                ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
                 ->whereIn('id', $saleIds)
                 ->count();
 
             $payments = Payment::query()
+                ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
                 ->whereIn('sale_id', $saleIds)
                 ->selectRaw('method, sum(amount) as total')
                 ->groupBy('method')
                 ->get()
                 ->map(fn ($row) => [
                     'method' => $row->method,
-                    'total' => (float) $row->total,
+                    'total' => Decimal::float(Decimal::money($row->total), Decimal::MONEY_SCALE),
                 ])
                 ->values()
                 ->all();
@@ -259,7 +305,7 @@ class ShiftController extends Controller
                 'name' => $branch->name,
             ] : null,
             'sales' => [
-                'total' => $salesTotal,
+                'total' => Decimal::float($salesTotal, Decimal::MONEY_SCALE),
                 'count' => $salesCount,
             ],
             'payments' => $payments,
@@ -270,6 +316,7 @@ class ShiftController extends Controller
     public function closedHistory(Request $request)
     {
         $tenant = TenantContext::get();
+        $tenantId = $tenant?->id;
         $timezone = $tenant?->timezone ?? 'UTC';
 
         $limit = (int) $request->query('limit', 20);
@@ -284,6 +331,7 @@ class ShiftController extends Controller
                 $join->on('branches.id', '=', 'shifts.branch_id')
                     ->on('branches.tenant_id', '=', 'shifts.tenant_id');
             })
+            ->when($tenantId, fn ($query) => $query->where('shifts.tenant_id', $tenantId))
             ->where('shifts.status', 'closed')
             ->orderByDesc('shifts.closed_at')
             ->limit($limit)
@@ -300,6 +348,7 @@ class ShiftController extends Controller
         $shiftIds = $shifts->pluck('id');
 
         $salesByShift = Sale::query()
+            ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
             ->whereIn('shift_id', $shiftIds)
             ->where('status', 'completed')
             ->selectRaw('shift_id, count(*) as sales_count, sum(total) as sales_total')
@@ -358,7 +407,7 @@ class ShiftController extends Controller
         }
 
         $cashPayment = collect($paymentRows)->firstWhere('method', 'cash');
-        if ($cashPayment && (float) $cashPayment['total'] > 0) {
+        if ($cashPayment && Decimal::compare(Decimal::money($cashPayment['total']), '0') > 0) {
             $findings[] = [
                 'severity' => 'info',
                 'code' => 'CASH_PAYMENT_PRESENT',
@@ -388,98 +437,6 @@ class ShiftController extends Controller
 
     private function resolveShiftActor(Request $request): ?User
     {
-        $actor = $request->user();
-        if ($actor) {
-            return $actor;
-        }
-
-        if (! app()->environment('local')) {
-            return null;
-        }
-
-        $tenantId = TenantContext::id();
-        if (! $tenantId) {
-            return null;
-        }
-
-        $fallbackUserId = DB::table('users')
-            ->join('user_roles', function ($join) {
-                $join->on('users.id', '=', 'user_roles.user_id')
-                    ->on('users.tenant_id', '=', 'user_roles.tenant_id');
-            })
-            ->join('roles', function ($join) {
-                $join->on('roles.id', '=', 'user_roles.role_id')
-                    ->on('roles.tenant_id', '=', 'user_roles.tenant_id');
-            })
-            ->where('users.tenant_id', $tenantId)
-            ->whereIn('roles.name', ['cashier', 'kasir', 'supervisor', 'manager', 'admin', 'administrator'])
-            ->orderBy('users.name')
-            ->value('users.id');
-
-        if (! $fallbackUserId) {
-            $fallback = User::query()
-                ->where('tenant_id', $tenantId)
-                ->orderBy('name')
-                ->first(['id', 'name']);
-
-            if ($fallback) {
-                return $fallback;
-            }
-
-            return $this->provisionLocalFallbackActor($tenantId);
-        }
-
-        return User::query()->where('id', $fallbackUserId)->first(['id', 'name']);
-    }
-
-    private function provisionLocalFallbackActor(string $tenantId): ?User
-    {
-        if (! app()->environment('local')) {
-            return null;
-        }
-
-        $now = CarbonImmutable::now('UTC');
-        $userId = (string) Str::uuid();
-        $roleId = (string) Str::uuid();
-
-        DB::transaction(function () use ($tenantId, $now, $userId, $roleId): void {
-            $roleIdForTenant = DB::table('roles')
-                ->where('tenant_id', $tenantId)
-                ->where('name', 'cashier')
-                ->value('id');
-
-            if (! $roleIdForTenant) {
-                DB::table('roles')->insert([
-                    'id' => $roleId,
-                    'tenant_id' => $tenantId,
-                    'name' => 'cashier',
-                ]);
-                $roleIdForTenant = $roleId;
-            }
-
-            $email = 'local-cashier-'.substr(str_replace('-', '', $tenantId), 0, 8).'@local.test';
-
-            DB::table('users')->insert([
-                'id' => $userId,
-                'tenant_id' => $tenantId,
-                'name' => 'Kasir Local',
-                'email' => $email,
-                'password' => Hash::make(Str::random(32)),
-                'failed_login_attempts' => 0,
-                'remember_token' => null,
-                'created_at' => $now,
-                'updated_at' => $now,
-                'deleted_at' => null,
-            ]);
-
-            DB::table('user_roles')->insert([
-                'id' => (string) Str::uuid(),
-                'tenant_id' => $tenantId,
-                'user_id' => $userId,
-                'role_id' => $roleIdForTenant,
-            ]);
-        });
-
-        return User::query()->where('id', $userId)->first(['id', 'name']);
+        return $request->user();
     }
 }

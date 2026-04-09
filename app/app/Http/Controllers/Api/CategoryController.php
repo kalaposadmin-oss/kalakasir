@@ -13,7 +13,10 @@ class CategoryController extends Controller
 {
     public function index()
     {
+        $tenantId = TenantContext::id();
+
         $categories = Category::query()
+            ->when($tenantId, fn ($query) => $query->where('categories.tenant_id', $tenantId))
             ->leftJoin('products', function ($join) {
                 $join->on('categories.id', '=', 'products.category_id')
                     ->on('categories.tenant_id', '=', 'products.tenant_id')
@@ -69,7 +72,10 @@ class CategoryController extends Controller
 
     public function show(string $category)
     {
+        $tenantId = TenantContext::id();
+
         $categoryRow = Category::query()
+            ->when($tenantId, fn ($query) => $query->where('categories.tenant_id', $tenantId))
             ->leftJoin('products', function ($join) {
                 $join->on('categories.id', '=', 'products.category_id')
                     ->on('categories.tenant_id', '=', 'products.tenant_id')
@@ -101,7 +107,10 @@ class CategoryController extends Controller
             'icon' => ['nullable', 'string', 'max:64'],
         ]);
 
-        $categoryRow = Category::query()->where('id', $category)->firstOrFail();
+        $categoryRow = Category::query()
+            ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
+            ->where('id', $category)
+            ->firstOrFail();
         $slug = $this->buildUniqueSlug($tenantId, $validated['name'], $categoryRow->id);
 
         $categoryRow->update([
@@ -124,9 +133,15 @@ class CategoryController extends Controller
 
     public function destroy(string $category)
     {
-        $categoryRow = Category::query()->where('id', $category)->firstOrFail();
+        $tenantId = TenantContext::id();
+
+        $categoryRow = Category::query()
+            ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
+            ->where('id', $category)
+            ->firstOrFail();
 
         $hasProducts = Product::query()
+            ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
             ->where('category_id', $categoryRow->id)
             ->exists();
 

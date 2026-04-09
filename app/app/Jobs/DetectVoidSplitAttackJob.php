@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Models\Sale;
 use App\Services\AdaptiveAnomalyThresholdService;
 use App\Services\AnomalyDetectorMetricsService;
 use App\Services\AnomalyService;
@@ -42,7 +43,7 @@ class DetectVoidSplitAttackJob implements ShouldQueue
             foreach ($tenantIds as $tenantId) {
                 $current = DB::table('sales')
                     ->where('tenant_id', $tenantId)
-                    ->where('status', 'voided')
+                    ->where('status', Sale::STATUS_VOIDED)
                     ->where('voided_at', '>=', $since)
                     ->where('total', '<=', $smallVoidAmountLimit);
 
@@ -53,7 +54,7 @@ class DetectVoidSplitAttackJob implements ShouldQueue
 
                 $actorRows = DB::table('sales')
                     ->where('tenant_id', $tenantId)
-                    ->where('status', 'voided')
+                    ->where('status', Sale::STATUS_VOIDED)
                     ->where('voided_at', '>=', $since)
                     ->where('total', '<=', $smallVoidAmountLimit)
                     ->whereNotNull('voided_by')
@@ -70,7 +71,7 @@ class DetectVoidSplitAttackJob implements ShouldQueue
 
                 $historicalCount = (int) DB::table('sales')
                     ->where('tenant_id', $tenantId)
-                    ->where('status', 'voided')
+                    ->where('status', Sale::STATUS_VOIDED)
                     ->whereBetween('voided_at', [$baselineStart, $since])
                     ->where('total', '<=', $smallVoidAmountLimit)
                     ->count();

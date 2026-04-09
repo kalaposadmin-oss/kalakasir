@@ -106,3 +106,7 @@ Gunakan command berikut dari repo `app` bila ingin langsung commit slice audit f
 git add app/Http/Controllers/Api/BootstrapController.php app/Http/Controllers/Api/CheckoutController.php app/Http/Controllers/Api/FinanceControlDashboardController.php docs/pr-summary-audit-final-batch-2026-04-08.md docs/pr-ready-audit-final-batch-2026-04-08.md
 git commit -m "feat(api): add final observability headers for bootstrap and finance flows"
 ```
+
+## Actual Commit
+
+- `2b20228` `feat(api): add final observability headers for bootstrap and finance flows`

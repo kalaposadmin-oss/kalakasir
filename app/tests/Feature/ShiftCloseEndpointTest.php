@@ -32,6 +32,7 @@ class ShiftCloseEndpointTest extends TestCase
 
         $branch = Branch::create(['tenant_id' => $tenant->id, 'name' => 'Main']);
         $user = User::factory()->create(['tenant_id' => $tenant->id]);
+        $this->actingAs($user, 'sanctum');
 
         // open a shift
         $shift = Shift::create([
@@ -48,9 +49,6 @@ class ShiftCloseEndpointTest extends TestCase
         ]);
 
         // no sales/payments created: shift will have zero expected cash
-
-        // disable auth middleware for this test
-        $this->withoutMiddleware();
 
         // call close endpoint
         $response = $this->postJson('/api/v1/shifts/close', [

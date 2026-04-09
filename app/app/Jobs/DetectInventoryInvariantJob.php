@@ -6,6 +6,7 @@ use App\Services\AnomalyService;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Database\Query\JoinClause;
 use Illuminate\Support\Facades\DB;
 
 class DetectInventoryInvariantJob implements ShouldQueue
@@ -29,19 +30,39 @@ class DetectInventoryInvariantJob implements ShouldQueue
 
     private function checkLedgerBalanceDrift(string $tenantId, AnomalyService $anomalyService): void
     {
-        $rows = DB::table('stock_ledger as sl')
-            ->join('inventory_balances as ib', function ($join) {
-                $join->on('sl.tenant_id', '=', 'ib.tenant_id')
-                    ->on('sl.product_id', '=', 'ib.product_id')
-                    ->on('sl.location_id', '=', 'ib.location_id');
+        // Inventory qty can already be variant-aware at the ledger/balance level,
+        // but valuation state remains product/location scoped in the current schema.
+        // This check therefore validates ledger-to-balance qty consistency per variant bucket,
+        // not full variant-isolated valuation correctness.
+        $ledgerTotals = $this->ledgerTotalsByInventoryDimension($tenantId);
+
+        $balanceRows = DB::table('inventory_balances as ib')
+            ->leftJoinSub($ledgerTotals, 'lt', function (JoinClause $join): void {
+                $this->joinOnInventoryDimension($join, 'ib', 'lt');
             })
-            ->where('sl.tenant_id', $tenantId)
-            ->select('sl.product_id', 'sl.location_id', 'ib.qty_on_hand')
-            ->selectRaw('sum(sl.qty_in - sl.qty_out) as ledger_qty')
-            ->groupBy('sl.product_id', 'sl.location_id', 'ib.qty_on_hand')
-            ->havingRaw('abs(sum(sl.qty_in - sl.qty_out) - ib.qty_on_hand) > 0.01')
+            ->where('ib.tenant_id', $tenantId)
+            ->select('ib.product_id', 'ib.location_id', 'ib.product_variant_id', 'ib.qty_on_hand')
+            ->selectRaw('coalesce(lt.ledger_qty, 0) as ledger_qty')
+            ->whereRaw('abs(coalesce(lt.ledger_qty, 0) - ib.qty_on_hand) > 0.01')
             ->limit(25)
             ->get();
+
+        $ledgerOnlyRows = DB::query()
+            ->fromSub($ledgerTotals, 'lt')
+            ->leftJoin('inventory_balances as ib', function (JoinClause $join): void {
+                $this->joinOnInventoryDimension($join, 'lt', 'ib');
+            })
+            ->whereNull('ib.tenant_id')
+            ->select('lt.product_id', 'lt.location_id', 'lt.product_variant_id')
+            ->selectRaw('0 as qty_on_hand')
+            ->selectRaw('lt.ledger_qty as ledger_qty')
+            ->limit(25)
+            ->get();
+
+        $rows = $balanceRows
+            ->concat($ledgerOnlyRows)
+            ->take(25)
+            ->values();
 
         if ($rows->isEmpty()) {
             return;
@@ -208,24 +229,57 @@ class DetectInventoryInvariantJob implements ShouldQueue
 
     private function checkVoidLedgerMismatch(string $tenantId, AnomalyService $anomalyService): void
     {
+        $this->raiseVoidLedgerMismatchForStream(
+            tenantId: $tenantId,
+            anomalyService: $anomalyService,
+            sourceReferenceType: 'sale',
+            reversalReferenceType: 'void',
+            anomalyType: 'fifo_void_ledger_mismatch'
+        );
+
+        $this->raiseVoidLedgerMismatchForStream(
+            tenantId: $tenantId,
+            anomalyService: $anomalyService,
+            sourceReferenceType: 'sale_recipe_input',
+            reversalReferenceType: 'void_recipe_input',
+            anomalyType: 'fifo_void_recipe_input_ledger_mismatch'
+        );
+    }
+
+    private function raiseVoidLedgerMismatchForStream(
+        string $tenantId,
+        AnomalyService $anomalyService,
+        string $sourceReferenceType,
+        string $reversalReferenceType,
+        string $anomalyType
+    ): void {
+        $sourceTotals = DB::table('stock_ledger')
+            ->where('tenant_id', $tenantId)
+            ->where('reference_type', $sourceReferenceType)
+            ->select('reference_id')
+            ->selectRaw('sum(qty_out) as source_qty')
+            ->groupBy('reference_id');
+
+        $reversalTotals = DB::table('stock_ledger')
+            ->where('tenant_id', $tenantId)
+            ->where('reference_type', $reversalReferenceType)
+            ->select('reference_id')
+            ->selectRaw('sum(qty_in) as reversal_qty')
+            ->groupBy('reference_id');
+
         $rows = DB::table('sales as s')
-            ->join('stock_ledger as sl', function ($join) {
-                $join->on('sl.reference_id', '=', 's.id')
-                    ->on('sl.tenant_id', '=', 's.tenant_id')
-                    ->where('sl.reference_type', '=', 'sale');
+            ->joinSub($sourceTotals, 'src', function (JoinClause $join): void {
+                $join->on('src.reference_id', '=', 's.id');
             })
-            ->leftJoin('stock_ledger as v', function ($join) {
-                $join->on('v.reference_id', '=', 's.id')
-                    ->on('v.tenant_id', '=', 's.tenant_id')
-                    ->where('v.reference_type', '=', 'void');
+            ->leftJoinSub($reversalTotals, 'rev', function (JoinClause $join): void {
+                $join->on('rev.reference_id', '=', 's.id');
             })
             ->where('s.tenant_id', $tenantId)
             ->where('s.status', 'voided')
-            ->select('s.id')
-            ->selectRaw('sum(sl.qty_out) as sold_qty')
-            ->selectRaw('coalesce(sum(v.qty_in), 0) as void_in_qty')
-            ->groupBy('s.id')
-            ->havingRaw('abs(sum(sl.qty_out) - coalesce(sum(v.qty_in), 0)) > 0.01')
+            ->select('s.id as reference_id')
+            ->selectRaw('src.source_qty as source_qty')
+            ->selectRaw('coalesce(rev.reversal_qty, 0) as reversal_qty')
+            ->whereRaw('abs(src.source_qty - coalesce(rev.reversal_qty, 0)) > 0.01')
             ->limit(25)
             ->get();
 
@@ -236,8 +290,10 @@ class DetectInventoryInvariantJob implements ShouldQueue
         $anomalyService->raise(
             tenantId: $tenantId,
             severity: 'high',
-            type: 'fifo_void_ledger_mismatch',
+            type: $anomalyType,
             payload: [
+                'source_reference_type' => $sourceReferenceType,
+                'reversal_reference_type' => $reversalReferenceType,
                 'count' => (int) $rows->count(),
                 'sample' => $rows->take(5)->values(),
                 'checked_at' => CarbonImmutable::now('UTC')->toIso8601String(),
@@ -276,5 +332,24 @@ class DetectInventoryInvariantJob implements ShouldQueue
                 'checked_at' => CarbonImmutable::now('UTC')->toIso8601String(),
             ]
         );
+    }
+
+    private function ledgerTotalsByInventoryDimension(string $tenantId)
+    {
+        return DB::table('stock_ledger')
+            ->where('tenant_id', $tenantId)
+            ->select('tenant_id', 'location_id', 'product_id', 'product_variant_id')
+            ->selectRaw('sum(qty_in - qty_out) as ledger_qty')
+            ->groupBy('tenant_id', 'location_id', 'product_id', 'product_variant_id');
+    }
+
+    private function joinOnInventoryDimension(JoinClause $join, string $leftAlias, string $rightAlias): void
+    {
+        // Use COALESCE so NULL variant buckets stay distinct from non-NULL buckets
+        // while remaining portable across SQLite tests and the main database.
+        $join->on($leftAlias.'.tenant_id', '=', $rightAlias.'.tenant_id')
+            ->on($leftAlias.'.product_id', '=', $rightAlias.'.product_id')
+            ->on($leftAlias.'.location_id', '=', $rightAlias.'.location_id')
+            ->whereRaw('coalesce('.$leftAlias.'.product_variant_id, \'\') = coalesce('.$rightAlias.'.product_variant_id, \'\')');
     }
 }

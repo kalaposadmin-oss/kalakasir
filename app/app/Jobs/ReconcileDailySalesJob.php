@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\DailySalesSummary;
+use App\Models\Sale;
 use App\Services\AnomalyService;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -26,7 +27,7 @@ class ReconcileDailySalesJob implements ShouldQueue
         foreach ($tenantIds as $tenantId) {
             $source = DB::table('sales')
                 ->where('tenant_id', $tenantId)
-                ->where('status', 'completed')
+                ->where('status', Sale::STATUS_COMPLETED)
                 ->whereRaw('COALESCE(transaction_date, DATE(created_at)) = ?', [$date])
                 ->sum('total');
 

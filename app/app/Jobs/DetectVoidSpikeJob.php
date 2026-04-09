@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Models\Sale;
 use App\Services\AnomalyService;
 use App\Services\AdaptiveAnomalyThresholdService;
 use App\Services\AnomalyDetectorMetricsService;
@@ -37,7 +38,7 @@ class DetectVoidSpikeJob implements ShouldQueue
             foreach ($tenantIds as $tenantId) {
                 $todayCount = (int) DB::table('sales')
                     ->where('tenant_id', $tenantId)
-                    ->where('status', 'voided')
+                    ->where('status', Sale::STATUS_VOIDED)
                     ->whereDate('voided_at', $today)
                     ->count();
 
@@ -46,7 +47,7 @@ class DetectVoidSpikeJob implements ShouldQueue
                     $day = CarbonImmutable::parse($today)->subDays($i)->toDateString();
                     $history[] = (int) DB::table('sales')
                         ->where('tenant_id', $tenantId)
-                        ->where('status', 'voided')
+                        ->where('status', Sale::STATUS_VOIDED)
                         ->whereDate('voided_at', $day)
                         ->count();
                 }

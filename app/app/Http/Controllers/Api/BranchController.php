@@ -8,13 +8,21 @@ use App\Models\Location;
 use App\Support\TenantContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class BranchController extends Controller
 {
     public function index()
     {
-        $branches = Branch::query()->orderBy('name')->get(['id', 'name', 'phone', 'address', 'is_active']);
-        $locations = Location::query()->get(['id', 'branch_id', 'name', 'is_default']);
+        $tenantId = TenantContext::id();
+
+        $branches = Branch::query()
+            ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
+            ->orderBy('name')
+            ->get(['id', 'name', 'phone', 'address', 'is_active']);
+        $locations = Location::query()
+            ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
+            ->get(['id', 'branch_id', 'name', 'is_default']);
 
         $rows = $branches->map(function ($branch) use ($locations) {
             $branchLocations = $locations->where('branch_id', $branch->id)->values();
@@ -47,8 +55,14 @@ class BranchController extends Controller
 
     public function show(string $branch)
     {
-        $branchRow = Branch::query()->where('id', $branch)->firstOrFail();
+        $tenantId = TenantContext::id();
+
+        $branchRow = Branch::query()
+            ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
+            ->where('id', $branch)
+            ->firstOrFail();
         $locations = Location::query()
+            ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
             ->where('branch_id', $branchRow->id)
             ->get(['id', 'name', 'is_default']);
 
@@ -112,15 +126,30 @@ class BranchController extends Controller
 
     public function update(Request $request, string $branch)
     {
+        $tenantId = TenantContext::id();
+
+        $branchRow = Branch::query()
+            ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
+            ->where('id', $branch)
+            ->firstOrFail();
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'phone' => ['nullable', 'string', 'max:50'],
             'address' => ['nullable', 'string', 'max:500'],
             'is_active' => ['nullable', 'boolean'],
-            'default_location_id' => ['nullable', 'uuid'],
+            'default_location_id' => [
+                'nullable',
+                'uuid',
+                $tenantId
+                    ? Rule::exists('locations', 'id')->where(function ($query) use ($tenantId, $branchRow) {
+                        $query->where('tenant_id', $tenantId)
+                            ->where('branch_id', $branchRow->id);
+                    })
+                    : Rule::exists('locations', 'id')->where(fn ($query) => $query->where('branch_id', $branchRow->id)),
+            ],
         ]);
 
-        $branchRow = Branch::query()->where('id', $branch)->firstOrFail();
         $branchRow->update([
             'name' => $validated['name'],
             'phone' => $validated['phone'] ?? null,
@@ -130,10 +159,12 @@ class BranchController extends Controller
 
         if (! empty($validated['default_location_id'])) {
             Location::query()
+                ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
                 ->where('branch_id', $branchRow->id)
                 ->update(['is_default' => false]);
 
             Location::query()
+                ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
                 ->where('branch_id', $branchRow->id)
                 ->where('id', $validated['default_location_id'])
                 ->update(['is_default' => true]);

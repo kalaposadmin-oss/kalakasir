@@ -11,11 +11,16 @@ Saat remote GitHub sudah diset, ganti ke badge dinamis Actions:
 `[![CI Tests](https://github.com/<OWNER>/<REPO>/actions/workflows/ci-tests.yml/badge.svg?branch=main)](https://github.com/<OWNER>/<REPO>/actions/workflows/ci-tests.yml)`
 
 Lane CI yang dijalankan:
+- Web build: `npm ci && npm run build`
+- Web smoke: `php artisan test tests/Feature/PortalWebAccessTest.php tests/Feature/WebDashboardSmokeTest.php tests/Feature/WebOperationalPagesSmokeTest.php tests/Feature/WebSettingsFinanceSmokeTest.php tests/Feature/WebAuthOnboardingSmokeTest.php tests/Feature/WebSubscriptionSupportSmokeTest.php tests/Feature/WebSupportMarketingSmokeTest.php`
 - Unit: `php artisan test --testsuite=Unit`
 - Valuation: `php artisan test --filter='ValuationAuthorizationTest|ValuationAsyncOperationsTest|ValuationWebSmokeTest'`
 - Write flow: `php artisan test --filter='WriteFlowLockPeriodApiEnforcementTest|WriteFlowTransactionDateHappyPathTest|CheckoutTransactionDateValidationTest|PurchaseReceiveTransactionDateValidationTest|StockTransferTransactionDateValidationTest|StockAdjustmentTransactionDateValidationTest|PurchaseReturnConsistencyTest'`
 
 Shortcut lokal VS Code task tersedia di `.vscode/tasks.json`:
+- `web: build`
+- `web: dev`
+- `tests: web-smoke`
 - `tests: unit`
 - `tests: valuation`
 - `tests: write-flow`
@@ -32,18 +37,66 @@ POS multi-tenant dengan Branch + Location, checkout idempotent, immutable ledger
 ## Requirement
 - PHP 8.3+
 - Composer
+- Node.js 20+
+- npm
 
 ## Setup Lokal
 1) Install dependency
 	- composer install
+	- npm install
 2) Setup env
-	- copy .env.example .env
+	- copy `.env.example` menjadi `.env`
 	- php artisan key:generate
+	- opsional untuk split portal berbasis host:
+	  - `POS_PORTAL_HOSTS=pos.127.0.0.1.nip.io`
+	  - `BACKOFFICE_PORTAL_HOSTS=admin.127.0.0.1.nip.io`
+	  - `SESSION_COOKIE=kalakasir-portal-session`
+	  - `SESSION_DOMAIN=.127.0.0.1.nip.io`
 3) Migrasi dan seed demo data
 	- php artisan migrate:fresh --seed
 
+## Konfigurasi Portal Web
+
+Generic route `/login` sekarang bisa mengikuti host request:
+- jika host ada di `POS_PORTAL_HOSTS`, halaman login utama memakai copy POS dan owner/admin tetap diarahkan ke portal POS setelah login.
+- jika host ada di `BACKOFFICE_PORTAL_HOSTS`, halaman login utama memakai copy Backoffice dan owner/admin diarahkan ke Backoffice.
+- jika host tidak terdaftar, fallback tetap memakai session portal aktif atau role user.
+
+Route eksplisit tetap tersedia untuk semua environment:
+- `/pos/login`
+- `/backoffice/login`
+
+Contoh setup lokal Windows:
+- opsi paling ringan: pakai `pos.127.0.0.1.nip.io` dan `admin.127.0.0.1.nip.io`
+- opsi alternatif: pakai `pos.localhost` dan `admin.localhost` jika resolver lokal mendukung wildcard `localhost`
+- opsi custom domain: tambahkan mapping hosts untuk `127.0.0.1 pos.kalakasir.test`
+- opsi custom domain: tambahkan mapping hosts untuk `127.0.0.1 office.kalakasir.test`
+- jalankan server Laravel dari folder `app`
+- buka `http://pos.127.0.0.1.nip.io:8000/login` untuk shell POS
+- buka `http://admin.127.0.0.1.nip.io:8000/login` untuk shell Backoffice
+- jika host portal terasa tidak berubah walau `.env` sudah diganti, cek env shell aktif karena `POS_PORTAL_HOSTS` dan `BACKOFFICE_PORTAL_HOSTS` di terminal dapat menimpa konfigurasi `.env`
+- jika login di POS hilang saat pindah ke Backoffice, isi `SESSION_DOMAIN` ke domain induk bersama, misalnya `.127.0.0.1.nip.io`, lalu login ulang sekali
+
+Owner/admin pada host POS tetap masuk ke shell POS mobile-first, tetapi sekarang mendapat shortcut manajemen di dashboard, histori, shift, detail transaksi, pembayaran, struk, dan void/refund. Cashier tetap tidak melihat shortcut tersebut.
+
+Untuk verifikasi manual yang konsisten, util lokal `scripts/dev/ensure_portal_qa_users.php` dapat dipakai untuk menyiapkan akun QA owner dan cashier.
+
 ## Menjalankan Aplikasi
 - php artisan serve
+- npm run dev
+
+## Validasi Web Frontend
+
+- Build production frontend:
+	- `npm run build`
+- Smoke suite halaman web:
+	- `tests: web-smoke`
+	- atau `php artisan test tests/Feature/PortalWebAccessTest.php tests/Feature/WebDashboardSmokeTest.php tests/Feature/WebOperationalPagesSmokeTest.php tests/Feature/WebSettingsFinanceSmokeTest.php tests/Feature/WebAuthOnboardingSmokeTest.php tests/Feature/WebSubscriptionSupportSmokeTest.php tests/Feature/WebSupportMarketingSmokeTest.php`
+- Shortcut task VS Code:
+	- `web: build`
+	- `web: dev`
+	- `tests: web-smoke`
+- CI sekarang memvalidasi build Vite dan batch `web-smoke` di workflow `ci-tests.yml`, jadi perubahan Blade/JS/CSS dan guardrail halaman utama ikut tervalidasi di pipeline.
 
 ## Catatan Operasional
 - UI mengambil data dari endpoint bootstrap dan membutuhkan tenant id.

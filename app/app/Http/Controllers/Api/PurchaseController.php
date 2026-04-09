@@ -18,6 +18,7 @@ use App\Support\TenantContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use InvalidArgumentException;
 use RuntimeException;
 
@@ -104,15 +105,21 @@ class PurchaseController extends Controller
         $tenantId = TenantContext::id();
 
         $validated = $request->validate([
-            'supplier_id' => ['required', 'uuid'],
-            'location_id' => ['nullable', 'uuid'],
+            'supplier_id' => ['required', 'uuid', $tenantId
+                ? Rule::exists('suppliers', 'id')->where('tenant_id', $tenantId)
+                : 'exists:suppliers,id'],
+            'location_id' => ['nullable', 'uuid', $tenantId
+                ? Rule::exists('locations', 'id')->where('tenant_id', $tenantId)
+                : 'exists:locations,id'],
             'transaction_date' => ['nullable', 'date'],
             'payment_method' => ['nullable', 'in:tunai,tempo'],
             'due_date' => ['nullable', 'date'],
             'status' => ['nullable', 'string', 'max:50'],
             'notes' => ['nullable', 'string', 'max:500'],
             'items' => ['required', 'array', 'min:1'],
-            'items.*.product_id' => ['required', 'uuid'],
+            'items.*.product_id' => ['required', 'uuid', $tenantId
+                ? Rule::exists('products', 'id')->where('tenant_id', $tenantId)
+                : 'exists:products,id'],
             'items.*.qty' => ['required', 'numeric', 'min:0.01'],
             'items.*.price' => ['required', 'numeric', 'min:0'],
         ]);
@@ -307,10 +314,14 @@ class PurchaseController extends Controller
 
     public function receive(Request $request, string $purchase, PurchaseService $service)
     {
+        $tenantId = TenantContext::id();
+
         $payload = $request->validate([
             'items' => ['nullable', 'array'],
             'transaction_date' => ['nullable', 'date'],
-            'items.*.product_id' => ['required', 'uuid'],
+            'items.*.product_id' => ['required', 'uuid', $tenantId
+                ? Rule::exists('products', 'id')->where('tenant_id', $tenantId)
+                : 'exists:products,id'],
             'items.*.qty' => ['required', 'numeric', 'min:0.01'],
         ]);
 
@@ -325,7 +336,6 @@ class PurchaseController extends Controller
                 'details' => [],
             ], $exception->status());
         } catch (InvalidArgumentException $exception) {
-            $tenantId = TenantContext::id();
             if ($tenantId) {
                 app(AnomalyService::class)->raise(
                     tenantId: $tenantId,

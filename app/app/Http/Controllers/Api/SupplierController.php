@@ -4,12 +4,24 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Supplier;
+use App\Support\TenantContext;
 
 class SupplierController extends Controller
 {
     public function index()
     {
+        $tenantId = TenantContext::id();
+
+        if (! $tenantId) {
+            return response()->json([
+                'code' => 'TENANT_NOT_RESOLVED',
+                'message' => 'Tenant tidak ditemukan.',
+                'details' => [],
+            ], 400);
+        }
+
         $suppliers = Supplier::query()
+            ->where('tenant_id', $tenantId)
             ->orderBy('name')
             ->get(['id', 'name', 'balance']);
 

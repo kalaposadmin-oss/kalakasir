@@ -5,12 +5,49 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
 use App\Models\Sale;
+use App\Support\TenantContext;
+use Illuminate\Http\Request;
 
 class CustomerController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
+        $tenantId = TenantContext::id();
+
+        $liteRequested = $request->boolean('lite') || $request->filled('q') || $request->filled('limit');
+
+        if ($liteRequested) {
+            $limit = max(1, min((int) $request->query('limit', 100), 250));
+            $term = trim((string) $request->query('q', ''));
+
+            $rows = Customer::query()
+                ->when($tenantId, fn ($query) => $query->where('customers.tenant_id', $tenantId))
+                ->when($term !== '', function ($query) use ($term) {
+                    $query->where(function ($nested) use ($term) {
+                        $likeTerm = '%'.$term.'%';
+                        $nested->where('customers.name', 'like', $likeTerm)
+                            ->orWhere('customers.phone', 'like', $likeTerm);
+                    });
+                })
+                ->orderBy('customers.name')
+                ->limit($limit)
+                ->get([
+                    'customers.id',
+                    'customers.name',
+                ]);
+
+            return response()->json([
+                'customers' => $rows,
+                'total' => $rows->count(),
+                'filters' => [
+                    'q' => $term,
+                    'limit' => $limit,
+                ],
+            ]);
+        }
+
         $customers = Customer::query()
+            ->when($tenantId, fn ($query) => $query->where('customers.tenant_id', $tenantId))
             ->leftJoin('sales', function ($join) {
                 $join->on('customers.id', '=', 'sales.customer_id')
                     ->on('customers.tenant_id', '=', 'sales.tenant_id')
@@ -33,6 +70,7 @@ class CustomerController extends Controller
 
         if ($customerIds) {
             $sales = Sale::query()
+                ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
                 ->whereIn('customer_id', $customerIds)
                 ->where('status', 'completed')
                 ->orderByDesc('created_at')

@@ -80,12 +80,25 @@ return [
             'void_split_additive_buffer' => env('ANOMALY_VOID_SPLIT_ADDITIVE_BUFFER', 3),
             'void_split_min_sample_events' => env('ANOMALY_VOID_SPLIT_MIN_SAMPLE_EVENTS', 30),
             'void_split_max_threshold' => env('ANOMALY_VOID_SPLIT_MAX_THRESHOLD', 300),
+
+            'production_batch_yield_variance_pct_threshold' => env('ANOMALY_PRODUCTION_BATCH_YIELD_VARIANCE_PCT_THRESHOLD', 10),
+            'production_batch_yield_variance_qty_threshold' => env('ANOMALY_PRODUCTION_BATCH_YIELD_VARIANCE_QTY_THRESHOLD', 1),
+            'production_batch_yield_variance_severity' => env('ANOMALY_PRODUCTION_BATCH_YIELD_VARIANCE_SEVERITY', 'high'),
         ],
 
         'security' => [
             'manager_pin' => [
                 'max_attempts' => env('SECURITY_MANAGER_PIN_MAX_ATTEMPTS', 5),
                 'lockout_seconds' => env('SECURITY_MANAGER_PIN_LOCKOUT_SECONDS', 900),
+            ],
+            'web_login' => [
+                'max_attempts' => env('SECURITY_WEB_LOGIN_MAX_ATTEMPTS', 5),
+                'lockout_seconds' => env('SECURITY_WEB_LOGIN_LOCKOUT_SECONDS', 900),
+                'max_lockout_seconds' => env('SECURITY_WEB_LOGIN_MAX_LOCKOUT_SECONDS', 3600),
+            ],
+            'operation_idempotency' => [
+                'ttl_minutes' => env('SECURITY_OPERATION_IDEMPOTENCY_TTL_MINUTES', 60),
+                'lock_seconds' => env('SECURITY_OPERATION_IDEMPOTENCY_LOCK_SECONDS', 10),
             ],
         ],
 

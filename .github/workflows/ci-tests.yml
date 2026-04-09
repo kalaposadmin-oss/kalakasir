@@ -7,6 +7,65 @@ on:
   pull_request:
 
 jobs:
+  web-build:
+    name: Web Frontend Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build frontend assets
+        run: npm run build
+
+  web-smoke:
+    name: Web Smoke Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, pdo_sqlite
+          tools: composer:v2
+
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Run web smoke tests
+        run: >-
+          php artisan test
+          tests/Feature/PortalWebAccessTest.php
+          tests/Feature/WebDashboardSmokeTest.php
+          tests/Feature/WebOperationalPagesSmokeTest.php
+          tests/Feature/WebSettingsFinanceSmokeTest.php
+          tests/Feature/WebAuthOnboardingSmokeTest.php
+          tests/Feature/WebSubscriptionSupportSmokeTest.php
+          tests/Feature/WebSupportMarketingSmokeTest.php
+
   unit:
     name: Unit Tests
     runs-on: ubuntu-latest

@@ -5,7 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Payment;
 use App\Models\Sale;
-use App\Models\SaleItem;
+use App\Services\SalesHistoryMetricsService;
+use App\Support\ApiResponse;
 use App\Support\TenantContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
@@ -26,6 +27,12 @@ class SalesHistoryController extends Controller
 
         [$fromAt, $toAt, $rangeMeta] = $this->resolveRange($range, $from, $to);
 
+        $filters = [
+            'branch_id' => $request->query('branch_id'),
+            'cashier_id' => $request->query('cashier_id'),
+            'status' => $request->query('status'),
+        ];
+
         $query = Sale::query()
             ->leftJoin('branches', function ($join) {
                 $join->on('sales.branch_id', '=', 'branches.id')
@@ -39,53 +46,34 @@ class SalesHistoryController extends Controller
                 'sales.id',
                 'sales.branch_id',
                 'sales.customer_id',
+                'sales.discount',
+                'sales.tax',
                 'sales.total',
                 'sales.status',
                 'sales.created_at',
+                'sales.transaction_date',
                 'sales.created_by',
                 'branches.name as branch_name',
                 'users.name as cashier_name',
             ])
             ->where('sales.tenant_id', $tenantId)
-            ->where('sales.created_at', '>=', $fromAt)
-            ->where('sales.created_at', '<', $toAt)
+            ->whereRaw('DATE(COALESCE(sales.transaction_date, sales.created_at)) >= ?', [$rangeMeta['start_date']])
+            ->whereRaw('DATE(COALESCE(sales.transaction_date, sales.created_at)) <= ?', [$rangeMeta['end_date']])
             ->orderByDesc('sales.created_at');
 
-        if ($request->filled('branch_id')) {
-            $query->where('sales.branch_id', $request->query('branch_id'));
-        }
+        $this->applyFilters($query, $request);
 
-        if ($request->filled('cashier_id')) {
-            $query->where('sales.created_by', $request->query('cashier_id'));
-        }
+        $summary = $this->buildSummary($tenantId, $rangeMeta['start_date'], $rangeMeta['end_date'], $filters);
 
-        if ($request->filled('status') && $request->query('status') !== 'all') {
-            $query->where('sales.status', $request->query('status'));
-        } elseif (! $request->filled('status')) {
-            $query->where('sales.status', 'completed');
-        }
+        $limit = (int) $request->query('limit', 200);
+        $limit = max(1, min($limit, 500));
 
-        $sales = $query->limit(200)->get();
+        $sales = $query->limit($limit)->get();
         $saleIds = $sales->pluck('id')->all();
 
-        $itemMap = [];
-        if ($saleIds) {
-            $items = SaleItem::query()
-                ->where('tenant_id', $tenantId)
-                ->select('sale_id')
-                ->selectRaw('sum(qty) as qty_total')
-                ->selectRaw('count(*) as line_count')
-                ->whereIn('sale_id', $saleIds)
-                ->groupBy('sale_id')
-                ->get();
-
-            foreach ($items as $item) {
-                $itemMap[$item->sale_id] = [
-                    'qty_total' => (float) $item->qty_total,
-                    'line_count' => (int) $item->line_count,
-                ];
-            }
-        }
+        $metricsService = app(SalesHistoryMetricsService::class);
+        $saleMetrics = $metricsService->saleMetricsForSaleIds($tenantId, $saleIds);
+        $refundMetrics = $metricsService->refundMetricsForSaleIds($tenantId, $saleIds, $rangeMeta['start_date'], $rangeMeta['end_date']);
 
         $paymentMap = [];
         if ($saleIds) {
@@ -104,9 +92,20 @@ class SalesHistoryController extends Controller
             }
         }
 
-        $rows = $sales->map(function ($sale) use ($itemMap, $paymentMap) {
-            $items = $itemMap[$sale->id] ?? ['qty_total' => 0, 'line_count' => 0];
+        $rows = $sales->map(function ($sale) use ($saleMetrics, $refundMetrics, $paymentMap) {
+            $items = $saleMetrics->get($sale->id);
+            $refunds = $refundMetrics->get($sale->id);
             $payments = $paymentMap[$sale->id] ?? [];
+
+            $grossSales = (float) ($items?->gross_sales ?? 0);
+            $itemDiscount = (float) ($items?->item_discount ?? 0);
+            $transactionDiscount = (float) ($items?->transaction_discount ?? ($sale->discount ?? 0));
+            $netSalesBeforeTax = (float) ($items?->net_sales_before_tax ?? 0);
+            $refundRevenueReversalBeforeTax = (float) ($refunds?->refund_revenue_reversal_before_tax ?? 0);
+            $refundTax = (float) ($refunds?->refund_tax ?? 0);
+            $refundedAmount = (float) ($refunds?->refunded_amount ?? 0);
+            $saleTax = (float) ($sale->tax ?? 0);
+            $originalReceiptTotal = (float) ($sale->total ?? 0);
 
             return [
                 'id' => $sale->id,
@@ -114,19 +113,70 @@ class SalesHistoryController extends Controller
                 'branch_name' => $sale->branch_name,
                 'cashier_id' => $sale->created_by,
                 'cashier_name' => $sale->cashier_name,
-                'total' => (float) $sale->total,
+                'transaction_date' => $sale->transaction_date ?: CarbonImmutable::parse($sale->created_at)->toDateString(),
+                'gross_sales' => $grossSales,
+                'item_discount' => $itemDiscount,
+                'transaction_discount' => $transactionDiscount,
+                'total_discount' => $itemDiscount + $transactionDiscount,
+                'net_sales_before_tax' => $netSalesBeforeTax,
+                'refund_revenue_reversal_before_tax' => $refundRevenueReversalBeforeTax,
+                'net_sales' => $netSalesBeforeTax - $refundRevenueReversalBeforeTax,
+                'sales_tax' => $saleTax,
+                'refund_tax' => $refundTax,
+                'tax' => $saleTax - $refundTax,
+                'refunded_amount' => $refundedAmount,
+                'original_receipt_total' => $originalReceiptTotal,
+                'net_total' => $originalReceiptTotal - $refundedAmount,
+                'total' => $originalReceiptTotal,
                 'status' => $sale->status,
                 'created_at' => $sale->created_at,
-                'item_count' => $items['line_count'],
-                'qty_total' => $items['qty_total'],
+                'item_count' => (int) ($items?->line_count ?? 0),
+                'qty_total' => (float) ($items?->qty_total ?? 0),
                 'payments' => $payments,
             ];
         });
 
-        return response()->json([
-            'range' => $rangeMeta,
+        return ApiResponse::success([
             'sales' => $rows,
+            'summary' => $summary,
+        ], [
+            'range' => $rangeMeta,
+            'count' => $rows->count(),
+            'limit' => $limit,
+            'list_mode' => 'sale_centric',
+            'summary_mode' => 'mixed_sales_and_refunds',
+            'refund_business_date_basis' => 'refunds.transaction_date',
         ]);
+    }
+
+    private function applyFilters($query, Request $request): void
+    {
+        if ($request->filled('branch_id')) {
+            $query->where('sales.branch_id', $request->query('branch_id'));
+        }
+
+        if ($request->filled('cashier_id')) {
+            $query->where('sales.created_by', $request->query('cashier_id'));
+        }
+
+        if ($request->filled('status') && $request->query('status') !== 'all') {
+            $query->where('sales.status', $request->query('status'));
+        } elseif (! $request->filled('status')) {
+            $query->where('sales.status', Sale::STATUS_COMPLETED);
+        }
+    }
+
+    private function buildSummary(string $tenantId, string $startDate, string $endDate, array $filters): array
+    {
+        $metricsService = app(SalesHistoryMetricsService::class);
+        $summary = $metricsService->summaryForRange($tenantId, $startDate, $endDate, $filters);
+        $summary['payments'] = $metricsService->paymentMixForRange($tenantId, $startDate, $endDate, $filters);
+        $summary['top_products'] = $metricsService->topProductsForRange($tenantId, $startDate, $endDate, $filters);
+        $summary['average_ticket'] = $summary['transaction_count'] > 0
+            ? round(($summary['original_receipt_total'] ?? 0) / $summary['transaction_count'], 2)
+            : 0.0;
+
+        return $summary;
     }
 
     private function resolveRange(string $range, ?string $from, ?string $to): array

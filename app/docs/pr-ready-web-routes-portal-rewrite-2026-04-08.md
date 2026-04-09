@@ -131,3 +131,7 @@ Jika perlu re-stage ulang slice web dari awal, gunakan:
 ```powershell
 git add app/Http/Controllers/Web/BackofficePageController.php app/Http/Controllers/Web/LegacyWebRedirectController.php app/Http/Controllers/Web/MenuController.php app/Http/Controllers/Web/OnboardingController.php app/Http/Controllers/Web/PlatformDashboardController.php app/Http/Controllers/Web/PortalAuthController.php app/Http/Controllers/Web/PortalSessionController.php app/Http/Controllers/Web/PosPageController.php app/Http/Controllers/Web/TenantViewController.php app/Services/PortalSwitchService.php app/Services/WebRouteContextService.php routes/web.php docs/pr-summary-web-routes-portal-rewrite-2026-04-08.md docs/pr-ready-web-routes-portal-rewrite-2026-04-08.md docs/commit-message-web-routes-portal-rewrite-2026-04-08.md
 ```
+
+## Actual Commit
+
+- `dd055f6` `refactor(web): move portal and detail page route flow into controllers`
