@@ -145,6 +145,9 @@ Dokumen referensi:
 - `docs/pr-summary-inventory-reporting-2026-04-09.md`
 - `docs/pr-ready-inventory-reporting-2026-04-09.md`
 - `docs/commit-message-inventory-reporting-2026-04-09.md`
+- `docs/pr-summary-platform-admin-api-2026-04-09.md`
+- `docs/pr-ready-platform-admin-api-2026-04-09.md`
+- `docs/commit-message-platform-admin-api-2026-04-09.md`
 
 Prioritas risiko:
 
@@ -158,20 +161,28 @@ Baseline validasi terbaru untuk refund legacy audit:
 
 - `php artisan test tests/Feature/RefundLegacyAuditApiTest.php tests/Feature/RefundLegacyAuditCommandTest.php tests/Feature/RefundLegacyAuditWebSmokeTest.php` PASS (`16` test, `130` assertion)
 
+Status eksekusi terbaru:
+
+- refund legacy audit sudah di-commit: `7bc4553` `feat(api): add refund legacy audit and remediation surface`
+- subscription core + invoice sudah di-commit: `b0d8590` `feat(api): add subscription core and invoice endpoints`
+- inventory reporting sudah di-commit: `b7e6cec` `feat(api): add inventory reporting endpoints`
+- platform admin API sudah siap dipisahkan sebagai slice tersendiri dengan focused validation hijau
+
 Langkah saat dilanjutkan:
 
-1. pisahkan refund legacy audit sebagai sub-batch API expansion terkecil di atas baseline refund core:
-	- `app/Http/Controllers/Api/RefundController.php`
-	- `app/Http/Controllers/Api/RefundLegacyAuditController.php`
-	- `app/Services/RefundLegacyAuditService.php`
-	- `app/tests/Feature/RefundLegacyAuditApiTest.php`
-	- `app/tests/Feature/RefundLegacyAuditCommandTest.php`
-	- `app/tests/Feature/RefundLegacyAuditWebSmokeTest.php`
-	- potongan terkait di `routes/api.php`
-2. lanjut subscription setelah refund legacy audit
-3. tinggalkan inventory reporting sebagai batch terpisah karena controller tunggalnya sangat besar
-4. cek contract break yang mungkin ke client lama
-5. siapkan smoke/API checklist minimal per surface
+1. gunakan commit `7bc4553`, `b0d8590`, dan `b7e6cec` sebagai baseline API slices yang sudah terpisah
+2. pisahkan platform admin API sebagai subsystem tersendiri:
+	- `app/Http/Controllers/Api/Platform/*`
+	- `app/Http/Requests/Platform/*`
+	- `app/Http/Resources/Platform/*`
+	- `app/Services/Platform/*`
+	- `app/tests/Feature/PlatformSuperadminReadApiTest.php`
+	- `app/tests/Feature/PlatformSuperadminDangerActionsTest.php`
+	- `app/routes/api_platform.php`
+	- hunk route registration terkait di `app/bootstrap/app.php`
+3. lanjut middleware dependency pass setelah platform dipisah
+4. sisakan commands/deploy sebagai batch operasional terakhir
+5. hindari mencampur guest redirect bootstrap dan portal host config ke commit platform
 
 ## 4. PR Middleware Access / Tenant / Subscription Gate
 
@@ -212,10 +223,10 @@ Langkah saat dilanjutkan:
 
 Status:
 
-- belum dikerjakan sebagai PR terpisah
-- plan awal batch berikutnya sudah ada
-- refund core sudah punya baseline commit (`48558ab`, `d634cd1`)
-- refund legacy audit sekarang siap dipisah sebagai slice lanjutan kecil dengan command/API/web smoke coverage
+- subscription core sudah di-commit terpisah
+- refund legacy audit sudah di-commit terpisah
+- inventory reporting sudah di-commit terpisah
+- platform admin API sudah terimplementasi di worktree dan lolos focused tests, tinggal dipisah sebagai commit tersendiri
 
 Scope utama:
 
@@ -233,13 +244,16 @@ Dokumen referensi:
 - `docs/pr-summary-subscription-core-invoices-2026-04-09.md`
 - `docs/pr-ready-subscription-core-invoices-2026-04-09.md`
 - `docs/commit-message-subscription-core-invoices-2026-04-09.md`
+- `docs/pr-summary-platform-admin-api-2026-04-09.md`
+- `docs/pr-ready-platform-admin-api-2026-04-09.md`
+- `docs/commit-message-platform-admin-api-2026-04-09.md`
 
 Langkah saat dilanjutkan:
 
-1. selesaikan pemisahan refund legacy audit
-2. mulai dari subscription core
-3. lanjut inventory reporting dependency bila masih terkait
-4. review platform admin API sebagai subsystem terpisah
+1. gunakan commit `7bc4553`, `b0d8590`, dan `b7e6cec` sebagai baseline slice API yang sudah dipisah
+2. commit platform admin API sebagai subsystem terpisah
+3. lanjut middleware dependency pass
+4. sisakan commands/deploy untuk batch operasional setelah middleware
 
 ## 6. PR Commands / Deploy Workflow
 

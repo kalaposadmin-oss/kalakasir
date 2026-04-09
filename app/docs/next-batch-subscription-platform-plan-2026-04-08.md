@@ -100,9 +100,10 @@ Checklist:
 - Alasan: `RefundController.php` (`352` baris) + `RefundLegacyAuditController.php` (`251` baris) jauh lebih kecil dibanding `InventoryReportController.php` (`1661` baris).
 - Status terbaru: refund core sudah punya baseline commit (`48558ab`, `d634cd1`), sedangkan refund legacy audit sudah implemented di worktree dan lolos validasi `RefundLegacyAuditApiTest`, `RefundLegacyAuditCommandTest`, dan `RefundLegacyAuditWebSmokeTest`.
 - Hardening terbaru: remediation refund legacy sekarang match `sale_items` secara variant-aware memakai `product_variant_id` bila tersedia, jadi row historis dengan produk yang sama tetapi variant berbeda tidak salah diklasifikasikan sebagai ambiguous atau salah dipasangkan saat backfill.
-- Urutan eksekusi praktis berikutnya:
-	1. commit/pisahkan refund legacy audit slice
-	2. subscription core + invoices
-	3. inventory reporting
-	4. platform admin API
-	5. middleware dependency pass
+- Urutan eksekusi praktis terbaru:
+	1. refund legacy audit selesai di `7bc4553`
+	2. subscription core + invoices selesai di `b0d8590`
+	3. inventory reporting selesai di `b7e6cec`
+	4. platform admin API menjadi slice aktif berikutnya
+	5. middleware dependency pass sesudah platform
+	6. commands/deploy workflow paling akhir
