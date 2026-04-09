@@ -3,15 +3,12 @@
 namespace App\Services;
 
 use App\Models\InventoryBalance;
+use App\Models\Location;
 use App\Models\ProductionBatch;
 use App\Models\ProductionBatchItem;
 use App\Models\Product;
 use App\Models\StockLedger;
-use App\Services\AnomalyService;
-use App\Services\InventoryValuationService;
-use App\Services\LockPeriodService;
-use App\Services\ProductItemTypeMapper;
-use App\Services\TransactionDateService;
+use App\Support\Decimal;
 use App\Support\TenantContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Arr;
@@ -25,70 +22,85 @@ use Throwable;
 
 class ProductionBatchService
 {
-    public function createDraft(array $payload, ?string $userId): string
+    public function createDraft(array $payload, ?string $userId): ProductionBatch
     {
         $tenantId = TenantContext::id();
         if (! $tenantId) {
             throw new RuntimeException('Tenant tidak ditemukan.');
         }
 
-        $this->ensureRequiredLinesPresent($payload);
-
-        $allProductIds = collect(array_merge(
-            Arr::pluck($payload['inputs'], 'product_id'),
-            Arr::pluck($payload['outputs'], 'product_id')
-        ))->unique()->values()->all();
-
-        $products = $this->loadProducts($tenantId, $allProductIds);
-
-        $this->assertLineItemTypes($products, $payload['inputs'], 'raw_material', 'input');
-        $this->assertLineItemTypes($products, $payload['outputs'], 'finished_good', 'output');
-
         $now = CarbonImmutable::now('UTC');
         $transactionDate = (new TransactionDateService())
             ->resolve(Arr::get($payload, 'transaction_date'));
+        $location = $this->loadLocation($tenantId, (string) $payload['branch_id'], (string) $payload['location_id']);
+        $product = $this->loadBatchProduct($tenantId, (string) $payload['product_id']);
+        $productVariantId = $this->resolveVariantId($tenantId, (string) $product->id, Arr::get($payload, 'product_variant_id'));
+        $recipeLines = $this->normalizeRecipeLines($product);
+        $expectedOutputQty = Decimal::qty($payload['expected_output_qty']);
 
         try {
-            return DB::transaction(function () use ($payload, $tenantId, $userId, $now, $transactionDate): string {
+            return DB::transaction(function () use ($payload, $tenantId, $userId, $now, $transactionDate, $location, $product, $productVariantId, $recipeLines, $expectedOutputQty): ProductionBatch {
                 $batchId = (string) Str::uuid();
 
-                ProductionBatch::query()->create([
+                $batch = ProductionBatch::query()->create([
                     'id' => $batchId,
                     'tenant_id' => $tenantId,
+                    'branch_id' => $location->branch_id,
                     'location_id' => $payload['location_id'],
+                    'product_id' => $product->id,
+                    'product_variant_id' => $productVariantId,
+                    'recipe_version' => (int) $payload['recipe_version'],
                     'reference_no' => Arr::get($payload, 'reference_no'),
                     'status' => ProductionBatch::STATUS_DRAFT,
                     'notes' => Arr::get($payload, 'notes'),
                     'created_by' => $userId,
                     'created_at' => $now,
+                    'updated_at' => $now,
                     'transaction_date' => $transactionDate->toDateString(),
+                    'expected_output_qty' => Decimal::float($expectedOutputQty, Decimal::QTY_SCALE),
+                    'actual_output_qty' => 0,
+                    'yield_variance_qty' => 0,
+                    'yield_variance_pct' => 0,
                 ]);
 
                 $rows = [];
 
-                foreach ($payload['inputs'] as $line) {
+                foreach ($recipeLines as $line) {
+                    $lineVariantId = $this->resolveVariantId($tenantId, (string) $line['product_id'], Arr::get($line, 'product_variant_id'));
+                    $plannedQty = Decimal::multiply($expectedOutputQty, Decimal::qty($line['qty']), Decimal::QTY_SCALE);
+
                     $rows[] = [
                         'id' => (string) Str::uuid(),
                         'tenant_id' => $tenantId,
                         'production_batch_id' => $batchId,
                         'line_type' => 'input',
                         'product_id' => $line['product_id'],
-                        'qty' => (float) $line['qty'],
+                        'product_variant_id' => $lineVariantId,
+                        'qty' => Decimal::float($plannedQty, Decimal::QTY_SCALE),
+                        'planned_qty' => Decimal::float($plannedQty, Decimal::QTY_SCALE),
+                        'actual_qty' => null,
+                        'uom' => Arr::get($line, 'unit') ?: Arr::get($line, 'uom'),
                         'unit_cost_snapshot' => 0,
+                        'created_at' => $now,
+                        'updated_at' => $now,
                     ];
                 }
 
-                foreach ($payload['outputs'] as $line) {
-                    $rows[] = [
-                        'id' => (string) Str::uuid(),
-                        'tenant_id' => $tenantId,
-                        'production_batch_id' => $batchId,
-                        'line_type' => 'output',
-                        'product_id' => $line['product_id'],
-                        'qty' => (float) $line['qty'],
-                        'unit_cost_snapshot' => 0,
-                    ];
-                }
+                $rows[] = [
+                    'id' => (string) Str::uuid(),
+                    'tenant_id' => $tenantId,
+                    'production_batch_id' => $batchId,
+                    'line_type' => 'output',
+                    'product_id' => $product->id,
+                    'product_variant_id' => $productVariantId,
+                    'qty' => Decimal::float($expectedOutputQty, Decimal::QTY_SCALE),
+                    'planned_qty' => Decimal::float($expectedOutputQty, Decimal::QTY_SCALE),
+                    'actual_qty' => null,
+                    'uom' => null,
+                    'unit_cost_snapshot' => 0,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
 
                 ProductionBatchItem::query()->insert($rows);
 
@@ -97,11 +109,41 @@ class ProductionBatchService
                     'tenant_id' => $tenantId,
                     'location_id' => $payload['location_id'],
                     'total_input_cost' => 0.0,
-                    'output_qty' => (float) collect($payload['outputs'])->sum(fn ($line) => (float) Arr::get($line, 'qty', 0)),
+                    'output_qty' => Decimal::float($expectedOutputQty, Decimal::QTY_SCALE),
                     'unit_cost_result' => 0.0,
                 ]);
 
-                return $batchId;
+                $this->logBatchAudit(
+                    event: 'production_batch.created',
+                    tenantId: $tenantId,
+                    actorId: $userId,
+                    batchId: $batchId,
+                    payload: [
+                        'status' => ProductionBatch::STATUS_DRAFT,
+                        'branch_id' => (string) $location->branch_id,
+                        'location_id' => (string) $location->id,
+                        'product_id' => (string) $product->id,
+                        'product_variant_id' => $productVariantId,
+                        'transaction_date' => $transactionDate->toDateString(),
+                        'expected_output_qty' => Decimal::float($expectedOutputQty, Decimal::QTY_SCALE),
+                        'recipe_version' => (int) $payload['recipe_version'],
+                        'reference_no' => Arr::get($payload, 'reference_no'),
+                        'notes' => Arr::get($payload, 'notes'),
+                        'variance_reason' => null,
+                        'cancel_reason' => null,
+                        'input_count' => count($recipeLines),
+                        'input_planned_qty_total' => Decimal::float(
+                            collect($rows)
+                                ->where('line_type', 'input')
+                                ->sum('planned_qty'),
+                            Decimal::QTY_SCALE
+                        ),
+                        'output_planned_qty' => Decimal::float($expectedOutputQty, Decimal::QTY_SCALE),
+                    ],
+                    occurredAt: $now
+                );
+
+                return $batch;
             });
         } catch (Throwable $exception) {
             Log::warning('production.batch.failed', [
@@ -110,7 +152,7 @@ class ProductionBatchService
                 'tenant_id' => $tenantId,
                 'location_id' => Arr::get($payload, 'location_id'),
                 'total_input_cost' => 0.0,
-                'output_qty' => (float) collect(Arr::get($payload, 'outputs', []))->sum(fn ($line) => (float) Arr::get($line, 'qty', 0)),
+                'output_qty' => Decimal::float(Decimal::qty(Arr::get($payload, 'expected_output_qty', 0)), Decimal::QTY_SCALE),
                 'unit_cost_result' => 0.0,
                 'error' => $exception->getMessage(),
                 'exception' => class_basename($exception),
@@ -120,7 +162,7 @@ class ProductionBatchService
         }
     }
 
-    public function post(string $batchId, ?string $userId, array $context = []): void
+    public function updateDraft(string $batchId, array $payload, ?string $userId): array
     {
         $tenantId = TenantContext::id();
         if (! $tenantId) {
@@ -129,224 +171,589 @@ class ProductionBatchService
 
         $now = CarbonImmutable::now('UTC');
 
-        $observabilityContext = [
-            'batch_id' => $batchId,
-            'tenant_id' => $tenantId,
-            'location_id' => null,
-            'total_input_cost' => 0.0,
-            'output_qty' => 0.0,
-            'unit_cost_result' => 0.0,
-        ];
+        return app(DatabaseTransactionService::class)->run(function () use ($batchId, $payload, $tenantId, $userId, $now): array {
+            $batch = ProductionBatch::query()
+                ->where('tenant_id', $tenantId)
+                ->where('id', $batchId)
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        try {
-            app(DatabaseTransactionService::class)->run(function () use ($batchId, $tenantId, $userId, $now, $context, &$observabilityContext): void {
-                $valuationService = app(InventoryValuationService::class);
+            $this->assertDraftMutable($batch);
 
-                $batch = ProductionBatch::query()
-                    ->where('tenant_id', $tenantId)
-                    ->where('id', $batchId)
-                    ->lockForUpdate()
-                    ->firstOrFail();
+            $product = $this->loadBatchProduct($tenantId, (string) $batch->product_id);
+            $transactionDate = (new TransactionDateService())
+                ->resolve(Arr::get($payload, 'transaction_date', $batch->transaction_date));
+            $expectedOutputQty = array_key_exists('expected_output_qty', $payload)
+                ? Decimal::qty($payload['expected_output_qty'])
+                : Decimal::qty($batch->expected_output_qty);
 
-                $observabilityContext['location_id'] = $batch->location_id;
+            if (Decimal::compare($expectedOutputQty, '0') <= 0) {
+                throw ValidationException::withMessages([
+                    'expected_output_qty' => 'Expected output qty harus lebih dari 0.',
+                ]);
+            }
 
-                if ($batch->status === ProductionBatch::STATUS_POSTED) {
+            $productVariantId = array_key_exists('product_variant_id', $payload)
+                ? $this->resolveVariantId($tenantId, (string) $product->id, Arr::get($payload, 'product_variant_id'))
+                : ($batch->product_variant_id ? (string) $batch->product_variant_id : null);
+
+            $items = ProductionBatchItem::query()
+                ->where('tenant_id', $tenantId)
+                ->where('production_batch_id', $batch->id)
+                ->lockForUpdate()
+                ->get();
+
+            $inputs = $items->where('line_type', 'input')->values();
+            $output = $items->firstWhere('line_type', 'output');
+
+            if ($inputs->isEmpty() || ! $output) {
+                throw ValidationException::withMessages([
+                    'batch' => 'Batch harus memiliki minimal satu input dan satu output.',
+                ]);
+            }
+
+            $beforeSnapshot = $this->draftAuditSnapshot($batch, $inputs, $output);
+
+            $plannedInputMap = array_key_exists('inputs', $payload)
+                ? $this->normalizePlannedInputs($payload['inputs'] ?? [])
+                : null;
+
+            if ($plannedInputMap !== null) {
+                $this->validateDraftInputKeys($inputs, $plannedInputMap, 'inputs');
+            }
+
+            $previousExpectedOutputQty = Decimal::qty($batch->expected_output_qty);
+            $scaleInputs = $plannedInputMap === null
+                && Decimal::compare($expectedOutputQty, $previousExpectedOutputQty) !== 0;
+
+            foreach ($inputs as $item) {
+                $key = $this->itemKey((string) $item->product_id, $item->product_variant_id ? (string) $item->product_variant_id : null);
+
+                if ($plannedInputMap !== null) {
+                    $plannedQty = Decimal::qty($plannedInputMap[$key]);
+                } elseif ($scaleInputs) {
+                    $plannedQty = Decimal::compare($previousExpectedOutputQty, '0') > 0
+                        ? Decimal::divide(
+                            Decimal::multiply(Decimal::qty($item->planned_qty), $expectedOutputQty, Decimal::QTY_SCALE),
+                            $previousExpectedOutputQty,
+                            Decimal::QTY_SCALE
+                        )
+                        : Decimal::qty($item->planned_qty);
+                } else {
+                    $plannedQty = Decimal::qty($item->planned_qty);
+                }
+
+                if (Decimal::compare($plannedQty, '0') <= 0) {
                     throw ValidationException::withMessages([
-                        'batch' => 'Batch already posted.',
+                        'inputs' => 'Planned qty input harus lebih dari 0.',
                     ]);
                 }
 
-                if ($batch->status !== ProductionBatch::STATUS_DRAFT) {
-                    throw new RuntimeException('Status batch tidak valid untuk proses posting.');
-                }
+                $item->planned_qty = Decimal::float($plannedQty, Decimal::QTY_SCALE);
+                $item->qty = Decimal::float($plannedQty, Decimal::QTY_SCALE);
+                $item->actual_qty = null;
+                $item->updated_at = $now;
+                $item->save();
+            }
 
-                $transactionDate = (new TransactionDateService())
-                    ->resolve(Arr::get($context, 'transaction_date', $batch->transaction_date));
-                (new LockPeriodService())->ensureNotLocked($transactionDate, $tenantId);
+            $output->product_variant_id = $productVariantId;
+            $output->planned_qty = Decimal::float($expectedOutputQty, Decimal::QTY_SCALE);
+            $output->qty = Decimal::float($expectedOutputQty, Decimal::QTY_SCALE);
+            $output->actual_qty = null;
+            $output->updated_at = $now;
+            $output->save();
 
-                $items = ProductionBatchItem::query()
-                    ->where('tenant_id', $tenantId)
-                    ->where('production_batch_id', $batch->id)
-                    ->get();
+            $batch->product_variant_id = $productVariantId;
+            $batch->transaction_date = $transactionDate->toDateString();
+            $batch->expected_output_qty = Decimal::float($expectedOutputQty, Decimal::QTY_SCALE);
+            $batch->recipe_version = (int) Arr::get($payload, 'recipe_version', $batch->recipe_version);
+            if (array_key_exists('reference_no', $payload)) {
+                $batch->reference_no = Arr::get($payload, 'reference_no');
+            }
+            if (array_key_exists('notes', $payload)) {
+                $batch->notes = Arr::get($payload, 'notes');
+            }
+            $batch->updated_at = $now;
+            $batch->save();
 
-                $inputs = $items->where('line_type', 'input')->values();
-                $outputs = $items->where('line_type', 'output')->values();
+            $freshBatch = $batch->fresh();
+            $freshInputs = $inputs->fresh();
+            $freshOutput = $output->fresh();
 
-                if ($inputs->isEmpty() || $outputs->isEmpty()) {
-                    throw ValidationException::withMessages([
-                        'batch' => 'Batch must contain at least one input and one output item.',
-                    ]);
-                }
+            $this->logBatchAudit(
+                event: 'production_batch.updated',
+                tenantId: $tenantId,
+                actorId: $userId,
+                batchId: (string) $batch->id,
+                payload: [
+                    'status' => ProductionBatch::STATUS_DRAFT,
+                    'before' => $beforeSnapshot,
+                    'after' => $this->draftAuditSnapshot($freshBatch, $freshInputs, $freshOutput),
+                ],
+                occurredAt: $now
+            );
 
-                $ledgerRows = [];
-                $totalInputCost = 0.0;
+            return $this->serializeDraftResult($freshBatch, $freshInputs, $freshOutput);
+        });
+    }
 
-                foreach ($inputs as $item) {
-                    $qty = (float) $item->qty;
+    public function cancelDraft(string $batchId, array $payload, ?string $userId): array
+    {
+        $tenantId = TenantContext::id();
+        if (! $tenantId) {
+            throw new RuntimeException('Tenant tidak ditemukan.');
+        }
 
-                    $affected = DB::update(
-                        'UPDATE inventory_balances SET qty_on_hand = qty_on_hand - ? WHERE tenant_id = ? AND product_id = ? AND location_id = ? AND qty_on_hand >= ?',
-                        [$qty, $tenantId, $item->product_id, $batch->location_id, $qty]
-                    );
+        $now = CarbonImmutable::now('UTC');
 
-                    if ($affected === 0) {
-                        app(AnomalyService::class)->raise(
-                            tenantId: $tenantId,
-                            severity: 'high',
-                            type: 'negative_stock_attempt',
-                            payload: [
-                                'source' => 'production_batch_post',
-                                'batch_id' => $batch->id,
-                                'product_id' => $item->product_id,
-                                'location_id' => $batch->location_id,
-                                'requested_qty' => $qty,
-                            ],
-                            referenceId: $batch->id
-                        );
+        return app(DatabaseTransactionService::class)->run(function () use ($batchId, $payload, $tenantId, $userId, $now): array {
+            $batch = ProductionBatch::query()
+                ->where('tenant_id', $tenantId)
+                ->where('id', $batchId)
+                ->lockForUpdate()
+                ->firstOrFail();
 
-                        throw new RuntimeException('Stok bahan baku tidak mencukupi.');
+            $this->assertDraftMutable($batch);
+            $cancelReason = $this->normalizeCancelReason(Arr::get($payload, 'cancel_reason'));
+
+            $batch->status = ProductionBatch::STATUS_CANCELLED;
+            $batch->cancel_reason = $cancelReason;
+            $batch->cancelled_by = $userId;
+            $batch->cancelled_at = $now;
+            $batch->updated_at = $now;
+            $batch->save();
+
+            $this->logBatchAudit(
+                event: 'production_batch.cancelled',
+                tenantId: $tenantId,
+                actorId: $userId,
+                batchId: (string) $batch->id,
+                payload: [
+                    'status' => ProductionBatch::STATUS_CANCELLED,
+                    'transaction_date' => optional($batch->transaction_date)?->format('Y-m-d'),
+                    'expected_output_qty' => (float) ($batch->expected_output_qty ?? 0),
+                    'reference_no' => $batch->reference_no,
+                    'notes' => $batch->notes,
+                    'variance_reason' => $batch->variance_reason,
+                    'cancel_reason' => $cancelReason,
+                    'cancelled_at' => optional($batch->cancelled_at)->toISOString(),
+                ],
+                occurredAt: $now
+            );
+
+            return [
+                'batch_id' => (string) $batch->id,
+                'status' => (string) $batch->status,
+                'cancel_reason' => $batch->cancel_reason,
+                'cancelled_at' => optional($batch->cancelled_at)->toISOString(),
+            ];
+        });
+    }
+
+    public function post(string $batchId, array $payload, ?string $userId, string $idempotencyKey): array
+    {
+        $tenantId = TenantContext::id();
+        if (! $tenantId) {
+            throw new RuntimeException('Tenant tidak ditemukan.');
+        }
+
+        $idempotencyKey = trim($idempotencyKey);
+        if ($idempotencyKey === '') {
+            throw ValidationException::withMessages([
+                'Idempotency-Key' => 'Idempotency-Key wajib diisi.',
+            ]);
+        }
+
+        $cacheKey = $this->idempotencyCacheKey($tenantId, $batchId, $idempotencyKey);
+
+        $result = app(OperationIdempotencyStore::class)->getOrRemember($cacheKey, function () use ($batchId, $payload, $tenantId, $userId, $idempotencyKey): array {
+            $now = CarbonImmutable::now('UTC');
+            $observabilityContext = [
+                'batch_id' => $batchId,
+                'tenant_id' => $tenantId,
+                'location_id' => null,
+                'total_input_cost' => 0.0,
+                'output_qty' => 0.0,
+                'unit_cost_result' => 0.0,
+            ];
+
+            try {
+                return app(DatabaseTransactionService::class)->run(function () use ($batchId, $payload, $tenantId, $userId, $idempotencyKey, $now, &$observabilityContext): array {
+                    $valuationService = app(InventoryValuationService::class);
+
+                    $batch = ProductionBatch::query()
+                        ->where('tenant_id', $tenantId)
+                        ->where('id', $batchId)
+                        ->lockForUpdate()
+                        ->firstOrFail();
+
+                    $this->loadBatchProduct($tenantId, (string) $batch->product_id);
+
+                    $observabilityContext['location_id'] = $batch->location_id;
+
+                    if ($batch->status === ProductionBatch::STATUS_POSTED) {
+                        if ($batch->idempotency_key === $idempotencyKey) {
+                            return $this->serializePostResult($batch, true);
+                        }
+
+                        throw ValidationException::withMessages([
+                            'batch' => 'Batch already posted or cancelled.',
+                        ]);
                     }
 
-                    $valuation = $valuationService->issue(
-                        tenantId: $tenantId,
-                        productId: $item->product_id,
-                        locationId: $batch->location_id,
-                        qty: $qty,
-                        referenceType: 'production_input',
-                        referenceId: $batch->id,
-                        referenceItemId: $item->id,
-                        at: $now
-                    );
+                    if ($batch->status !== ProductionBatch::STATUS_DRAFT) {
+                        throw ValidationException::withMessages([
+                            'batch' => 'Batch already posted or cancelled.',
+                        ]);
+                    }
 
-                    $unitCost = (float) $valuation['unit_cost'];
-                    $item->update([
-                        'unit_cost_snapshot' => $unitCost,
-                    ]);
+                    $transactionDate = (new TransactionDateService())
+                        ->resolve(Arr::get($payload, 'transaction_date', $batch->transaction_date));
+                    (new LockPeriodService())->ensureNotLocked($transactionDate, $tenantId);
 
-                    $totalInputCost += ((float) $valuation['total_cost']);
-
-                    $balanceAfter = (float) InventoryBalance::query()
+                    $items = ProductionBatchItem::query()
                         ->where('tenant_id', $tenantId)
-                        ->where('product_id', $item->product_id)
-                        ->where('location_id', $batch->location_id)
-                        ->value('qty_on_hand');
+                        ->where('production_batch_id', $batch->id)
+                        ->lockForUpdate()
+                        ->get();
 
-                    $ledgerRows[] = [
-                        'id' => (string) Str::uuid(),
-                        'tenant_id' => $tenantId,
-                        'product_id' => $item->product_id,
-                        'location_id' => $batch->location_id,
-                        'reference_type' => 'production_input',
-                        'reference_id' => $batch->id,
-                        'reference_item_id' => $item->id,
-                        'qty_in' => 0,
-                        'qty_out' => $qty,
-                        'balance_after' => $balanceAfter,
-                        'unit_cost' => $unitCost,
-                        'total_cost' => ((float) $valuation['total_cost']),
-                        'created_at' => $now,
-                        'created_by' => $userId,
-                    ];
-                }
+                    $inputs = $items->where('line_type', 'input')->values();
+                    $output = $items->firstWhere('line_type', 'output');
 
-                $totalOutputQty = (float) $outputs->sum(function ($item) {
-                    return (float) $item->qty;
-                });
+                    if ($inputs->isEmpty() || ! $output) {
+                        throw ValidationException::withMessages([
+                            'batch' => 'Batch must contain at least one input and one output item.',
+                        ]);
+                    }
 
-                $observabilityContext['total_input_cost'] = $totalInputCost;
-                $observabilityContext['output_qty'] = $totalOutputQty;
+                    $actualInputMap = $this->normalizeActualInputs($payload['inputs'] ?? []);
+                    $actualOutputQty = Decimal::qty($payload['actual_output_qty']);
 
-                if ($totalOutputQty <= 0) {
-                    throw new RuntimeException('Total qty output harus lebih dari 0.');
-                }
+                    $this->validatePostPayload(
+                        $batch,
+                        $inputs,
+                        $output,
+                        $actualInputMap,
+                        $actualOutputQty,
+                        Arr::get($payload, 'variance_reason')
+                    );
+                    $this->lockInventoryRows($tenantId, (string) $batch->location_id, $inputs, $output);
 
-                $outputUnitCost = $totalInputCost > 0 ? ($totalInputCost / $totalOutputQty) : 0.0;
-                $observabilityContext['unit_cost_result'] = $outputUnitCost;
+                    $ledgerRows = [];
+                    $totalInputCost = Decimal::cost('0');
 
-                foreach ($outputs as $item) {
-                    $qty = (float) $item->qty;
+                    foreach ($inputs as $item) {
+                        $actualQty = Decimal::qty($actualInputMap[$this->itemKey((string) $item->product_id, $item->product_variant_id ? (string) $item->product_variant_id : null)] ?? 0);
+                        $productVariantId = $item->product_variant_id ? (string) $item->product_variant_id : null;
 
-                    DB::table('inventory_balances')->insertOrIgnore([
-                        'tenant_id' => $tenantId,
-                        'product_id' => $item->product_id,
-                        'location_id' => $batch->location_id,
-                        'qty_on_hand' => 0,
-                    ]);
+                        if (Decimal::compare($actualQty, '0') > 0) {
+                            $affected = $this->decrementInventory(
+                                $tenantId,
+                                (string) $item->product_id,
+                                $productVariantId,
+                                (string) $batch->location_id,
+                                Decimal::float($actualQty, Decimal::QTY_SCALE)
+                            );
 
-                    DB::update(
-                        'UPDATE inventory_balances SET qty_on_hand = qty_on_hand + ? WHERE tenant_id = ? AND product_id = ? AND location_id = ?',
-                        [$qty, $tenantId, $item->product_id, $batch->location_id]
+                            if ($affected === 0) {
+                                app(AnomalyService::class)->raise(
+                                    tenantId: $tenantId,
+                                    severity: 'high',
+                                    type: 'negative_stock_attempt',
+                                    payload: [
+                                        'source' => 'production_batch_post',
+                                        'batch_id' => $batch->id,
+                                        'product_id' => $item->product_id,
+                                        'product_variant_id' => $productVariantId,
+                                        'location_id' => $batch->location_id,
+                                        'requested_qty' => Decimal::float($actualQty, Decimal::QTY_SCALE),
+                                    ],
+                                    referenceId: $batch->id
+                                );
+
+                                throw new RuntimeException('Stok bahan baku tidak mencukupi.');
+                            }
+
+                            $valuation = $valuationService->issue(
+                                tenantId: $tenantId,
+                                productId: (string) $item->product_id,
+                                productVariantId: $productVariantId,
+                                locationId: (string) $batch->location_id,
+                                qty: Decimal::float($actualQty, Decimal::QTY_SCALE),
+                                referenceType: 'production_batch',
+                                referenceId: (string) $batch->id,
+                                referenceItemId: (string) $item->id,
+                                at: $now
+                            );
+
+                            $unitCost = Decimal::cost($valuation['unit_cost']);
+                            $totalCost = Decimal::cost($valuation['total_cost']);
+                            $totalInputCost = Decimal::add($totalInputCost, $totalCost, Decimal::COST_SCALE);
+
+                            $balanceAfter = Decimal::qty($this->inventoryBalanceQuery(
+                                tenantId: $tenantId,
+                                productId: (string) $item->product_id,
+                                productVariantId: $productVariantId,
+                                locationId: (string) $batch->location_id,
+                            )->value('qty_on_hand'));
+
+                            $ledgerRows[] = [
+                                'id' => (string) Str::uuid(),
+                                'tenant_id' => $tenantId,
+                                'product_id' => $item->product_id,
+                                'product_variant_id' => $productVariantId,
+                                'location_id' => $batch->location_id,
+                                'reference_type' => 'production_batch',
+                                'reference_id' => $batch->id,
+                                'reference_item_id' => $item->id,
+                                'qty_in' => 0,
+                                'qty_out' => Decimal::float($actualQty, Decimal::QTY_SCALE),
+                                'balance_after' => Decimal::float($balanceAfter, Decimal::QTY_SCALE),
+                                'unit_cost' => Decimal::float($unitCost, Decimal::COST_SCALE),
+                                'total_cost' => Decimal::float($totalCost, Decimal::COST_SCALE),
+                                'created_at' => $now,
+                                'created_by' => $userId,
+                            ];
+
+                            $item->unit_cost_snapshot = Decimal::float($unitCost, Decimal::COST_SCALE);
+                        } else {
+                            $item->unit_cost_snapshot = 0;
+                        }
+
+                        $item->actual_qty = Decimal::float($actualQty, Decimal::QTY_SCALE);
+                        $item->qty = Decimal::float($actualQty, Decimal::QTY_SCALE);
+                        $item->updated_at = $now;
+                        $item->save();
+                    }
+
+                    $observabilityContext['total_input_cost'] = Decimal::float($totalInputCost, Decimal::COST_SCALE);
+                    $observabilityContext['output_qty'] = Decimal::float($actualOutputQty, Decimal::QTY_SCALE);
+
+                    $outputUnitCost = Decimal::compare($totalInputCost, '0') > 0
+                        ? Decimal::divide($totalInputCost, $actualOutputQty, Decimal::COST_SCALE)
+                        : Decimal::cost('0');
+                    $observabilityContext['unit_cost_result'] = Decimal::float($outputUnitCost, Decimal::COST_SCALE);
+
+                    $outputVariantId = $output->product_variant_id ? (string) $output->product_variant_id : null;
+                    $this->ensureInventoryBalanceBucket($tenantId, (string) $output->product_id, $outputVariantId, (string) $batch->location_id);
+                    $this->incrementInventory(
+                        $tenantId,
+                        (string) $output->product_id,
+                        $outputVariantId,
+                        (string) $batch->location_id,
+                        Decimal::float($actualOutputQty, Decimal::QTY_SCALE)
                     );
 
                     $valuationService->receive(
                         tenantId: $tenantId,
-                        productId: $item->product_id,
-                        locationId: $batch->location_id,
-                        qty: $qty,
-                        unitCost: $outputUnitCost,
-                        sourceType: 'production_output',
-                        sourceId: $batch->id,
+                        productId: (string) $output->product_id,
+                        productVariantId: $outputVariantId,
+                        locationId: (string) $batch->location_id,
+                        qty: Decimal::float($actualOutputQty, Decimal::QTY_SCALE),
+                        unitCost: Decimal::float($outputUnitCost, Decimal::COST_SCALE),
+                        sourceType: 'production_batch',
+                        sourceId: (string) $batch->id,
+                        sourceItemId: (string) $output->id,
                         at: $now
                     );
 
-                    $item->update([
-                        'unit_cost_snapshot' => $outputUnitCost,
-                    ]);
-
-                    $balanceAfter = (float) InventoryBalance::query()
-                        ->where('tenant_id', $tenantId)
-                        ->where('product_id', $item->product_id)
-                        ->where('location_id', $batch->location_id)
-                        ->value('qty_on_hand');
+                    $outputBalanceAfter = Decimal::qty($this->inventoryBalanceQuery(
+                        tenantId: $tenantId,
+                        productId: (string) $output->product_id,
+                        productVariantId: $outputVariantId,
+                        locationId: (string) $batch->location_id,
+                    )->value('qty_on_hand'));
 
                     $ledgerRows[] = [
                         'id' => (string) Str::uuid(),
                         'tenant_id' => $tenantId,
-                        'product_id' => $item->product_id,
+                        'product_id' => $output->product_id,
+                        'product_variant_id' => $outputVariantId,
                         'location_id' => $batch->location_id,
-                        'reference_type' => 'production_output',
+                        'reference_type' => 'production_batch',
                         'reference_id' => $batch->id,
-                        'reference_item_id' => $item->id,
-                        'qty_in' => $qty,
+                        'reference_item_id' => $output->id,
+                        'qty_in' => Decimal::float($actualOutputQty, Decimal::QTY_SCALE),
                         'qty_out' => 0,
-                        'balance_after' => $balanceAfter,
-                        'unit_cost' => $outputUnitCost,
-                        'total_cost' => ($outputUnitCost * $qty),
+                        'balance_after' => Decimal::float($outputBalanceAfter, Decimal::QTY_SCALE),
+                        'unit_cost' => Decimal::float($outputUnitCost, Decimal::COST_SCALE),
+                        'total_cost' => Decimal::float(Decimal::multiply($outputUnitCost, $actualOutputQty, Decimal::COST_SCALE), Decimal::COST_SCALE),
                         'created_at' => $now,
                         'created_by' => $userId,
                     ];
-                }
 
-                StockLedger::query()->insert($ledgerRows);
+                    $output->actual_qty = Decimal::float($actualOutputQty, Decimal::QTY_SCALE);
+                    $output->qty = Decimal::float($actualOutputQty, Decimal::QTY_SCALE);
+                    $output->unit_cost_snapshot = Decimal::float($outputUnitCost, Decimal::COST_SCALE);
+                    $output->updated_at = $now;
+                    $output->save();
 
-                $batch->update([
-                    'status' => ProductionBatch::STATUS_POSTED,
-                    'posted_at' => $now,
-                    'posted_by' => $userId,
-                    'transaction_date' => $transactionDate->toDateString(),
-                ]);
+                    StockLedger::query()->insert($ledgerRows);
 
-                Log::info('production.batch.posted', $observabilityContext);
-            });
-        } catch (Throwable $exception) {
-            Log::warning('production.batch.failed', array_merge($observabilityContext, [
-                'stage' => 'post',
-                'error' => $exception->getMessage(),
-                'exception' => class_basename($exception),
-            ]));
+                    $expectedOutputQty = Decimal::qty($batch->expected_output_qty);
+                    $yieldVarianceQty = Decimal::subtract($actualOutputQty, $expectedOutputQty, Decimal::QTY_SCALE);
+                    $yieldVariancePct = Decimal::compare($expectedOutputQty, '0') > 0
+                        ? Decimal::divide(
+                            Decimal::multiply($yieldVarianceQty, Decimal::qty('100'), Decimal::QTY_SCALE),
+                            $expectedOutputQty,
+                            4
+                        )
+                        : '0';
 
-            throw $exception;
-        }
+                    $batch->actual_output_qty = Decimal::float($actualOutputQty, Decimal::QTY_SCALE);
+                    $batch->yield_variance_qty = Decimal::float($yieldVarianceQty, Decimal::QTY_SCALE);
+                    $batch->yield_variance_pct = Decimal::float($yieldVariancePct, 4);
+                    $batch->variance_reason = $payload['variance_reason'] ?? null;
+                    $batch->status = ProductionBatch::STATUS_POSTED;
+                    $batch->posted_by = $userId;
+                    $batch->posted_at = $now;
+                    $batch->updated_at = $now;
+                    $batch->transaction_date = $transactionDate->toDateString();
+                    $batch->idempotency_key = $idempotencyKey;
+                    $batch->save();
+
+                    $freshBatch = $batch->fresh();
+                    $freshInputs = $inputs->fresh();
+                    $freshOutput = $output->fresh();
+
+                    $this->raiseYieldVarianceAnomalyIfNeeded($freshBatch, $tenantId, $freshInputs, $freshOutput);
+
+                    $this->logBatchAudit(
+                        event: 'production_batch.posted',
+                        tenantId: $tenantId,
+                        actorId: $userId,
+                        batchId: (string) $batch->id,
+                        payload: $this->postAuditSnapshot($freshBatch, $freshInputs, $freshOutput, $idempotencyKey),
+                        occurredAt: $now
+                    );
+
+                    Log::info('production.batch.posted', $observabilityContext);
+
+                    return $this->serializePostResult($freshBatch, false);
+                });
+            } catch (Throwable $exception) {
+                Log::warning('production.batch.failed', array_merge($observabilityContext, [
+                    'stage' => 'post',
+                    'error' => $exception->getMessage(),
+                    'exception' => class_basename($exception),
+                ]));
+
+                throw $exception;
+            }
+        });
+
+        return [
+            ...$result['value'],
+            'idempotent' => (bool) ($result['replayed'] || ($result['value']['idempotent'] ?? false)),
+        ];
     }
 
-    private function ensureRequiredLinesPresent(array $payload): void
+    private function loadLocation(string $tenantId, string $branchId, string $locationId): Location
     {
-        if (empty($payload['inputs']) || empty($payload['outputs'])) {
-            throw new RuntimeException('Batch produksi harus memiliki input dan output.');
+        $location = Location::query()
+            ->where('tenant_id', $tenantId)
+            ->where('branch_id', $branchId)
+            ->where('id', $locationId)
+            ->first();
+
+        if (! $location) {
+            throw ValidationException::withMessages([
+                'location_id' => 'Location tidak valid untuk branch dan tenant aktif.',
+            ]);
         }
+
+        return $location;
     }
 
-    private function loadProducts(string $tenantId, array $productIds): Collection
+    private function loadBatchProduct(string $tenantId, string $productId): Product
+    {
+        $product = Product::query()
+            ->where('tenant_id', $tenantId)
+            ->where('id', $productId)
+            ->first();
+
+        if (! $product) {
+            throw ValidationException::withMessages([
+                'product_id' => 'Produk tidak ditemukan untuk tenant aktif.',
+            ]);
+        }
+
+        if (! $product->is_active) {
+            throw ValidationException::withMessages([
+                'product_id' => 'Produk batch production harus aktif.',
+            ]);
+        }
+
+        if ((string) ($product->production_mode ?? Product::PRODUCTION_MODE_NONE) !== Product::PRODUCTION_MODE_BATCH) {
+            throw ValidationException::withMessages([
+                'product_id' => 'Produk harus menggunakan production_mode batch_production.',
+            ]);
+        }
+
+        $resolvedType = ProductItemTypeMapper::resolve(
+            $product->item_type,
+            (string) ($product->product_mode ?? 'default')
+        );
+
+        if ($resolvedType !== 'finished_good' || ! $product->track_stock) {
+            throw ValidationException::withMessages([
+                'product_id' => 'Produk batch production harus finished_good dan track_stock aktif.',
+            ]);
+        }
+
+        return $product;
+    }
+
+    private function normalizeRecipeLines(Product $product): array
+    {
+        $recipeLines = collect(Arr::wrap($product->bom_items))
+            ->filter(fn ($line) => is_array($line) && ! empty($line['product_id']))
+            ->map(function (array $line) {
+                return [
+                    'product_id' => (string) $line['product_id'],
+                    'product_variant_id' => Arr::get($line, 'product_variant_id'),
+                    'qty' => Decimal::qty($line['qty'] ?? 0),
+                    'unit' => Arr::get($line, 'unit'),
+                    'uom' => Arr::get($line, 'uom'),
+                ];
+            })
+            ->filter(fn (array $line) => Decimal::compare($line['qty'], '0') > 0)
+            ->values();
+
+        if ($recipeLines->isEmpty()) {
+            throw ValidationException::withMessages([
+                'product_id' => 'Recipe aktif tidak ditemukan untuk produk batch production.',
+            ]);
+        }
+
+        $products = $this->loadProductsForRecipe((string) $product->tenant_id, $recipeLines->pluck('product_id')->all());
+
+        foreach ($recipeLines as $index => $line) {
+            $recipeProduct = $products->get($line['product_id']);
+            $resolvedType = ProductItemTypeMapper::resolve(
+                $recipeProduct?->item_type,
+                (string) ($recipeProduct?->product_mode ?? 'default')
+            );
+
+            if ($resolvedType !== 'raw_material') {
+                throw ValidationException::withMessages([
+                    'product_id' => 'Semua input recipe batch production harus bertipe raw_material.',
+                ]);
+            }
+
+            if (! empty($line['product_variant_id'])) {
+                $this->resolveVariantId((string) $product->tenant_id, $line['product_id'], (string) $line['product_variant_id']);
+            } elseif ($this->productHasVariants((string) $product->tenant_id, $line['product_id'])) {
+                throw ValidationException::withMessages([
+                    'product_id' => sprintf('Recipe input index %d wajib menyimpan product_variant_id.', $index),
+                ]);
+            }
+        }
+
+        return $recipeLines->all();
+    }
+
+    private function loadProductsForRecipe(string $tenantId, array $productIds): Collection
     {
         $products = Product::query()
             ->where('tenant_id', $tenantId)
@@ -354,29 +761,507 @@ class ProductionBatchService
             ->get(['id', 'item_type', 'product_mode'])
             ->keyBy('id');
 
-        if ($products->count() !== count($productIds)) {
-            throw new RuntimeException('Produk tidak ditemukan untuk tenant aktif.');
+        if ($products->count() !== count(array_unique($productIds))) {
+            throw ValidationException::withMessages([
+                'product_id' => 'Komponen recipe tidak ditemukan untuk tenant aktif.',
+            ]);
         }
 
         return $products;
     }
 
-    private function assertLineItemTypes(Collection $products, array $lines, string $expectedItemType, string $label): void
+    private function resolveVariantId(string $tenantId, string $productId, ?string $variantId): ?string
     {
+        if ($variantId) {
+            $exists = DB::table('product_variants')
+                ->where('tenant_id', $tenantId)
+                ->where('id', $variantId)
+                ->where('product_id', $productId)
+                ->exists();
+
+            if (! $exists) {
+                throw new RuntimeException('Varian produk batch produksi tidak valid.');
+            }
+
+            return $variantId;
+        }
+
+        $hasVariants = DB::table('product_variants')
+            ->where('tenant_id', $tenantId)
+            ->where('product_id', $productId)
+            ->exists();
+
+        if ($hasVariants) {
+            throw new RuntimeException('Produk varian memerlukan product_variant_id pada production batch.');
+        }
+
+        return null;
+    }
+
+    private function productHasVariants(string $tenantId, string $productId): bool
+    {
+        return DB::table('product_variants')
+            ->where('tenant_id', $tenantId)
+            ->where('product_id', $productId)
+            ->exists();
+    }
+
+    private function normalizeActualInputs(array $inputs): array
+    {
+        $normalized = [];
+
+        foreach ($inputs as $index => $input) {
+            $productId = (string) ($input['product_id'] ?? '');
+            $productVariantId = isset($input['product_variant_id']) && $input['product_variant_id'] !== ''
+                ? (string) $input['product_variant_id']
+                : null;
+
+            if ($productId === '') {
+                throw ValidationException::withMessages([
+                    "inputs.$index.product_id" => 'Product input wajib diisi.',
+                ]);
+            }
+
+            $qty = Decimal::qty($input['actual_qty'] ?? 0);
+            if (Decimal::compare($qty, '0') < 0) {
+                throw ValidationException::withMessages([
+                    "inputs.$index.actual_qty" => 'Qty input aktual tidak boleh negatif.',
+                ]);
+            }
+
+            $key = $this->itemKey($productId, $productVariantId);
+            if (array_key_exists($key, $normalized)) {
+                throw ValidationException::withMessages([
+                    "inputs.$index.product_id" => 'Input aktual duplikat terdeteksi.',
+                ]);
+            }
+
+            $normalized[$key] = Decimal::float($qty, Decimal::QTY_SCALE);
+        }
+
+        return $normalized;
+    }
+
+    private function normalizePlannedInputs(array $inputs): array
+    {
+        $normalized = [];
+
+        foreach ($inputs as $index => $input) {
+            $productId = (string) ($input['product_id'] ?? '');
+            $productVariantId = isset($input['product_variant_id']) && $input['product_variant_id'] !== ''
+                ? (string) $input['product_variant_id']
+                : null;
+
+            if ($productId === '') {
+                throw ValidationException::withMessages([
+                    "inputs.$index.product_id" => 'Product input wajib diisi.',
+                ]);
+            }
+
+            $qty = Decimal::qty($input['planned_qty'] ?? 0);
+            if (Decimal::compare($qty, '0') <= 0) {
+                throw ValidationException::withMessages([
+                    "inputs.$index.planned_qty" => 'Planned qty input harus lebih dari 0.',
+                ]);
+            }
+
+            $key = $this->itemKey($productId, $productVariantId);
+            if (array_key_exists($key, $normalized)) {
+                throw ValidationException::withMessages([
+                    "inputs.$index.product_id" => 'Input draft duplikat terdeteksi.',
+                ]);
+            }
+
+            $normalized[$key] = Decimal::float($qty, Decimal::QTY_SCALE);
+        }
+
+        return $normalized;
+    }
+
+    private function validateDraftInputKeys(Collection $inputs, array $plannedInputMap, string $field): void
+    {
+        $expectedKeys = $inputs
+            ->map(fn (ProductionBatchItem $item) => $this->itemKey((string) $item->product_id, $item->product_variant_id ? (string) $item->product_variant_id : null))
+            ->values()
+            ->all();
+        $actualKeys = array_keys($plannedInputMap);
+
+        sort($expectedKeys);
+        sort($actualKeys);
+
+        if ($expectedKeys !== $actualKeys) {
+            throw ValidationException::withMessages([
+                $field => 'Input draft harus persis sama dengan snapshot batch.',
+            ]);
+        }
+    }
+
+    private function assertDraftMutable(ProductionBatch $batch): void
+    {
+        if ($batch->status !== ProductionBatch::STATUS_DRAFT) {
+            throw ValidationException::withMessages([
+                'batch' => 'Batch draft sudah tidak bisa diubah atau dibatalkan.',
+            ]);
+        }
+    }
+
+    private function normalizeCancelReason(mixed $value): string
+    {
+        $reason = trim((string) $value);
+
+        if ($reason === '') {
+            throw ValidationException::withMessages([
+                'cancel_reason' => 'Cancel reason wajib diisi saat membatalkan draft batch.',
+            ]);
+        }
+
+        if (mb_strlen($reason) > 2000) {
+            throw ValidationException::withMessages([
+                'cancel_reason' => 'Cancel reason maksimal 2000 karakter.',
+            ]);
+        }
+
+        return $reason;
+    }
+
+    private function validatePostPayload(
+        ProductionBatch $batch,
+        Collection $inputs,
+        ProductionBatchItem $output,
+        array $actualInputMap,
+        string $actualOutputQty,
+        ?string $varianceReason = null
+    ): void {
+        if ($batch->product_id === null || $batch->branch_id === null || $batch->location_id === null) {
+            throw ValidationException::withMessages([
+                'batch' => 'Batch tidak valid untuk dipost.',
+            ]);
+        }
+
+        if (Decimal::compare($actualOutputQty, '0') <= 0) {
+            throw ValidationException::withMessages([
+                'actual_output_qty' => 'Actual output qty harus lebih dari 0.',
+            ]);
+        }
+
+        if ($inputs->isEmpty()) {
+            throw ValidationException::withMessages([
+                'inputs' => 'Batch harus memiliki minimal satu input.',
+            ]);
+        }
+
+        $expectedKeys = $inputs
+            ->map(fn (ProductionBatchItem $item) => $this->itemKey((string) $item->product_id, $item->product_variant_id ? (string) $item->product_variant_id : null))
+            ->values()
+            ->all();
+        $actualKeys = array_keys($actualInputMap);
+
+        sort($expectedKeys);
+        sort($actualKeys);
+
+        if ($expectedKeys !== $actualKeys) {
+            throw ValidationException::withMessages([
+                'inputs' => 'Input aktual harus persis sama dengan draft batch.',
+            ]);
+        }
+
+        if ($output->product_id !== $batch->product_id) {
+            throw ValidationException::withMessages([
+                'batch' => 'Output batch tidak konsisten dengan produk header.',
+            ]);
+        }
+
+        if ($this->yieldVarianceExceedsAlertThreshold((float) ($batch->expected_output_qty ?? 0), Decimal::float($actualOutputQty, Decimal::QTY_SCALE))
+            && trim((string) $varianceReason) === '') {
+            throw ValidationException::withMessages([
+                'variance_reason' => 'Variance reason wajib diisi saat yield variance menyentuh threshold monitoring.',
+            ]);
+        }
+    }
+
+    private function lockInventoryRows(string $tenantId, string $locationId, Collection $inputs, ProductionBatchItem $output): void
+    {
+        $lines = $inputs->push($output)
+            ->map(fn (ProductionBatchItem $item) => [
+                'product_id' => (string) $item->product_id,
+                'product_variant_id' => $item->product_variant_id ? (string) $item->product_variant_id : null,
+            ])
+            ->unique(fn (array $line) => $this->itemKey($line['product_id'], $line['product_variant_id']))
+            ->values();
+
         foreach ($lines as $line) {
-            $product = $products->get($line['product_id']);
-            $resolvedType = ProductItemTypeMapper::resolve(
-                $product?->item_type,
-                (string) ($product?->product_mode ?? 'default')
+            $this->inventoryBalanceQuery(
+                tenantId: $tenantId,
+                productId: $line['product_id'],
+                productVariantId: $line['product_variant_id'],
+                locationId: $locationId,
+            )->lockForUpdate()->get();
+
+            DB::table('inventory_cost_states')
+                ->where('tenant_id', $tenantId)
+                ->where('product_id', $line['product_id'])
+                ->where('location_id', $locationId)
+                ->when($line['product_variant_id'], function ($query, $variantId) {
+                    $query->where('product_variant_id', $variantId);
+                }, function ($query) {
+                    $query->whereNull('product_variant_id');
+                })
+                ->lockForUpdate()
+                ->get();
+        }
+    }
+
+    private function inventoryBalanceQuery(string $tenantId, string $productId, ?string $productVariantId, string $locationId)
+    {
+        return InventoryBalance::query()
+            ->where('tenant_id', $tenantId)
+            ->where('product_id', $productId)
+            ->where('location_id', $locationId)
+            ->when($productVariantId, function ($query) use ($productVariantId) {
+                $query->where('product_variant_id', $productVariantId);
+            }, function ($query) {
+                $query->whereNull('product_variant_id');
+            });
+    }
+
+    private function itemKey(string $productId, ?string $productVariantId): string
+    {
+        return $productId.'|'.($productVariantId ?? 'null');
+    }
+
+    private function logBatchAudit(
+        string $event,
+        string $tenantId,
+        ?string $actorId,
+        string $batchId,
+        array $payload,
+        ?CarbonImmutable $occurredAt = null
+    ): void {
+        app(AuditLogger::class)->log(
+            event: $event,
+            actorId: $actorId,
+            referenceType: 'production_batch',
+            referenceId: $batchId,
+            payload: $payload,
+            ipAddress: request()?->ip(),
+            userAgent: request()?->userAgent(),
+            tenantId: $tenantId,
+            occurredAt: $occurredAt
+        );
+    }
+
+    private function draftAuditSnapshot(ProductionBatch $batch, Collection $inputs, ProductionBatchItem $output): array
+    {
+        return [
+            'transaction_date' => optional($batch->transaction_date)?->format('Y-m-d'),
+            'expected_output_qty' => (float) ($batch->expected_output_qty ?? 0),
+            'recipe_version' => (int) ($batch->recipe_version ?? 0),
+            'reference_no' => $batch->reference_no,
+            'notes' => $batch->notes,
+            'variance_reason' => $batch->variance_reason,
+            'cancel_reason' => $batch->cancel_reason,
+            'product_variant_id' => $batch->product_variant_id,
+            'input_count' => $inputs->count(),
+            'input_planned_qty_total' => (float) $inputs->sum(fn (ProductionBatchItem $item) => (float) ($item->planned_qty ?? 0)),
+            'inputs' => $inputs->map(fn (ProductionBatchItem $item) => [
+                'product_id' => (string) $item->product_id,
+                'product_variant_id' => $item->product_variant_id,
+                'planned_qty' => (float) ($item->planned_qty ?? 0),
+            ])->values()->all(),
+            'output' => [
+                'product_id' => (string) $output->product_id,
+                'product_variant_id' => $output->product_variant_id,
+                'planned_qty' => (float) ($output->planned_qty ?? 0),
+            ],
+        ];
+    }
+
+    private function postAuditSnapshot(ProductionBatch $batch, Collection $inputs, ProductionBatchItem $output, string $idempotencyKey): array
+    {
+        $totalInputCost = $inputs->sum(function (ProductionBatchItem $item) {
+            return (float) ($item->actual_qty ?? 0) * (float) ($item->unit_cost_snapshot ?? 0);
+        });
+
+        return [
+            'status' => (string) $batch->status,
+            'transaction_date' => optional($batch->transaction_date)?->format('Y-m-d'),
+            'expected_output_qty' => (float) ($batch->expected_output_qty ?? 0),
+            'actual_output_qty' => (float) ($batch->actual_output_qty ?? 0),
+            'yield_variance_qty' => (float) ($batch->yield_variance_qty ?? 0),
+            'yield_variance_pct' => (float) ($batch->yield_variance_pct ?? 0),
+            'reference_no' => $batch->reference_no,
+            'notes' => $batch->notes,
+            'variance_reason' => $batch->variance_reason,
+            'cancel_reason' => $batch->cancel_reason,
+            'idempotency_key' => $idempotencyKey,
+            'input_count' => $inputs->count(),
+            'input_actual_qty_total' => (float) $inputs->sum(fn (ProductionBatchItem $item) => (float) ($item->actual_qty ?? 0)),
+            'total_input_cost' => $totalInputCost,
+            'output' => [
+                'product_id' => (string) $output->product_id,
+                'product_variant_id' => $output->product_variant_id,
+                'actual_qty' => (float) ($output->actual_qty ?? 0),
+                'unit_cost_snapshot' => (float) ($output->unit_cost_snapshot ?? 0),
+            ],
+        ];
+    }
+
+    private function raiseYieldVarianceAnomalyIfNeeded(
+        ProductionBatch $batch,
+        string $tenantId,
+        Collection $inputs,
+        ProductionBatchItem $output
+    ): void {
+        [$pctThreshold, $qtyThreshold] = $this->yieldVarianceThresholds();
+
+        if (! $this->yieldVarianceExceedsAlertThreshold(
+            (float) ($batch->expected_output_qty ?? 0),
+            (float) ($batch->actual_output_qty ?? 0)
+        )) {
+            return;
+        }
+
+        $severity = strtolower((string) config('services.anomaly.production_batch_yield_variance_severity', 'high'));
+        if (! in_array($severity, ['low', 'med', 'high', 'critical'], true)) {
+            $severity = 'high';
+        }
+
+        app(AnomalyService::class)->raise(
+            tenantId: $tenantId,
+            severity: $severity,
+            type: 'production_batch_yield_variance',
+            payload: [
+                'source' => 'production_batch_post',
+                'batch_id' => (string) $batch->id,
+                'branch_id' => (string) $batch->branch_id,
+                'location_id' => (string) $batch->location_id,
+                'product_id' => (string) $batch->product_id,
+                'product_variant_id' => $batch->product_variant_id ? (string) $batch->product_variant_id : null,
+                'reference_no' => $batch->reference_no,
+                'transaction_date' => optional($batch->transaction_date)?->format('Y-m-d'),
+                'expected_output_qty' => (float) ($batch->expected_output_qty ?? 0),
+                'actual_output_qty' => (float) ($batch->actual_output_qty ?? 0),
+                'yield_variance_qty' => (float) ($batch->yield_variance_qty ?? 0),
+                'yield_variance_pct' => (float) ($batch->yield_variance_pct ?? 0),
+                'variance_reason' => $batch->variance_reason,
+                'input_count' => $inputs->count(),
+                'input_actual_qty_total' => (float) $inputs->sum(fn (ProductionBatchItem $item) => (float) ($item->actual_qty ?? 0)),
+                'output_unit_cost' => (float) ($output->unit_cost_snapshot ?? 0),
+                'threshold_pct' => $pctThreshold,
+                'threshold_qty' => $qtyThreshold,
+            ],
+            referenceId: (string) $batch->id
+        );
+    }
+
+    private function yieldVarianceThresholds(): array
+    {
+        return [
+            max(0.0, (float) config('services.anomaly.production_batch_yield_variance_pct_threshold', 10)),
+            max(0.0, (float) config('services.anomaly.production_batch_yield_variance_qty_threshold', 1)),
+        ];
+    }
+
+    private function yieldVarianceExceedsAlertThreshold(float $expectedOutputQty, float $actualOutputQty): bool
+    {
+        [$pctThreshold, $qtyThreshold] = $this->yieldVarianceThresholds();
+        $varianceQty = abs($actualOutputQty - $expectedOutputQty);
+        $variancePct = $expectedOutputQty > 0
+            ? abs((($actualOutputQty - $expectedOutputQty) * 100) / $expectedOutputQty)
+            : 0.0;
+
+        return $varianceQty >= $qtyThreshold || $variancePct >= $pctThreshold;
+    }
+
+    private function idempotencyCacheKey(string $tenantId, string $batchId, string $idempotencyKey): string
+    {
+        return 'production_batch:post:'.sha1($tenantId.'|'.$batchId.'|'.$idempotencyKey);
+    }
+
+    private function serializePostResult(ProductionBatch $batch, bool $idempotent): array
+    {
+        return [
+            'batch_id' => (string) $batch->id,
+            'status' => (string) $batch->status,
+            'posted_at' => optional($batch->posted_at)->toISOString(),
+            'actual_output_qty' => (float) ($batch->actual_output_qty ?? 0),
+            'yield_variance_qty' => (float) ($batch->yield_variance_qty ?? 0),
+            'yield_variance_pct' => (float) ($batch->yield_variance_pct ?? 0),
+            'idempotent' => $idempotent,
+        ];
+    }
+
+    private function serializeDraftResult(ProductionBatch $batch, Collection $inputs, ProductionBatchItem $output): array
+    {
+        return [
+            'batch_id' => (string) $batch->id,
+            'status' => (string) $batch->status,
+            'transaction_date' => optional($batch->transaction_date)?->format('Y-m-d'),
+            'expected_output_qty' => (float) ($batch->expected_output_qty ?? 0),
+            'recipe_version' => (int) ($batch->recipe_version ?? 0),
+            'reference_no' => $batch->reference_no,
+            'notes' => $batch->notes,
+            'product_variant_id' => $batch->product_variant_id,
+            'inputs' => $inputs->map(fn (ProductionBatchItem $item) => [
+                'id' => (string) $item->id,
+                'product_id' => (string) $item->product_id,
+                'product_variant_id' => $item->product_variant_id,
+                'planned_qty' => (float) ($item->planned_qty ?? 0),
+                'uom' => $item->uom,
+            ])->values()->all(),
+            'output' => [
+                'id' => (string) $output->id,
+                'product_id' => (string) $output->product_id,
+                'product_variant_id' => $output->product_variant_id,
+                'planned_qty' => (float) ($output->planned_qty ?? 0),
+            ],
+        ];
+    }
+
+    private function decrementInventory(string $tenantId, string $productId, ?string $productVariantId, string $locationId, float $qty): int
+    {
+        if ($productVariantId) {
+            return DB::update(
+                'UPDATE inventory_balances SET qty_on_hand = qty_on_hand - ? WHERE tenant_id = ? AND product_id = ? AND product_variant_id = ? AND location_id = ? AND qty_on_hand >= ?',
+                [$qty, $tenantId, $productId, $productVariantId, $locationId, $qty]
+            );
+        }
+
+        return DB::update(
+            'UPDATE inventory_balances SET qty_on_hand = qty_on_hand - ? WHERE tenant_id = ? AND product_id = ? AND location_id = ? AND product_variant_id IS NULL AND qty_on_hand >= ?',
+            [$qty, $tenantId, $productId, $locationId, $qty]
+        );
+    }
+
+    private function ensureInventoryBalanceBucket(string $tenantId, string $productId, ?string $productVariantId, string $locationId): void
+    {
+        InventoryBalance::query()->firstOrCreate(
+            [
+                'tenant_id' => $tenantId,
+                'product_id' => $productId,
+                'product_variant_id' => $productVariantId,
+                'location_id' => $locationId,
+            ],
+            [
+                'qty_on_hand' => 0,
+            ]
+        );
+    }
+
+    private function incrementInventory(string $tenantId, string $productId, ?string $productVariantId, string $locationId, float $qty): void
+    {
+        if ($productVariantId) {
+            DB::update(
+                'UPDATE inventory_balances SET qty_on_hand = qty_on_hand + ? WHERE tenant_id = ? AND product_id = ? AND product_variant_id = ? AND location_id = ?',
+                [$qty, $tenantId, $productId, $productVariantId, $locationId]
             );
 
-            if ($resolvedType !== $expectedItemType) {
-                throw new RuntimeException(sprintf(
-                    'Produk %s harus bertipe %s.',
-                    $label,
-                    $expectedItemType
-                ));
-            }
+            return;
         }
+
+        DB::update(
+            'UPDATE inventory_balances SET qty_on_hand = qty_on_hand + ? WHERE tenant_id = ? AND product_id = ? AND location_id = ? AND product_variant_id IS NULL',
+            [$qty, $tenantId, $productId, $locationId]
+        );
     }
 }
