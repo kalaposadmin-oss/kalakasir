@@ -1,0 +1,894 @@
+@extends('layouts.app')
+
+@php
+    $productionBatchDetailTenant = \App\Support\TenantContext::get();
+    $productionBatchDetailUser = auth()->user();
+    $productionBatchDetailRole = null;
+
+    if (! $productionBatchDetailTenant && filled($productionBatchDetailUser?->tenant_id)) {
+        $productionBatchDetailTenant = \App\Models\Tenant::query()->find($productionBatchDetailUser->tenant_id);
+    }
+
+    if ($productionBatchDetailTenant && $productionBatchDetailUser) {
+        $productionBatchDetailRole = app(\App\Services\UserRoleResolverService::class)
+            ->resolveNormalizedRole((string) $productionBatchDetailTenant->id, (string) $productionBatchDetailUser->id);
+
+        if (! $productionBatchDetailRole && filled($productionBatchDetailUser->role ?? null)) {
+            $productionBatchDetailRole = app(\App\Services\UserRoleResolverService::class)
+                ->normalize((string) $productionBatchDetailUser->role);
+        }
+    }
+
+    abort_unless(in_array($productionBatchDetailRole, ['warehouse', 'supervisor', 'admin', 'owner', 'superadmin'], true), 403);
+
+    $resolvedBatchId = (string) ($batchId ?? request()->route('batch', request()->query('batch_id', '')));
+    $productionBatchCurrentPath = $currentPath ?? '/backoffice/inventory/production-batches/'.$resolvedBatchId;
+    $productionBatchDetailBackUrl = $backUrl ?? '/backoffice/inventory/production-batches';
+    $productionBatchDetailCanViewObservability = in_array($productionBatchDetailRole, ['admin', 'owner', 'superadmin'], true);
+    $productionBatchDetailCanResolveAnomaly = in_array($productionBatchDetailRole, ['admin', 'owner'], true);
+    $productionBatchVariancePctThreshold = max(0, (float) config('services.anomaly.production_batch_yield_variance_pct_threshold', 10));
+    $productionBatchVarianceQtyThreshold = max(0, (float) config('services.anomaly.production_batch_yield_variance_qty_threshold', 1));
+@endphp
+
+@section('page_title', 'Detail Batch Produksi')
+@section('ui_mode', 'backoffice')
+@section('body_class', 'bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display')
+@section('main_class', 'flex-1 overflow-y-auto pb-8 lg:pl-72')
+
+@section('header')
+    <header class="sticky top-0 z-10 h-16 border-b border-slate-200 bg-white/95 px-4 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 lg:px-8 lg:pl-[336px]">
+        <div class="flex h-full items-center justify-between">
+            <div class="flex items-center gap-3 min-w-0">
+                <a href="{{ $productionBatchDetailBackUrl }}" class="flex items-center justify-center size-9 rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                    <span class="material-symbols-outlined text-[20px]">arrow_back_ios_new</span>
+                </a>
+                <div>
+                    <h2 class="text-base font-bold lg:text-lg">Detail Batch Produksi</h2>
+                    <p id="batch-detail-subtitle" class="hidden text-xs text-slate-500 lg:block">Memuat data batch...</p>
+                </div>
+            </div>
+            <a href="/backoffice/inventory/production-batches" class="flex items-center gap-2 rounded-full bg-slate-100 px-4 py-2 text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                <span class="material-symbols-outlined text-sm">list_alt</span>
+                Semua Batch
+            </a>
+        </div>
+    </header>
+@endsection
+
+@section('content')
+    <div class="mx-auto w-full max-w-5xl px-4 py-4 space-y-4 lg:px-8">
+        <section class="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                    <p id="batch-detail-reference" class="text-[11px] font-bold uppercase tracking-widest text-slate-400">Batch</p>
+                    <h3 id="batch-detail-product" class="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">-</h3>
+                    <p id="batch-detail-location" class="mt-2 text-sm text-slate-500">-</p>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <span id="batch-detail-status" class="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold uppercase text-slate-600">-</span>
+                    <span id="batch-detail-date" class="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold uppercase text-slate-600">-</span>
+                </div>
+            </div>
+            <div class="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <div class="rounded-2xl bg-slate-50 px-4 py-3 dark:bg-slate-950">
+                    <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Expected Output</p>
+                    <p id="batch-detail-expected-output" class="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">0</p>
+                </div>
+                <div class="rounded-2xl bg-slate-50 px-4 py-3 dark:bg-slate-950">
+                    <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Actual Output</p>
+                    <p id="batch-detail-actual-output" class="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">0</p>
+                </div>
+                <div class="rounded-2xl bg-slate-50 px-4 py-3 dark:bg-slate-950">
+                    <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Yield Variance</p>
+                    <p id="batch-detail-variance" class="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">0</p>
+                </div>
+                <div class="rounded-2xl bg-slate-50 px-4 py-3 dark:bg-slate-950">
+                    <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Recipe Version</p>
+                    <p id="batch-detail-recipe-version" class="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">0</p>
+                </div>
+            </div>
+
+            <div id="batch-detail-anomaly-banner" class="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-emerald-800">
+                <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                        <p class="text-[10px] font-bold uppercase tracking-widest text-emerald-700/80">Monitoring Alert</p>
+                        <h4 id="batch-detail-anomaly-status" class="mt-1 text-sm font-bold">Tidak ada alert batch yang terbuka.</h4>
+                        <p id="batch-detail-anomaly-meta" class="mt-1 text-sm text-emerald-700/90">Belum ada anomaly yield variance yang aktif untuk batch ini.</p>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <span id="batch-detail-anomaly-count" class="rounded-full bg-white/80 px-3 py-1 text-[11px] font-bold uppercase text-emerald-700">0 open alert</span>
+                        @if ($productionBatchDetailCanViewObservability)
+                            <a id="batch-detail-observability-link" href="/backoffice/settings/observability" class="inline-flex items-center gap-2 rounded-full border border-emerald-300 bg-white px-4 py-2 text-xs font-bold text-emerald-700">
+                                <span class="material-symbols-outlined text-sm">monitoring</span>
+                                Buka Observability
+                            </a>
+                        @endif
+                    </div>
+                </div>
+            </div>
+
+            <div id="batch-detail-actions" class="mt-5 hidden flex-wrap gap-3 border-t border-slate-100 pt-4 dark:border-slate-800">
+                <button id="batch-detail-edit-open" class="rounded-full border border-primary/20 bg-primary/10 px-4 py-2 text-sm font-bold text-primary" type="button">Edit Draft</button>
+                <button id="batch-detail-post-open" class="rounded-full bg-emerald-500 px-4 py-2 text-sm font-bold text-white" type="button">Post Batch</button>
+                <button id="batch-detail-cancel-open" class="rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-bold text-rose-600" type="button">Batalkan Draft</button>
+            </div>
+        </section>
+
+        <section class="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+            <div class="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
+                <div class="mb-4 flex items-center justify-between">
+                    <h3 class="text-sm font-bold text-slate-900 dark:text-slate-100">Input Bahan Baku</h3>
+                    <span id="batch-detail-input-count" class="text-xs font-bold uppercase tracking-widest text-slate-400">0 line</span>
+                </div>
+                <div id="batch-detail-inputs" class="space-y-3"></div>
+            </div>
+
+            <div class="space-y-4">
+                <section class="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
+                    <div class="mb-4 flex items-center justify-between">
+                        <h3 class="text-sm font-bold text-slate-900 dark:text-slate-100">Output Jadi</h3>
+                    </div>
+                    <div id="batch-detail-outputs" class="space-y-3"></div>
+                </section>
+
+                <section class="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
+                    <h3 class="text-sm font-bold text-slate-900 dark:text-slate-100">Catatan Batch</h3>
+                    <dl class="mt-4 space-y-3 text-sm">
+                        <div class="flex items-start justify-between gap-4">
+                            <dt class="text-slate-500">Reference</dt>
+                            <dd id="batch-detail-reference-full" class="text-right font-semibold text-slate-900 dark:text-slate-100">-</dd>
+                        </div>
+                        <div class="flex items-start justify-between gap-4">
+                            <dt class="text-slate-500">Operator Note</dt>
+                            <dd id="batch-detail-notes" class="text-right font-semibold text-slate-900 dark:text-slate-100">-</dd>
+                        </div>
+                        <div class="flex items-start justify-between gap-4">
+                            <dt class="text-slate-500">Variance Reason</dt>
+                            <dd id="batch-detail-variance-reason" class="text-right font-semibold text-slate-900 dark:text-slate-100">-</dd>
+                        </div>
+                        <div class="flex items-start justify-between gap-4">
+                            <dt class="text-slate-500">Cancel Reason</dt>
+                            <dd id="batch-detail-cancel-reason" class="text-right font-semibold text-slate-900 dark:text-slate-100">-</dd>
+                        </div>
+                        <div class="flex items-start justify-between gap-4">
+                            <dt class="text-slate-500">Posted At</dt>
+                            <dd id="batch-detail-posted-at" class="text-right font-semibold text-slate-900 dark:text-slate-100">-</dd>
+                        </div>
+                    </dl>
+                </section>
+            </div>
+        </section>
+
+        <section id="batch-detail-anomaly-history-section" class="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
+            <div class="mb-4 flex items-center justify-between gap-3">
+                <div>
+                    <h3 class="text-sm font-bold text-slate-900 dark:text-slate-100">Riwayat Alert Batch</h3>
+                    <p class="mt-1 text-xs text-slate-500">Pantau alert yield variance yang masih open maupun yang sudah resolved untuk batch ini.</p>
+                </div>
+                <div class="flex flex-wrap items-center justify-end gap-2">
+                    <label class="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-2 text-[11px] font-bold uppercase text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+                        <span>Status</span>
+                        <select id="batch-detail-anomaly-status-filter" class="bg-transparent text-[11px] font-bold uppercase text-slate-600 outline-none dark:text-slate-200">
+                            <option value="all">Semua</option>
+                            <option value="open">Open</option>
+                            <option value="resolved">Resolved</option>
+                        </select>
+                    </label>
+                    @if ($productionBatchDetailCanResolveAnomaly)
+                        <span class="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold uppercase text-slate-500">Admin or owner can resolve</span>
+                    @endif
+                </div>
+            </div>
+            <div id="batch-detail-anomaly-history-meta" class="mb-3 text-xs text-slate-500">Memuat riwayat alert batch...</div>
+            <div id="batch-detail-anomaly-history" class="space-y-3"></div>
+            <div class="mt-4 flex justify-center">
+                <button id="batch-detail-anomaly-load-more" class="hidden rounded-full border border-slate-200 px-4 py-2 text-xs font-bold text-slate-600 dark:border-slate-700 dark:text-slate-300" type="button">Muat lebih banyak</button>
+            </div>
+        </section>
+    </div>
+
+    <div id="batch-detail-edit-modal" class="fixed inset-0 z-50 hidden">
+        <div data-close="edit" class="absolute inset-0 bg-slate-950/40"></div>
+        <div class="absolute inset-x-0 bottom-0 mx-auto w-full max-w-2xl rounded-t-[28px] bg-white p-5 shadow-2xl dark:bg-slate-950 lg:top-1/2 lg:bottom-auto lg:-translate-y-1/2 lg:rounded-[28px]">
+            <div class="mx-auto mb-4 h-1.5 w-14 rounded-full bg-slate-200 dark:bg-slate-700"></div>
+            <div class="mb-4 flex items-start justify-between gap-4">
+                <div>
+                    <p class="text-[11px] font-bold uppercase tracking-widest text-slate-400">Draft Batch</p>
+                    <h3 class="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">Edit Draft Batch</h3>
+                </div>
+                <button data-close="edit" class="flex size-9 items-center justify-center rounded-full bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300" type="button">
+                    <span class="material-symbols-outlined text-base">close</span>
+                </button>
+            </div>
+            <form id="batch-detail-edit-form" class="space-y-3">
+                <div class="grid gap-3 md:grid-cols-2">
+                    <label class="block">
+                        <span class="mb-1 block text-[11px] font-bold uppercase tracking-widest text-slate-400">Tanggal Transaksi</span>
+                        <input id="batch-edit-date" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium dark:border-slate-700 dark:bg-slate-900" type="date" />
+                    </label>
+                    <label class="block">
+                        <span class="mb-1 block text-[11px] font-bold uppercase tracking-widest text-slate-400">Expected Output Qty</span>
+                        <input id="batch-edit-output" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium dark:border-slate-700 dark:bg-slate-900" min="0.0001" step="0.0001" type="number" />
+                    </label>
+                </div>
+                <div class="grid gap-3 md:grid-cols-2">
+                    <label class="block">
+                        <span class="mb-1 block text-[11px] font-bold uppercase tracking-widest text-slate-400">Recipe Version</span>
+                        <input id="batch-edit-recipe-version" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium dark:border-slate-700 dark:bg-slate-900" min="1" step="1" type="number" />
+                    </label>
+                    <label class="block">
+                        <span class="mb-1 block text-[11px] font-bold uppercase tracking-widest text-slate-400">Reference</span>
+                        <input id="batch-edit-reference" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium dark:border-slate-700 dark:bg-slate-900" maxlength="100" type="text" />
+                    </label>
+                </div>
+                <label class="block">
+                    <span class="mb-1 block text-[11px] font-bold uppercase tracking-widest text-slate-400">Catatan</span>
+                    <textarea id="batch-edit-notes" class="min-h-[96px] w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium dark:border-slate-700 dark:bg-slate-900" maxlength="2000"></textarea>
+                </label>
+                <div id="batch-edit-feedback" class="hidden rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600"></div>
+                <div class="flex justify-end gap-3 pt-2">
+                    <button data-close="edit" class="rounded-full border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600 dark:border-slate-700 dark:text-slate-300" type="button">Batal</button>
+                    <button id="batch-edit-submit" class="rounded-full bg-primary px-5 py-2.5 text-sm font-bold text-white" type="submit">Simpan Perubahan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="batch-detail-post-modal" class="fixed inset-0 z-50 hidden">
+        <div data-close="post" class="absolute inset-0 bg-slate-950/40"></div>
+        <div class="absolute inset-x-0 bottom-0 mx-auto w-full max-w-2xl rounded-t-[28px] bg-white p-5 shadow-2xl dark:bg-slate-950 lg:top-1/2 lg:bottom-auto lg:-translate-y-1/2 lg:rounded-[28px]">
+            <div class="mx-auto mb-4 h-1.5 w-14 rounded-full bg-slate-200 dark:bg-slate-700"></div>
+            <div class="mb-4 flex items-start justify-between gap-4">
+                <div>
+                    <p class="text-[11px] font-bold uppercase tracking-widest text-slate-400">Posting Batch</p>
+                    <h3 class="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">Konfirmasi Actual Yield</h3>
+                </div>
+                <button data-close="post" class="flex size-9 items-center justify-center rounded-full bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300" type="button">
+                    <span class="material-symbols-outlined text-base">close</span>
+                </button>
+            </div>
+            <form id="batch-post-form" class="space-y-3">
+                <div class="grid gap-3 md:grid-cols-2">
+                    <label class="block">
+                        <span class="mb-1 block text-[11px] font-bold uppercase tracking-widest text-slate-400">Actual Output Qty</span>
+                        <input id="batch-post-output" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium dark:border-slate-700 dark:bg-slate-900" min="0.0001" step="0.0001" type="number" />
+                    </label>
+                    <label class="block">
+                        <span class="mb-1 block text-[11px] font-bold uppercase tracking-widest text-slate-400">Variance Reason</span>
+                        <input id="batch-post-variance-reason" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium dark:border-slate-700 dark:bg-slate-900" maxlength="2000" type="text" />
+                    </label>
+                </div>
+                <div id="batch-post-variance-hint" class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                    Variance reason wajib diisi bila selisih actual yield menyentuh threshold monitoring: qty {{ $productionBatchVarianceQtyThreshold }} atau {{ $productionBatchVariancePctThreshold }}%.
+                </div>
+                <div>
+                    <p class="mb-2 text-[11px] font-bold uppercase tracking-widest text-slate-400">Actual Input</p>
+                    <div id="batch-post-inputs" class="space-y-3"></div>
+                </div>
+                <div id="batch-post-feedback" class="hidden rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600"></div>
+                <div class="flex justify-end gap-3 pt-2">
+                    <button data-close="post" class="rounded-full border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600 dark:border-slate-700 dark:text-slate-300" type="button">Batal</button>
+                    <button id="batch-post-submit" class="rounded-full bg-emerald-500 px-5 py-2.5 text-sm font-bold text-white" type="submit">Post Batch</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="batch-detail-cancel-modal" class="fixed inset-0 z-50 hidden">
+        <div data-close="cancel" class="absolute inset-0 bg-slate-950/40"></div>
+        <div class="absolute inset-x-0 bottom-0 mx-auto w-full max-w-lg rounded-t-[28px] bg-white p-5 shadow-2xl dark:bg-slate-950 lg:top-1/2 lg:bottom-auto lg:-translate-y-1/2 lg:rounded-[28px]">
+            <div class="mx-auto mb-4 h-1.5 w-14 rounded-full bg-slate-200 dark:bg-slate-700"></div>
+            <p class="text-[11px] font-bold uppercase tracking-widest text-slate-400">Batalkan Draft</p>
+            <h3 class="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">Draft batch akan dibatalkan</h3>
+            <p class="mt-2 text-sm text-slate-500">Aksi ini akan mengubah status draft menjadi cancelled dan draft tidak bisa diedit lagi.</p>
+            <label class="mt-4 block">
+                <span class="mb-1 block text-[11px] font-bold uppercase tracking-widest text-slate-400">Cancel Reason</span>
+                <textarea id="batch-cancel-reason" class="min-h-[96px] w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium dark:border-slate-700 dark:bg-slate-900" maxlength="2000" placeholder="Tulis alasan pembatalan draft batch..."></textarea>
+            </label>
+            <div id="batch-cancel-feedback" class="mt-4 hidden rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600"></div>
+            <div class="mt-5 flex justify-end gap-3">
+                <button data-close="cancel" class="rounded-full border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600 dark:border-slate-700 dark:text-slate-300" type="button">Kembali</button>
+                <button id="batch-cancel-submit" class="rounded-full bg-rose-500 px-5 py-2.5 text-sm font-bold text-white" type="button">Ya, batalkan</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="batch-detail-resolve-modal" class="fixed inset-0 z-50 hidden">
+        <div data-close="resolve" class="absolute inset-0 bg-slate-950/40"></div>
+        <div class="absolute inset-x-0 bottom-0 mx-auto w-full max-w-lg rounded-t-[28px] bg-white p-5 shadow-2xl dark:bg-slate-950 lg:top-1/2 lg:bottom-auto lg:-translate-y-1/2 lg:rounded-[28px]">
+            <div class="mx-auto mb-4 h-1.5 w-14 rounded-full bg-slate-200 dark:bg-slate-700"></div>
+            <div class="mb-4 flex items-start justify-between gap-4">
+                <div>
+                    <p class="text-[11px] font-bold uppercase tracking-widest text-slate-400">Resolve Alert</p>
+                    <h3 class="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">Tutup alert yield variance</h3>
+                    <p id="batch-resolve-meta" class="mt-2 text-sm text-slate-500">Alert yang dipilih akan ditandai selesai dan masuk audit trail.</p>
+                </div>
+                <button data-close="resolve" class="flex size-9 items-center justify-center rounded-full bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300" type="button">
+                    <span class="material-symbols-outlined text-base">close</span>
+                </button>
+            </div>
+            <label class="block">
+                <span class="mb-1 block text-[11px] font-bold uppercase tracking-widest text-slate-400">Catatan Resolve</span>
+                <textarea id="batch-resolve-note" class="min-h-[96px] w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium dark:border-slate-700 dark:bg-slate-900" maxlength="255" placeholder="Contoh: sudah diverifikasi supervisor produksi"></textarea>
+            </label>
+            <div id="batch-resolve-feedback" class="mt-4 hidden rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600"></div>
+            <div class="mt-5 flex justify-end gap-3">
+                <button data-close="resolve" class="rounded-full border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600 dark:border-slate-700 dark:text-slate-300" type="button">Batal</button>
+                <button id="batch-resolve-submit" class="rounded-full bg-slate-900 px-5 py-2.5 text-sm font-bold text-white" type="button">Resolve Alert</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (() => {
+            const tenantId = document.querySelector('meta[name="tenant-id"]')?.content || '';
+            const headers = tenantId ? { 'X-Tenant-Id': tenantId } : {};
+            const batchId = @json($resolvedBatchId);
+            const canViewObservability = Boolean(@json($productionBatchDetailCanViewObservability));
+            const canResolveAnomaly = Boolean(@json($productionBatchDetailCanResolveAnomaly));
+            const varianceThresholds = {
+                qty: Number(@json($productionBatchVarianceQtyThreshold)),
+                pct: Number(@json($productionBatchVariancePctThreshold)),
+            };
+
+            const el = {
+                subtitle: document.getElementById('batch-detail-subtitle'),
+                reference: document.getElementById('batch-detail-reference'),
+                product: document.getElementById('batch-detail-product'),
+                location: document.getElementById('batch-detail-location'),
+                status: document.getElementById('batch-detail-status'),
+                date: document.getElementById('batch-detail-date'),
+                expectedOutput: document.getElementById('batch-detail-expected-output'),
+                actualOutput: document.getElementById('batch-detail-actual-output'),
+                variance: document.getElementById('batch-detail-variance'),
+                recipeVersion: document.getElementById('batch-detail-recipe-version'),
+                anomalyBanner: document.getElementById('batch-detail-anomaly-banner'),
+                anomalyStatus: document.getElementById('batch-detail-anomaly-status'),
+                anomalyMeta: document.getElementById('batch-detail-anomaly-meta'),
+                anomalyCount: document.getElementById('batch-detail-anomaly-count'),
+                observabilityLink: document.getElementById('batch-detail-observability-link'),
+                anomalyHistory: document.getElementById('batch-detail-anomaly-history'),
+                anomalyHistoryMeta: document.getElementById('batch-detail-anomaly-history-meta'),
+                anomalyStatusFilter: document.getElementById('batch-detail-anomaly-status-filter'),
+                anomalyLoadMore: document.getElementById('batch-detail-anomaly-load-more'),
+                inputCount: document.getElementById('batch-detail-input-count'),
+                inputs: document.getElementById('batch-detail-inputs'),
+                outputs: document.getElementById('batch-detail-outputs'),
+                referenceFull: document.getElementById('batch-detail-reference-full'),
+                notes: document.getElementById('batch-detail-notes'),
+                varianceReason: document.getElementById('batch-detail-variance-reason'),
+                cancelReason: document.getElementById('batch-detail-cancel-reason'),
+                postedAt: document.getElementById('batch-detail-posted-at'),
+                actions: document.getElementById('batch-detail-actions'),
+                editOpen: document.getElementById('batch-detail-edit-open'),
+                postOpen: document.getElementById('batch-detail-post-open'),
+                cancelOpen: document.getElementById('batch-detail-cancel-open'),
+                editModal: document.getElementById('batch-detail-edit-modal'),
+                postModal: document.getElementById('batch-detail-post-modal'),
+                cancelModal: document.getElementById('batch-detail-cancel-modal'),
+                editForm: document.getElementById('batch-detail-edit-form'),
+                editDate: document.getElementById('batch-edit-date'),
+                editOutput: document.getElementById('batch-edit-output'),
+                editRecipeVersion: document.getElementById('batch-edit-recipe-version'),
+                editReference: document.getElementById('batch-edit-reference'),
+                editNotes: document.getElementById('batch-edit-notes'),
+                editFeedback: document.getElementById('batch-edit-feedback'),
+                editSubmit: document.getElementById('batch-edit-submit'),
+                postForm: document.getElementById('batch-post-form'),
+                postOutput: document.getElementById('batch-post-output'),
+                postVarianceReason: document.getElementById('batch-post-variance-reason'),
+                postVarianceHint: document.getElementById('batch-post-variance-hint'),
+                postInputs: document.getElementById('batch-post-inputs'),
+                postFeedback: document.getElementById('batch-post-feedback'),
+                postSubmit: document.getElementById('batch-post-submit'),
+                cancelReasonInput: document.getElementById('batch-cancel-reason'),
+                cancelFeedback: document.getElementById('batch-cancel-feedback'),
+                cancelSubmit: document.getElementById('batch-cancel-submit'),
+                resolveModal: document.getElementById('batch-detail-resolve-modal'),
+                resolveMeta: document.getElementById('batch-resolve-meta'),
+                resolveNote: document.getElementById('batch-resolve-note'),
+                resolveFeedback: document.getElementById('batch-resolve-feedback'),
+                resolveSubmit: document.getElementById('batch-resolve-submit'),
+            };
+
+            const state = {
+                bootstrap: { products: [], branches: [], locations: [] },
+                detail: null,
+                historyFilters: {
+                    status: 'all',
+                    limit: 20,
+                },
+                selectedAnomalyId: null,
+            };
+
+            const unwrap = (payload) => payload?.data || payload || {};
+            const parsePayload = (payload) => {
+                if (!payload) return {};
+                if (typeof payload === 'string') {
+                    try {
+                        return JSON.parse(payload);
+                    } catch {
+                        return {};
+                    }
+                }
+
+                return typeof payload === 'object' ? payload : {};
+            };
+            const formatNumber = (value) => new Intl.NumberFormat('id-ID', { maximumFractionDigits: 2 }).format(Number(value || 0));
+            const formatDate = (value, includeTime = false) => {
+                if (!value) return '-';
+                return new Intl.DateTimeFormat('id-ID', includeTime
+                    ? { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }
+                    : { day: '2-digit', month: 'short', year: 'numeric' }
+                ).format(new Date(value));
+            };
+            const productName = (id) => state.bootstrap.products.find((row) => row.id === id)?.name || 'Produk';
+            const branchName = (id) => state.bootstrap.branches.find((row) => row.id === id)?.name || 'Cabang';
+            const locationName = (id) => state.bootstrap.locations.find((row) => row.id === id)?.name || 'Lokasi';
+            const badgeClass = (status) => ({
+                draft: 'bg-amber-100 text-amber-700',
+                posted: 'bg-emerald-100 text-emerald-700',
+                cancelled: 'bg-slate-200 text-slate-600',
+            }[status] || 'bg-slate-100 text-slate-500');
+            const requiresVarianceReason = () => {
+                const expectedQty = Number(state.detail?.batch?.expected_output_qty || 0);
+                const actualQty = Number(el.postOutput.value || 0);
+                const varianceQty = Math.abs(actualQty - expectedQty);
+                const variancePct = expectedQty > 0 ? Math.abs(((actualQty - expectedQty) * 100) / expectedQty) : 0;
+
+                return varianceQty >= varianceThresholds.qty || variancePct >= varianceThresholds.pct;
+            };
+            const refreshVarianceHint = () => {
+                const required = requiresVarianceReason();
+                el.postVarianceReason.toggleAttribute('required', required);
+                el.postVarianceHint.className = `rounded-2xl px-4 py-3 text-sm ${required
+                    ? 'border border-amber-200 bg-amber-50 text-amber-700'
+                    : 'border border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-300'}`;
+                el.postVarianceHint.textContent = required
+                    ? `Variance reason wajib diisi karena selisih hasil menyentuh threshold monitoring (${varianceThresholds.qty} qty / ${varianceThresholds.pct}%).`
+                    : `Variance reason opsional selama selisih hasil masih di bawah threshold monitoring (${varianceThresholds.qty} qty / ${varianceThresholds.pct}%).`;
+            };
+            const buildObservabilityUrl = (detail) => {
+                const baseUrl = detail?.observability_url || '/backoffice/settings/observability';
+                const batch = detail?.batch || {};
+                const url = new URL(baseUrl, window.location.origin);
+                url.searchParams.set('type', 'production_batch_yield_variance');
+                url.searchParams.set('resolved', '0');
+                url.searchParams.set('reference_id', batch.id || batchId);
+                url.searchParams.set('context_label', batch.reference_no || batch.id || batchId);
+
+                return `${url.pathname}?${url.searchParams.toString()}`;
+            };
+            const anomalySeverityClass = (severity) => ({
+                critical: 'bg-red-100 text-red-700',
+                high: 'bg-amber-100 text-amber-700',
+                med: 'bg-sky-100 text-sky-700',
+                low: 'bg-slate-100 text-slate-700',
+            }[severity] || 'bg-slate-100 text-slate-700');
+            const renderAnomalySummary = (detail) => {
+                const summary = detail?.anomaly_summary || {};
+                const openCount = Number(summary.open_count || 0);
+                const resolvedCount = Number(summary.resolved_count || 0);
+                const totalCount = Number(summary.total_count || 0);
+                const hasOpenAlert = !!summary.has_open_alert;
+
+                el.anomalyBanner.className = `mt-5 rounded-2xl border px-4 py-4 ${hasOpenAlert
+                    ? 'border-amber-200 bg-amber-50 text-amber-900'
+                    : 'border-emerald-200 bg-emerald-50 text-emerald-800'}`;
+                el.anomalyCount.className = `rounded-full px-3 py-1 text-[11px] font-bold uppercase ${hasOpenAlert
+                    ? 'bg-white/80 text-amber-800'
+                    : 'bg-white/80 text-emerald-700'}`;
+                el.anomalyCount.textContent = `${openCount} open alert`;
+                el.anomalyStatus.textContent = hasOpenAlert
+                    ? `${openCount} alert yield variance masih terbuka.`
+                    : 'Tidak ada alert batch yang terbuka.';
+
+                if (hasOpenAlert) {
+                    const detectedAt = summary.latest_open_detected_at ? formatDate(summary.latest_open_detected_at, true) : '-';
+                    el.anomalyMeta.textContent = `Alert terakhir terdeteksi ${detectedAt}. Segera review variance reason dan hasil output aktual.`;
+                } else if (totalCount > 0 || resolvedCount > 0) {
+                    el.anomalyMeta.textContent = `${resolvedCount} alert sebelumnya sudah ditutup untuk batch ini.`;
+                } else {
+                    el.anomalyMeta.textContent = 'Belum ada anomaly yield variance yang aktif untuk batch ini.';
+                }
+
+                if (canViewObservability && el.observabilityLink) {
+                    el.observabilityLink.href = buildObservabilityUrl(detail);
+                }
+            };
+            const renderAnomalyHistory = (detail) => {
+                const rows = detail?.anomaly_history || [];
+                const historyMeta = detail?.anomaly_history_meta || {};
+
+                el.anomalyHistoryMeta.textContent = `${Number(historyMeta.total || rows.length || 0)} alert • filter ${historyMeta.status || 'all'}${historyMeta.has_more ? ` • ${rows.length} tampil` : ''}`;
+                el.anomalyLoadMore.classList.toggle('hidden', !historyMeta.has_more);
+
+                if (!rows.length) {
+                    el.anomalyHistory.innerHTML = '<div class="rounded-2xl border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-400">Belum ada riwayat alert yield variance untuk batch ini.</div>';
+                    return;
+                }
+
+                el.anomalyHistory.innerHTML = rows.map((row) => {
+                    const payload = parsePayload(row.payload_json);
+                    const resolved = row.status === 'resolved';
+                    const resolvedNote = row.resolved_note || payload.resolved_note || '-';
+                    const varianceText = `${formatNumber(payload.yield_variance_qty)} (${formatNumber(payload.yield_variance_pct)}%)`;
+                    const scopeText = [branchName(row.branch_id || payload.branch_id), locationName(row.location_id || payload.location_id)].filter((value) => value && value !== 'Cabang' && value !== 'Lokasi').join(' • ');
+
+                    return `
+                        <div class="rounded-2xl border border-slate-200 px-4 py-4 dark:border-slate-800">
+                            <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                <div>
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <span class="rounded-full px-3 py-1 text-[11px] font-bold uppercase ${anomalySeverityClass(row.severity)}">${row.severity}</span>
+                                        <span class="rounded-full px-3 py-1 text-[11px] font-bold uppercase ${resolved ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}">${row.status}</span>
+                                    </div>
+                                    <p class="mt-2 text-sm font-bold text-slate-900 dark:text-slate-100">Yield variance ${varianceText}</p>
+                                    <p class="mt-1 text-xs text-slate-500">Detected ${formatDate(row.detected_at, true)}${resolved && row.resolved_at ? ` • Resolved ${formatDate(row.resolved_at, true)}` : ''}</p>
+                                    <p class="mt-1 text-xs text-slate-500">${scopeText || 'Scope batch mengikuti lokasi posting saat anomaly terdeteksi.'}</p>
+                                </div>
+                                ${!resolved && canResolveAnomaly ? `<button data-anomaly-resolve-id="${row.id}" class="rounded-full bg-slate-900 px-4 py-2 text-xs font-bold text-white" type="button">Resolve Alert</button>` : ''}
+                            </div>
+                            <div class="mt-3 grid gap-3 md:grid-cols-2">
+                                <div class="rounded-2xl bg-slate-50 px-3 py-3 text-sm dark:bg-slate-950">
+                                    <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Variance Reason</p>
+                                    <p class="mt-1 font-semibold text-slate-900 dark:text-slate-100">${payload.variance_reason || '-'}</p>
+                                </div>
+                                <div class="rounded-2xl bg-slate-50 px-3 py-3 text-sm dark:bg-slate-950">
+                                    <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Resolved Note</p>
+                                    <p class="mt-1 font-semibold text-slate-900 dark:text-slate-100">${resolvedNote}</p>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            };
+
+            const setFeedback = (element, message, isError = true) => {
+                if (!message) {
+                    element.classList.add('hidden');
+                    element.textContent = '';
+                    return;
+                }
+
+                element.className = `rounded-2xl px-4 py-3 text-sm ${isError ? 'border border-red-200 bg-red-50 text-red-600' : 'border border-emerald-200 bg-emerald-50 text-emerald-700'}`;
+                element.textContent = message;
+            };
+
+            const toggleModal = (key, open) => {
+                const modal = {
+                    edit: el.editModal,
+                    post: el.postModal,
+                    cancel: el.cancelModal,
+                    resolve: el.resolveModal,
+                }[key];
+
+                modal?.classList.toggle('hidden', !open);
+                if (!open) {
+                    if (key === 'edit') setFeedback(el.editFeedback, '');
+                    if (key === 'post') setFeedback(el.postFeedback, '');
+                    if (key === 'cancel') setFeedback(el.cancelFeedback, '');
+                    if (key === 'resolve') {
+                        setFeedback(el.resolveFeedback, '');
+                        state.selectedAnomalyId = null;
+                    }
+                }
+            };
+
+            const requestJson = async (url, options = {}) => {
+                const response = await fetch(url, {
+                    headers: {
+                        ...headers,
+                        'Accept': 'application/json',
+                        ...(options.headers || {}),
+                    },
+                    ...options,
+                });
+
+                const result = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    const details = result.details ? Object.values(result.details).flat().join(' ') : '';
+                    throw new Error(details || result.message || 'Permintaan gagal.');
+                }
+
+                return result;
+            };
+
+            const renderLines = (target, lines, kind) => {
+                target.innerHTML = '';
+                if (!lines.length) {
+                    target.innerHTML = `<div class="rounded-2xl border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-400">Belum ada line ${kind}.</div>`;
+                    return;
+                }
+
+                lines.forEach((line) => {
+                    const row = document.createElement('div');
+                    row.className = 'rounded-2xl border border-slate-200 px-4 py-3 dark:border-slate-800';
+                    row.innerHTML = `
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <p class="text-sm font-bold text-slate-900 dark:text-slate-100">${line.product_name || productName(line.product_id)}</p>
+                                <p class="text-xs text-slate-500">${line.product_sku || line.product_id}</p>
+                            </div>
+                            <span class="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase text-slate-500">${kind}</span>
+                        </div>
+                        <div class="mt-3 grid grid-cols-3 gap-3 text-sm">
+                            <div>
+                                <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Planned</p>
+                                <p class="mt-1 font-semibold text-slate-900 dark:text-slate-100">${formatNumber(line.planned_qty)}</p>
+                            </div>
+                            <div>
+                                <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Actual</p>
+                                <p class="mt-1 font-semibold text-slate-900 dark:text-slate-100">${formatNumber(line.actual_qty)}</p>
+                            </div>
+                            <div>
+                                <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">UOM</p>
+                                <p class="mt-1 font-semibold text-slate-900 dark:text-slate-100">${line.uom || '-'}</p>
+                            </div>
+                        </div>
+                    `;
+                    target.appendChild(row);
+                });
+            };
+
+            const render = () => {
+                const detail = state.detail || {};
+                const batch = detail.batch || {};
+                const inputs = detail.inputs || [];
+                const outputs = detail.outputs || [];
+
+                el.subtitle.textContent = `Batch ${batch.reference_no || batch.id || '-'} • ${branchName(batch.branch_id)} • ${locationName(batch.location_id)}`;
+                el.reference.textContent = batch.reference_no || (batch.id || '').slice(0, 8).toUpperCase();
+                el.product.textContent = productName(batch.product_id);
+                el.location.textContent = `${branchName(batch.branch_id)} • ${locationName(batch.location_id)}`;
+                el.status.className = `rounded-full px-3 py-1 text-[11px] font-bold uppercase ${badgeClass(batch.status)}`;
+                el.status.textContent = batch.status || '-';
+                el.date.textContent = batch.transaction_date ? formatDate(batch.transaction_date) : '-';
+                el.expectedOutput.textContent = formatNumber(batch.expected_output_qty);
+                el.actualOutput.textContent = formatNumber(batch.actual_output_qty);
+                el.variance.textContent = `${formatNumber(batch.yield_variance_qty)} (${formatNumber(batch.yield_variance_pct)}%)`;
+                el.recipeVersion.textContent = batch.recipe_version || 0;
+                el.inputCount.textContent = `${inputs.length} line`;
+                el.referenceFull.textContent = batch.reference_no || '-';
+                el.notes.textContent = batch.notes || '-';
+                el.varianceReason.textContent = batch.variance_reason || '-';
+                el.cancelReason.textContent = batch.cancel_reason || '-';
+                el.postedAt.textContent = batch.posted_at ? formatDate(batch.posted_at, true) : '-';
+                el.actions.classList.toggle('hidden', batch.status !== 'draft');
+                renderAnomalySummary(detail);
+                renderAnomalyHistory(detail);
+
+                el.editDate.value = batch.transaction_date || '';
+                el.editOutput.value = batch.expected_output_qty || '';
+                el.editRecipeVersion.value = batch.recipe_version || 1;
+                el.editReference.value = batch.reference_no || '';
+                el.editNotes.value = batch.notes || '';
+                el.postOutput.value = batch.expected_output_qty || '';
+                el.postVarianceReason.value = batch.variance_reason || '';
+                el.cancelReasonInput.value = batch.cancel_reason || '';
+                el.postInputs.innerHTML = '';
+                inputs.forEach((line) => {
+                    const row = document.createElement('label');
+                    row.className = 'block rounded-2xl border border-slate-200 px-4 py-3 dark:border-slate-800';
+                    row.innerHTML = `
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <p class="text-sm font-bold text-slate-900 dark:text-slate-100">${line.product_name || productName(line.product_id)}</p>
+                                <p class="text-xs text-slate-500">Planned ${formatNumber(line.planned_qty)} ${line.uom || ''}</p>
+                            </div>
+                            <input class="mt-1 w-32 rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium dark:border-slate-700 dark:bg-slate-900" data-product-id="${line.product_id}" data-product-variant-id="${line.product_variant_id || ''}" min="0" step="0.0001" type="number" value="${line.planned_qty || 0}" />
+                        </div>
+                    `;
+                    el.postInputs.appendChild(row);
+                });
+
+                renderLines(el.inputs, inputs, 'input');
+                renderLines(el.outputs, outputs, 'output');
+                refreshVarianceHint();
+            };
+
+            const loadBootstrap = async () => {
+                const response = await fetch('/api/v1/bootstrap', { headers });
+                if (!response.ok) {
+                    throw new Error('Gagal memuat master data batch.');
+                }
+                state.bootstrap = unwrap(await response.json().catch(() => ({})));
+            };
+
+            const loadDetail = async () => {
+                const query = new URLSearchParams({
+                    anomaly_status: state.historyFilters.status,
+                    anomaly_limit: String(state.historyFilters.limit),
+                });
+                const response = await fetch(`/api/v1/production-batches/${encodeURIComponent(batchId)}?${query.toString()}`, { headers });
+                if (!response.ok) {
+                    throw new Error('Gagal memuat detail batch produksi.');
+                }
+                state.detail = await response.json().catch(() => ({}));
+            };
+
+            [
+                [el.editOpen, 'edit', true],
+                [el.postOpen, 'post', true],
+                [el.cancelOpen, 'cancel', true],
+            ].forEach(([node, key, open]) => {
+                node?.addEventListener('click', () => toggleModal(key, open));
+            });
+
+            document.querySelectorAll('[data-close="edit"]').forEach((node) => node.addEventListener('click', () => toggleModal('edit', false)));
+            document.querySelectorAll('[data-close="post"]').forEach((node) => node.addEventListener('click', () => toggleModal('post', false)));
+            document.querySelectorAll('[data-close="cancel"]').forEach((node) => node.addEventListener('click', () => toggleModal('cancel', false)));
+            document.querySelectorAll('[data-close="resolve"]').forEach((node) => node.addEventListener('click', () => toggleModal('resolve', false)));
+            el.postOutput?.addEventListener('input', refreshVarianceHint);
+            el.anomalyStatusFilter?.addEventListener('change', async () => {
+                state.historyFilters.status = el.anomalyStatusFilter.value || 'all';
+                state.historyFilters.limit = 20;
+                await loadDetail();
+                render();
+            });
+            el.anomalyLoadMore?.addEventListener('click', async () => {
+                state.historyFilters.limit += 20;
+                await loadDetail();
+                render();
+            });
+
+            el.editForm?.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                setFeedback(el.editFeedback, '');
+                el.editSubmit.disabled = true;
+                el.editSubmit.textContent = 'Menyimpan...';
+
+                try {
+                    await requestJson(`/api/v1/production-batches/${encodeURIComponent(batchId)}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            transaction_date: el.editDate.value || null,
+                            expected_output_qty: Number(el.editOutput.value || 0),
+                            recipe_version: Number(el.editRecipeVersion.value || 0),
+                            reference_no: (el.editReference.value || '').trim() || null,
+                            notes: (el.editNotes.value || '').trim() || null,
+                        }),
+                    });
+
+                    toggleModal('edit', false);
+                    await loadDetail();
+                    render();
+                } catch (error) {
+                    setFeedback(el.editFeedback, error.message || 'Gagal memperbarui draft batch.');
+                } finally {
+                    el.editSubmit.disabled = false;
+                    el.editSubmit.textContent = 'Simpan Perubahan';
+                }
+            });
+
+            el.postForm?.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                setFeedback(el.postFeedback, '');
+
+                if (requiresVarianceReason() && !(el.postVarianceReason.value || '').trim()) {
+                    refreshVarianceHint();
+                    setFeedback(el.postFeedback, 'Variance reason wajib diisi saat yield variance menyentuh threshold monitoring.');
+                    return;
+                }
+
+                el.postSubmit.disabled = true;
+                el.postSubmit.textContent = 'Posting...';
+
+                try {
+                    const inputs = Array.from(el.postInputs.querySelectorAll('input[data-product-id]')).map((input) => ({
+                        product_id: input.dataset.productId,
+                        ...(input.dataset.productVariantId ? { product_variant_id: input.dataset.productVariantId } : {}),
+                        actual_qty: Number(input.value || 0),
+                    }));
+
+                    await requestJson(`/api/v1/production-batches/${encodeURIComponent(batchId)}/post`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Idempotency-Key': `web-production-post-${crypto.randomUUID()}`,
+                        },
+                        body: JSON.stringify({
+                            actual_output_qty: Number(el.postOutput.value || 0),
+                            variance_reason: (el.postVarianceReason.value || '').trim() || null,
+                            inputs,
+                        }),
+                    });
+
+                    toggleModal('post', false);
+                    await loadDetail();
+                    render();
+                } catch (error) {
+                    setFeedback(el.postFeedback, error.message || 'Gagal mem-post batch.');
+                } finally {
+                    el.postSubmit.disabled = false;
+                    el.postSubmit.textContent = 'Post Batch';
+                }
+            });
+
+            el.cancelSubmit?.addEventListener('click', async () => {
+                setFeedback(el.cancelFeedback, '');
+
+                if (!(el.cancelReasonInput.value || '').trim()) {
+                    setFeedback(el.cancelFeedback, 'Cancel reason wajib diisi saat membatalkan draft batch.');
+                    return;
+                }
+
+                el.cancelSubmit.disabled = true;
+                el.cancelSubmit.textContent = 'Membatalkan...';
+
+                try {
+                    await requestJson(`/api/v1/production-batches/${encodeURIComponent(batchId)}/cancel`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            cancel_reason: (el.cancelReasonInput.value || '').trim(),
+                        }),
+                    });
+
+                    toggleModal('cancel', false);
+                    await loadDetail();
+                    render();
+                } catch (error) {
+                    setFeedback(el.cancelFeedback, error.message || 'Gagal membatalkan draft batch.');
+                } finally {
+                    el.cancelSubmit.disabled = false;
+                    el.cancelSubmit.textContent = 'Ya, batalkan';
+                }
+            });
+
+            el.anomalyHistory?.addEventListener('click', async (event) => {
+                const button = event.target.closest('[data-anomaly-resolve-id]');
+                if (!button || !canResolveAnomaly) {
+                    return;
+                }
+
+                state.selectedAnomalyId = button.dataset.anomalyResolveId;
+                const card = button.closest('.rounded-2xl');
+                el.resolveMeta.textContent = card?.querySelector('.text-sm.font-bold')?.textContent
+                    ? `${card.querySelector('.text-sm.font-bold').textContent} akan ditandai selesai dan masuk audit trail.`
+                    : 'Alert yang dipilih akan ditandai selesai dan masuk audit trail.';
+                el.resolveNote.value = 'resolved from batch detail';
+                toggleModal('resolve', true);
+            });
+
+            el.resolveSubmit?.addEventListener('click', async () => {
+                if (!state.selectedAnomalyId) {
+                    return;
+                }
+
+                setFeedback(el.resolveFeedback, '');
+                el.resolveSubmit.disabled = true;
+                el.resolveSubmit.textContent = 'Resolving...';
+
+                try {
+                    await requestJson(`/api/v1/anomalies/${encodeURIComponent(state.selectedAnomalyId)}/resolve`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            note: (el.resolveNote.value || '').trim() || 'resolved from batch detail',
+                        }),
+                    });
+
+                    toggleModal('resolve', false);
+                    await loadDetail();
+                    render();
+                } catch (error) {
+                    setFeedback(el.resolveFeedback, error.message || 'Gagal resolve alert batch.');
+                } finally {
+                    el.resolveSubmit.disabled = false;
+                    el.resolveSubmit.textContent = 'Resolve Alert';
+                }
+            });
+
+            Promise.all([loadBootstrap(), loadDetail()])
+                .then(render)
+                .catch((error) => {
+                    el.subtitle.textContent = error.message;
+                    el.product.textContent = error.message;
+                    el.inputs.innerHTML = `<div class="text-sm text-red-500">${error.message}</div>`;
+                    el.outputs.innerHTML = '';
+                });
+        })();
+    </script>
+@endsection

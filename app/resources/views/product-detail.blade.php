@@ -1,9 +1,33 @@
 @extends('layouts.app')
 
+@php
+    $productDetailTenant = \App\Support\TenantContext::get();
+    $productDetailUser = auth()->user();
+    $productDetailRole = null;
+
+    if (! $productDetailTenant && filled($productDetailUser?->tenant_id)) {
+        $productDetailTenant = \App\Models\Tenant::query()->find($productDetailUser->tenant_id);
+    }
+
+    if ($productDetailTenant && $productDetailUser) {
+        $productDetailRole = app(\App\Services\UserRoleResolverService::class)
+            ->resolveNormalizedRole((string) $productDetailTenant->id, (string) $productDetailUser->id);
+
+        if (! $productDetailRole && filled($productDetailUser->role ?? null)) {
+            $productDetailRole = app(\App\Services\UserRoleResolverService::class)
+                ->normalize((string) $productDetailUser->role);
+        }
+    }
+
+    abort_unless(in_array($productDetailRole, ['warehouse', 'supervisor', 'admin', 'owner', 'superadmin'], true), 403);
+
+    $canManageProductDetail = in_array($productDetailRole, ['admin', 'owner', 'superadmin'], true);
+@endphp
+
 @section('page_title', 'Detail Produk & Stok Lokasi')
 @section('body_class', 'font-display text-slate-900')
 @section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-white shadow-2xl')
-@section('main_class', 'flex-1 overflow-hidden p-0')
+@section('main_class', 'flex flex-1 flex-col overflow-hidden p-0')
 
 @push('head')
     <style>
@@ -12,12 +36,29 @@
     </style>
 @endpush
 
+@php
+    $productCurrentPath = $currentPath ?? '/backoffice/products/'.((string) ($productId ?? request()->query('product_id', '')));
+    $productBackUrl = $backUrl ?? '/backoffice/products';
+    $resolvedProductId = (string) ($productId ?? request()->query('product_id', ''));
+    $productDetailFrom = trim((string) request()->query('from', ''));
+
+    if ($productDetailFrom !== '' && ! isset($backUrl)) {
+        if (str_starts_with($productDetailFrom, '/pos/')) {
+            $productBackUrl = '/portal/switch/pos?next='.rawurlencode($productDetailFrom);
+        } elseif (str_starts_with($productDetailFrom, '/backoffice/')) {
+            $productBackUrl = $productDetailFrom;
+        }
+    }
+@endphp
+
 @section('header')
-    <x-page-header title="Detail Produk" backUrl="/products">
+    <x-page-header title="Detail Produk" :backUrl="$productBackUrl">
         <x-slot name="actions">
-            <button class="p-2 text-primary" type="button">
-                <span class="material-symbols-outlined">edit</span>
-            </button>
+            @if ($canManageProductDetail)
+                <button class="p-2 text-primary" type="button">
+                    <span class="material-symbols-outlined">edit</span>
+                </button>
+            @endif
         </x-slot>
     </x-page-header>
 @endsection
@@ -43,8 +84,8 @@
                     <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
                         <p class="text-[11px] text-slate-500 font-medium mb-0.5">Status Produk</p>
                         <div class="flex items-center gap-1.5 mt-1">
-                            <span id="status-dot" class="w-2 h-2 rounded-full bg-success"></span>
-                            <span id="status-label" class="text-sm font-bold text-success">Aktif</span>
+                            <span id="status-dot" class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                            <span id="status-label" class="text-sm font-bold text-emerald-600">Aktif</span>
                         </div>
                     </div>
                 </div>
@@ -88,7 +129,7 @@
                 <span class="material-symbols-outlined">sync_alt</span>
                 Transfer Stok
             </button>
-            <button class="flex-1 py-4 bg-success text-white font-bold rounded-2xl shadow-lg shadow-success/20 active:scale-95 transition-transform flex items-center justify-center gap-2">
+            <button class="flex-1 py-4 bg-emerald-500 text-white font-bold rounded-2xl shadow-lg shadow-emerald-500/20 active:scale-95 transition-transform flex items-center justify-center gap-2">
                 <span class="material-symbols-outlined text-xl">add_box</span>
                 Penyesuaian
             </button>
@@ -119,11 +160,11 @@
                     stockHistoryBtn: document.getElementById('stock-history-btn'),
                 };
 
-                const productId = new URLSearchParams(window.location.search).get('product_id');
+                const productId = @json($resolvedProductId) || new URLSearchParams(window.location.search).get('product_id');
 
                 el.stockHistoryBtn?.addEventListener('click', () => {
                     const target = productId
-                        ? `/stock-card?product_id=${encodeURIComponent(productId)}`
+                        ? `/backoffice/inventory/products/${encodeURIComponent(productId)}/stock-card?from=${encodeURIComponent(@json($productCurrentPath))}`
                         : '/stock-card';
                     window.location.href = target;
                 });
@@ -147,7 +188,7 @@
                         const card = document.createElement('div');
                         card.className = 'px-4 py-4 flex items-center justify-between';
                         const status = location.qty <= 5 ? 'Stok Menipis' : 'Aman';
-                        const statusClass = location.qty <= 5 ? 'text-orange-500' : 'text-success';
+                        const statusClass = location.qty <= 5 ? 'text-orange-500' : 'text-emerald-600';
                         const statusDot = location.qty <= 5 ? 'bg-orange-50 text-orange-500' : 'bg-blue-50 text-primary';
                         card.innerHTML = `
                             <div class="flex items-center gap-3">
@@ -207,7 +248,3 @@
             })();
         </script>
     @endsection
-
-
-
-

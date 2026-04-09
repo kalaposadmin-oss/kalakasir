@@ -1,5 +1,27 @@
 @extends('layouts.app')
 
+@php
+    $purchaseCreateTenant = \App\Support\TenantContext::get();
+    $purchaseCreateUser = auth()->user();
+    $purchaseCreateRole = null;
+
+    if (! $purchaseCreateTenant && filled($purchaseCreateUser?->tenant_id)) {
+        $purchaseCreateTenant = \App\Models\Tenant::query()->find($purchaseCreateUser->tenant_id);
+    }
+
+    if ($purchaseCreateTenant && $purchaseCreateUser) {
+        $purchaseCreateRole = app(\App\Services\UserRoleResolverService::class)
+            ->resolveNormalizedRole((string) $purchaseCreateTenant->id, (string) $purchaseCreateUser->id);
+
+        if (! $purchaseCreateRole && filled($purchaseCreateUser->role ?? null)) {
+            $purchaseCreateRole = app(\App\Services\UserRoleResolverService::class)
+                ->normalize((string) $purchaseCreateUser->role);
+        }
+    }
+
+    abort_unless(in_array($purchaseCreateRole, ['admin', 'owner', 'superadmin'], true), 403);
+@endphp
+
 @section('page_title', 'Form Buat PO Baru')
 @section('body_class', 'bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display')
 @section('main_class', 'flex-1 overflow-y-auto px-4 py-6 space-y-6 pb-32')
@@ -13,7 +35,7 @@
 @endpush
 
 @section('header')
-    <x-page-header title="Buat PO Baru" backUrl="/menu/purchases" :showMenuButton="true">
+    <x-page-header title="Buat PO Baru" backUrl="/backoffice/suppliers" :showMenuButton="true">
         <x-slot:actions>
             <button class="text-primary font-semibold text-base">Bantuan</button>
         </x-slot:actions>
@@ -325,7 +347,7 @@
                             }
 
                             alert('PO berhasil disimpan.');
-                            window.location.href = '/suppliers';
+                            window.location.href = '/backoffice/suppliers';
                         } catch (error) {
                             if (error?.name === 'AbortError') {
                                 alert('Permintaan timeout. Cek daftar PO sebelum mengulang simpan.');
@@ -364,8 +386,5 @@
             })();
         </script>
     @endsection
-
-
-
 
 

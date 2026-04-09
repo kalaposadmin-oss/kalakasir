@@ -1,5 +1,29 @@
 @extends('layouts.app')
 
+@php
+    $suppliersTenant = \App\Support\TenantContext::get();
+    $suppliersUser = auth()->user();
+    $suppliersRole = null;
+
+    if (! $suppliersTenant && filled($suppliersUser?->tenant_id)) {
+        $suppliersTenant = \App\Models\Tenant::query()->find($suppliersUser->tenant_id);
+    }
+
+    if ($suppliersTenant && $suppliersUser) {
+        $suppliersRole = app(\App\Services\UserRoleResolverService::class)
+            ->resolveNormalizedRole((string) $suppliersTenant->id, (string) $suppliersUser->id);
+
+        if (! $suppliersRole && filled($suppliersUser->role ?? null)) {
+            $suppliersRole = app(\App\Services\UserRoleResolverService::class)
+                ->normalize((string) $suppliersUser->role);
+        }
+    }
+
+    abort_unless(in_array($suppliersRole, ['warehouse', 'supervisor', 'admin', 'owner', 'superadmin'], true), 403);
+
+    $canManagePurchases = in_array($suppliersRole, ['admin', 'owner', 'superadmin'], true);
+@endphp
+
 @section('page_title', 'Pemasok & Pembelian (PO)')
 @section('body_class', 'bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display')
 @section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-background-light dark:bg-background-dark shadow-2xl')
@@ -9,14 +33,16 @@
 @endpush
 
 @section('header')
-    <x-page-header title="Pemasok & PO" backUrl="/menu/management">
+    <x-page-header title="Pemasok & PO" backUrl="/backoffice/dashboard">
         <x-slot name="actions">
             <button class="flex items-center justify-center size-10 rounded-full bg-slate-100 dark:bg-slate-800">
                 <span class="material-symbols-outlined text-slate-600 dark:text-slate-400">search</span>
             </button>
-            <a class="flex items-center justify-center size-10 rounded-full bg-primary text-white" href="/purchases/new">
-                <span class="material-symbols-outlined">add</span>
-            </a>
+            @if ($canManagePurchases)
+                <a class="flex items-center justify-center size-10 rounded-full bg-primary text-white" href="/backoffice/purchases/new">
+                    <span class="material-symbols-outlined">add</span>
+                </a>
+            @endif
         </x-slot>
     </x-page-header>
 @endsection
@@ -39,12 +65,14 @@
                 </div>
             </div>
 
-            <div class="px-4 mb-4">
-                <a class="w-full bg-primary text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-primary/20" href="/purchases/new">
-                    <span class="material-symbols-outlined">shopping_cart_checkout</span>
-                    Tambah PO Baru
-                </a>
-            </div>
+            @if ($canManagePurchases)
+                <div class="px-4 mb-4">
+                    <a class="w-full bg-primary text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-primary/20" href="/backoffice/purchases/new">
+                        <span class="material-symbols-outlined">shopping_cart_checkout</span>
+                        Tambah PO Baru
+                    </a>
+                </div>
+            @endif
 
             <div id="supplier-section" class="px-4 space-y-3">
                 <h3 class="text-sm font-bold text-slate-500 uppercase tracking-widest px-1">Daftar Pemasok</h3>
@@ -123,7 +151,7 @@
 
                     purchases.forEach((purchase) => {
                         const row = document.createElement('a');
-                        row.href = `/purchases/detail?purchase_id=${purchase.id}`;
+                        row.href = `/backoffice/purchases/${purchase.id}?from=${encodeURIComponent('/backoffice/suppliers')}`;
                         row.className = 'bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-primary/40 transition-colors';
                         row.innerHTML = `
                             <div class="flex items-center justify-between">

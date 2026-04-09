@@ -1,5 +1,29 @@
 @extends('layouts.app')
 
+@php
+    $purchaseDetailTenant = \App\Support\TenantContext::get();
+    $purchaseDetailUser = auth()->user();
+    $purchaseDetailRole = null;
+
+    if (! $purchaseDetailTenant && filled($purchaseDetailUser?->tenant_id)) {
+        $purchaseDetailTenant = \App\Models\Tenant::query()->find($purchaseDetailUser->tenant_id);
+    }
+
+    if ($purchaseDetailTenant && $purchaseDetailUser) {
+        $purchaseDetailRole = app(\App\Services\UserRoleResolverService::class)
+            ->resolveNormalizedRole((string) $purchaseDetailTenant->id, (string) $purchaseDetailUser->id);
+
+        if (! $purchaseDetailRole && filled($purchaseDetailUser->role ?? null)) {
+            $purchaseDetailRole = app(\App\Services\UserRoleResolverService::class)
+                ->normalize((string) $purchaseDetailUser->role);
+        }
+    }
+
+    abort_unless(in_array($purchaseDetailRole, ['warehouse', 'supervisor', 'admin', 'owner', 'superadmin'], true), 403);
+
+    $canManagePurchaseDetail = in_array($purchaseDetailRole, ['admin', 'owner', 'superadmin'], true);
+@endphp
+
 @section('page_title', 'Detail dan Persetujuan PO')
 @section('body_class', 'bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display')
 @section('main_class', 'flex-1 overflow-y-auto pb-32')
@@ -12,13 +36,19 @@
         </style>
 @endpush
 
+@php
+    $purchaseCurrentPath = $currentPath ?? '/backoffice/purchases/'.((string) ($purchaseId ?? request()->query('purchase_id', '')));
+    $purchaseBackUrl = $backUrl ?? '/backoffice/suppliers';
+    $resolvedPurchaseId = (string) ($purchaseId ?? request()->query('purchase_id', ''));
+@endphp
+
 @section('header')
     <x-page-header
         title="PO -"
         titleId="po-number"
         subtitle="-"
         subtitleId="po-supplier"
-        backUrl="/menu/purchases"
+        :backUrl="$purchaseBackUrl"
         :showMenuButton="true"
     >
         <x-slot:actions>
@@ -79,18 +109,20 @@
             </div>
         </div>
     </section>
-    <div class="fixed bottom-0 w-full max-w-[430px] bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800 pt-4 pb-10 px-4">
-        <div class="flex gap-3">
-            <button id="reject" class="flex-1 py-4 px-6 rounded-xl border-2 border-slate-200 dark:border-slate-700 font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50">Tolak</button>
-            <button id="approve" class="flex-[2] py-4 px-6 rounded-xl bg-primary text-white font-bold shadow-lg shadow-primary/30 flex items-center justify-center gap-2">
-                <span class="material-symbols-outlined text-sm">check_circle</span>
-                Setujui PO
-            </button>
+    @if ($canManagePurchaseDetail)
+        <div class="fixed bottom-0 w-full max-w-[430px] bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800 pt-4 pb-10 px-4">
+            <div class="flex gap-3">
+                <button id="reject" class="flex-1 py-4 px-6 rounded-xl border-2 border-slate-200 dark:border-slate-700 font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50">Tolak</button>
+                <button id="approve" class="flex-[2] py-4 px-6 rounded-xl bg-primary text-white font-bold shadow-lg shadow-primary/30 flex items-center justify-center gap-2">
+                    <span class="material-symbols-outlined text-sm">check_circle</span>
+                    Setujui PO
+                </button>
+            </div>
+            <div class="mt-4 flex justify-center">
+                <div class="w-32 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full"></div>
+            </div>
         </div>
-        <div class="mt-4 flex justify-center">
-            <div class="w-32 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full"></div>
-        </div>
-    </div>
+    @endif
 
         <script>
             (() => {
@@ -116,7 +148,7 @@
                     reject: document.getElementById('reject'),
                 };
 
-                let purchaseId = new URLSearchParams(window.location.search).get('purchase_id');
+                let purchaseId = @json($resolvedPurchaseId) || new URLSearchParams(window.location.search).get('purchase_id');
 
                 const formatCurrency = (value) => new Intl.NumberFormat('id-ID', {
                     style: 'currency',
@@ -203,8 +235,10 @@
                     setStatus(status);
                 };
 
-                el.approve.addEventListener('click', () => decide('approved'));
-                el.reject.addEventListener('click', () => decide('rejected'));
+                if (el.approve && el.reject) {
+                    el.approve.addEventListener('click', () => decide('approved'));
+                    el.reject.addEventListener('click', () => decide('rejected'));
+                }
 
                 (async () => {
                     try {
@@ -236,8 +270,5 @@
             })();
         </script>
     @endsection
-
-
-
 
 

@@ -1,3 +1,29 @@
+@php
+    $branchTenant = \App\Support\TenantContext::get();
+    $branchUser = auth()->user();
+    $branchRole = null;
+
+    if (! $branchTenant && filled($branchUser?->tenant_id)) {
+        $branchTenant = \App\Models\Tenant::query()->find($branchUser->tenant_id);
+    }
+
+    if ($branchTenant && $branchUser) {
+        $branchRole = app(\App\Services\UserRoleResolverService::class)
+            ->resolveNormalizedRole((string) $branchTenant->id, (string) $branchUser->id);
+
+        if (! $branchRole && filled($branchUser->role ?? null)) {
+            $branchRole = app(\App\Services\UserRoleResolverService::class)
+                ->normalize((string) $branchUser->role);
+        }
+    }
+
+    abort_unless(in_array($branchRole, ['admin', 'owner', 'superadmin'], true), 403);
+
+    $branchCurrentPath = $currentPath ?? ($branchId ? '/backoffice/branches/'.$branchId.'/edit' : '/backoffice/branches/edit');
+    $branchBackUrl = $backUrl ?? '/backoffice/branches';
+    $resolvedBranchId = (string) ($branchId ?? request()->query('branch_id', ''));
+@endphp
+
 @extends('layouts.app')
 
 @section('page_title', 'Tambah & Edit Cabang')
@@ -18,11 +44,8 @@
 @endpush
 
 @section('header')
-    <x-page-header title="Kelola Cabang" backUrl="/menu/settings" :showMenuButton="false">
+    <x-page-header title="Kelola Cabang" :backUrl="$branchBackUrl" :showMenuButton="true">
         <x-slot name="actions">
-            <a class="flex items-center justify-center size-9 rounded-full bg-slate-100 dark:bg-slate-800" href="#" data-menu-trigger>
-                <span class="material-symbols-outlined text-slate-600 dark:text-slate-300 text-[20px]">menu</span>
-            </a>
             <button id="save-top" class="text-primary font-semibold text-sm">Simpan</button>
         </x-slot>
     </x-page-header>
@@ -104,6 +127,7 @@
             (() => {
                 const tenantId = document.querySelector('meta[name="tenant-id"]').content;
                 const headers = tenantId ? { 'X-Tenant-Id': tenantId } : {};
+                const currentPath = @json($branchCurrentPath);
 
                 const el = {
                     name: document.getElementById('branch-name'),
@@ -116,7 +140,7 @@
                     delete: document.getElementById('delete-branch'),
                 };
 
-                let branchId = new URLSearchParams(window.location.search).get('branch_id');
+                let branchId = @json($resolvedBranchId) || new URLSearchParams(window.location.search).get('branch_id');
                 let defaultLocationId = null;
 
                 const loadBranch = async () => {
@@ -161,6 +185,10 @@
                     const data = await response.json();
                     if (!branchId) {
                         branchId = data.branch_id;
+                        if (branchId) {
+                            const nextPath = `/backoffice/branches/${encodeURIComponent(branchId)}/edit`;
+                            window.history.replaceState(null, '', nextPath);
+                        }
                     }
                     alert('Perubahan disimpan.');
                 };

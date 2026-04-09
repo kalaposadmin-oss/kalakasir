@@ -1,5 +1,33 @@
 @extends('layouts.app')
 
+@php
+    $stockAlertTenant = \App\Support\TenantContext::get();
+    $stockAlertUser = auth()->user();
+    $stockAlertRole = null;
+
+    if (! $stockAlertTenant && filled($stockAlertUser?->tenant_id)) {
+        $stockAlertTenant = \App\Models\Tenant::query()->find($stockAlertUser->tenant_id);
+    }
+
+    $stockAlertPlan = $stockAlertTenant
+        ? app(\App\Services\SubscriptionService::class)->currentPlan($stockAlertTenant)
+        : null;
+    $canViewStockAlerts = \App\Support\FeatureGateConfig::isFeatureAllowed('reports.inventory_view', $stockAlertPlan);
+
+    if ($stockAlertTenant && $stockAlertUser) {
+        $stockAlertRole = app(\App\Services\UserRoleResolverService::class)
+            ->resolveNormalizedRole((string) $stockAlertTenant->id, (string) $stockAlertUser->id);
+
+        if (! $stockAlertRole && filled($stockAlertUser->role ?? null)) {
+            $stockAlertRole = app(\App\Services\UserRoleResolverService::class)
+                ->normalize((string) $stockAlertUser->role);
+        }
+    }
+
+    abort_unless($canViewStockAlerts, 403);
+    abort_unless(in_array($stockAlertRole, ['warehouse', 'supervisor', 'admin', 'owner', 'superadmin'], true), 403);
+@endphp
+
 @section('page_title', 'Alert Stok dan Reorder')
 @section('body_class', 'bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display')
 @section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-background-light dark:bg-background-dark shadow-2xl')
@@ -15,7 +43,7 @@
 @endpush
 
 @section('header')
-        <x-page-header title="Alert Stok dan Reorder" backUrl="/menu/reports">
+        <x-page-header title="Alert Stok dan Reorder" backUrl="/backoffice/reports/inventory">
             <x-slot name="actions">
                 <button class="flex items-center justify-center size-9 rounded-full bg-slate-100 dark:bg-slate-800">
                     <span class="material-symbols-outlined text-slate-600 dark:text-slate-400 text-[20px]">filter_list</span>

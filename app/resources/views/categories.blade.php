@@ -1,12 +1,36 @@
 @extends('layouts.app')
 
+@php
+    $categoriesTenant = \App\Support\TenantContext::get();
+    $categoriesUser = auth()->user();
+    $categoriesRole = null;
+
+    if (! $categoriesTenant && filled($categoriesUser?->tenant_id)) {
+        $categoriesTenant = \App\Models\Tenant::query()->find($categoriesUser->tenant_id);
+    }
+
+    if ($categoriesTenant && $categoriesUser) {
+        $categoriesRole = app(\App\Services\UserRoleResolverService::class)
+            ->resolveNormalizedRole((string) $categoriesTenant->id, (string) $categoriesUser->id);
+
+        if (! $categoriesRole && filled($categoriesUser->role ?? null)) {
+            $categoriesRole = app(\App\Services\UserRoleResolverService::class)
+                ->normalize((string) $categoriesUser->role);
+        }
+    }
+
+    abort_unless(in_array($categoriesRole, ['warehouse', 'supervisor', 'admin', 'owner', 'superadmin'], true), 403);
+
+    $canManageCategories = in_array($categoriesRole, ['admin', 'owner', 'superadmin'], true);
+@endphp
+
 @section('page_title', 'POS SaaS')
 @section('body_class', 'bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 antialiased')
 @section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-white dark:bg-background-dark shadow-2xl')
 @section('main_class', 'flex-1 overflow-hidden p-0')
 
 @section('header')
-    <x-page-header title="Kategori Produk" backUrl="/menu/management">
+    <x-page-header title="Kategori Produk" backUrl="/backoffice/products">
         <x-slot name="actions">
             <button class="flex items-center justify-center p-2 rounded-full hover:bg-slate-100 transition-colors" type="button">
                 <span class="material-symbols-outlined text-slate-900">more_vert</span>
@@ -31,9 +55,11 @@
 
         <div class="flex-1 overflow-y-auto px-4 space-y-3 pb-24" id="category-list"></div>
 
-        <button id="add-category" class="fixed bottom-24 left-1/2 flex items-center justify-center size-14 bg-primary text-white rounded-full shadow-lg hover:scale-105 active:scale-95 transition-transform -translate-x-1/2" type="button" onclick="location.href='/categories/new'">
-            <span class="material-symbols-outlined text-3xl">add</span>
-        </button>
+        @if ($canManageCategories)
+            <button id="add-category" class="fixed bottom-24 left-1/2 flex items-center justify-center size-14 bg-primary text-white rounded-full shadow-lg hover:scale-105 active:scale-95 transition-transform -translate-x-1/2" type="button" onclick="location.href='/backoffice/categories/new'">
+                <span class="material-symbols-outlined text-3xl">add</span>
+            </button>
+        @endif
 
         <script>
             (() => {
@@ -92,9 +118,11 @@
                                 <span class="material-symbols-outlined text-slate-300 text-sm">chevron_right</span>
                             </div>
                         `;
-                        row.addEventListener('click', () => {
-                            window.location.href = `/categories/${item.id}/edit`;
-                        });
+                        @if ($canManageCategories)
+                            row.addEventListener('click', () => {
+                                window.location.href = `/backoffice/categories/${item.id}/edit`;
+                            });
+                        @endif
                         el.list.appendChild(row);
                     });
                 };

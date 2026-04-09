@@ -1,5 +1,27 @@
 @extends('layouts.app')
 
+@php
+    $stockTransferTenant = \App\Support\TenantContext::get();
+    $stockTransferUser = auth()->user();
+    $stockTransferRole = null;
+
+    if (! $stockTransferTenant && filled($stockTransferUser?->tenant_id)) {
+        $stockTransferTenant = \App\Models\Tenant::query()->find($stockTransferUser->tenant_id);
+    }
+
+    if ($stockTransferTenant && $stockTransferUser) {
+        $stockTransferRole = app(\App\Services\UserRoleResolverService::class)
+            ->resolveNormalizedRole((string) $stockTransferTenant->id, (string) $stockTransferUser->id);
+
+        if (! $stockTransferRole && filled($stockTransferUser->role ?? null)) {
+            $stockTransferRole = app(\App\Services\UserRoleResolverService::class)
+                ->normalize((string) $stockTransferUser->role);
+        }
+    }
+
+    abort_unless(in_array($stockTransferRole, ['warehouse', 'supervisor', 'admin', 'owner', 'superadmin'], true), 403);
+@endphp
+
 @section('page_title', 'Mutasi Stok Antar Cabang')
 @section('body_class', 'bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display')
 @section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-background-light dark:bg-background-dark shadow-2xl')
@@ -16,7 +38,7 @@
         <header class="sticky top-0 z-50 bg-white/80 dark:bg-background-dark/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800" data-auto-center-title="true">
             <div class="flex items-center justify-between p-4 pb-2">
                 <div class="flex items-center gap-3">
-                    <button class="material-symbols-outlined text-slate-900 dark:text-slate-100 cursor-pointer" onclick="location.href='/menu/reports'">arrow_back_ios</button>
+                    <button class="material-symbols-outlined text-slate-900 dark:text-slate-100 cursor-pointer" onclick="location.href='/backoffice/reports/inventory'">arrow_back_ios</button>
                     <h1 class="text-lg font-bold tracking-tight">Mutasi Stok</h1>
                 </div>
                 <div class="flex gap-2">

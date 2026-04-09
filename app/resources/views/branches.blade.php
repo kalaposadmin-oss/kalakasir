@@ -1,16 +1,42 @@
 @extends('layouts.app')
 
+@php
+    $branchesTenant = \App\Support\TenantContext::get();
+    $branchesUser = auth()->user();
+    $branchesRole = null;
+
+    if (! $branchesTenant && filled($branchesUser?->tenant_id)) {
+        $branchesTenant = \App\Models\Tenant::query()->find($branchesUser->tenant_id);
+    }
+
+    if ($branchesTenant && $branchesUser) {
+        $branchesRole = app(\App\Services\UserRoleResolverService::class)
+            ->resolveNormalizedRole((string) $branchesTenant->id, (string) $branchesUser->id);
+
+        if (! $branchesRole && filled($branchesUser->role ?? null)) {
+            $branchesRole = app(\App\Services\UserRoleResolverService::class)
+                ->normalize((string) $branchesUser->role);
+        }
+    }
+
+    abort_unless(in_array($branchesRole, ['warehouse', 'supervisor', 'admin', 'owner', 'superadmin'], true), 403);
+
+    $canManageBranches = in_array($branchesRole, ['admin', 'owner', 'superadmin'], true);
+@endphp
+
 @section('page_title', 'Manajemen Lokasi & Cabang')
 @section('body_class', 'font-display bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 antialiased')
 @section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-white dark:bg-slate-950 shadow-2xl')
 @section('main_class', 'flex-1 overflow-hidden p-0')
 
 @section('header')
-    <x-page-header title="Manajemen Cabang" backUrl="/menu/settings">
+    <x-page-header title="Manajemen Cabang" backUrl="/backoffice/dashboard">
         <x-slot name="actions">
-            <a class="flex items-center justify-center rounded-full size-10 bg-primary/10 text-primary hover:bg-primary/20 transition-colors" href="/branches/edit">
-                <span class="material-symbols-outlined">add</span>
-            </a>
+            @if ($canManageBranches)
+                <a class="flex items-center justify-center rounded-full size-10 bg-primary/10 text-primary hover:bg-primary/20 transition-colors" href="/backoffice/branches/edit">
+                    <span class="material-symbols-outlined">add</span>
+                </a>
+            @endif
         </x-slot>
     </x-page-header>
 @endsection
@@ -72,7 +98,9 @@
                             <p class="text-[10px] uppercase tracking-wider font-bold text-primary/70">Lokasi Perangkat Ini</p>
                             <p class="text-sm font-bold text-slate-900 dark:text-slate-100">${defaultLocation}</p>
                         </div>
-                        <a class="text-xs font-bold text-primary px-3 py-1.5 rounded-lg bg-white shadow-sm border border-primary/10" href="/branches/edit?branch_id=${defaultBranch.id}">Ubah</a>
+                        @if ($canManageBranches)
+                            <a class="text-xs font-bold text-primary px-3 py-1.5 rounded-lg bg-white shadow-sm border border-primary/10" href="/backoffice/branches/${encodeURIComponent(defaultBranch.id)}/edit?from=${encodeURIComponent('/backoffice/branches')}">Ubah</a>
+                        @endif
                     `;
                 };
 
@@ -102,14 +130,16 @@
                                     <span class="size-2 rounded-full bg-emerald-500"></span>
                                     <h4 class="font-bold text-slate-900 dark:text-slate-100">${branch.name}</h4>
                                 </div>
-                                <div class="flex gap-1">
-                                    <a class="size-8 flex items-center justify-center text-slate-400 hover:text-primary transition-colors" href="/branches/edit?branch_id=${branch.id}">
-                                        <span class="material-symbols-outlined text-xl">edit</span>
-                                    </a>
-                                    <button class="size-8 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors" data-branch-id="${branch.id}">
-                                        <span class="material-symbols-outlined text-xl">delete</span>
-                                    </button>
-                                </div>
+                                @if ($canManageBranches)
+                                    <div class="flex gap-1">
+                                        <a class="size-8 flex items-center justify-center text-slate-400 hover:text-primary transition-colors" href="/backoffice/branches/${encodeURIComponent(branch.id)}/edit?from=${encodeURIComponent('/backoffice/branches')}">
+                                            <span class="material-symbols-outlined text-xl">edit</span>
+                                        </a>
+                                        <button class="size-8 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors" data-branch-id="${branch.id}">
+                                            <span class="material-symbols-outlined text-xl">delete</span>
+                                        </button>
+                                    </div>
+                                @endif
                             </div>
                             <div class="space-y-2 mb-4">
                                 <div class="flex items-start gap-2 text-slate-500 dark:text-slate-400">
@@ -123,9 +153,11 @@
                             </div>
                             <div class="flex items-center justify-between pt-3 border-t border-slate-50 dark:border-slate-800">
                                 ${isDefault ? '<span class="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded uppercase">Default Device</span>' : '<div class="w-1"></div>'}
-                                ${isDefault
-                                    ? '<button class="text-xs font-semibold text-slate-400 flex items-center gap-1 opacity-50 cursor-not-allowed"><span class="material-symbols-outlined text-sm">check_circle</span>Terpilih</button>'
-                                    : '<button class="text-xs font-semibold text-primary flex items-center gap-1 hover:underline"><span class="material-symbols-outlined text-sm">pin</span>Set Default</button>'}
+                                @if ($canManageBranches)
+                                    ${isDefault
+                                        ? '<button class="text-xs font-semibold text-slate-400 flex items-center gap-1 opacity-50 cursor-not-allowed"><span class="material-symbols-outlined text-sm">check_circle</span>Terpilih</button>'
+                                        : '<button class="text-xs font-semibold text-primary flex items-center gap-1 hover:underline"><span class="material-symbols-outlined text-sm">pin</span>Set Default</button>'}
+                                @endif
                             </div>
                         `;
                         el.list.appendChild(row);
@@ -154,6 +186,7 @@
                     renderBranches();
                 });
 
+                @if ($canManageBranches)
                 el.list.addEventListener('click', async (event) => {
                     const target = event.target.closest('button[data-branch-id]');
                     if (!target) {
@@ -191,6 +224,7 @@
                     renderBanner();
                     renderBranches();
                 });
+                @endif
 
                 (async () => {
                     const [branches, bootstrap] = await Promise.all([loadBranches(), loadBootstrap()]);

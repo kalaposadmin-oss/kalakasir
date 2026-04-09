@@ -1,5 +1,27 @@
 @extends('layouts.app')
 
+@php
+    $purchaseReturnTenant = \App\Support\TenantContext::get();
+    $purchaseReturnUser = auth()->user();
+    $purchaseReturnRole = null;
+
+    if (! $purchaseReturnTenant && filled($purchaseReturnUser?->tenant_id)) {
+        $purchaseReturnTenant = \App\Models\Tenant::query()->find($purchaseReturnUser->tenant_id);
+    }
+
+    if ($purchaseReturnTenant && $purchaseReturnUser) {
+        $purchaseReturnRole = app(\App\Services\UserRoleResolverService::class)
+            ->resolveNormalizedRole((string) $purchaseReturnTenant->id, (string) $purchaseReturnUser->id);
+
+        if (! $purchaseReturnRole && filled($purchaseReturnUser->role ?? null)) {
+            $purchaseReturnRole = app(\App\Services\UserRoleResolverService::class)
+                ->normalize((string) $purchaseReturnUser->role);
+        }
+    }
+
+    abort_unless(in_array($purchaseReturnRole, ['admin', 'owner', 'superadmin'], true), 403);
+@endphp
+
 @section('page_title', 'Pencatatan Retur Pembelian')
 @section('body_class', 'bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display')
 @section('main_class', 'flex-1 overflow-y-auto pb-32')
@@ -14,9 +36,9 @@
 @endpush
 
 @section('header')
-    <x-page-header title="Retur Pembelian" backUrl="/menu/purchases" :showMenuButton="true">
+    <x-page-header title="Retur Pembelian" backUrl="/backoffice/purchases/detail" :showMenuButton="true">
         <x-slot:actions>
-            <button class="text-primary font-semibold text-sm" onclick="location.href='/menu/purchases'">Batal</button>
+            <button class="text-primary font-semibold text-sm" onclick="location.href='/backoffice/purchases/detail'">Batal</button>
         </x-slot:actions>
     </x-page-header>
 @endsection
@@ -245,7 +267,7 @@
                     }
 
                     alert('Retur berhasil disimpan.');
-                    window.location.href = '/suppliers';
+                    window.location.href = '/backoffice/suppliers';
                 });
 
                 (async () => {
@@ -261,8 +283,6 @@
             })();
         </script>
     @endsection
-
-
 
 
 

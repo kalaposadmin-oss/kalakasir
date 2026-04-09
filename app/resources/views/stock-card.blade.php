@@ -8,8 +8,14 @@
 @push('head')
 @endpush
 
+@php
+    $stockCardCurrentPath = $currentPath ?? '/backoffice/inventory/products/'.((string) ($productId ?? request()->query('product_id', ''))).'/stock-card';
+    $stockCardBackUrl = $backUrl ?? '/backoffice/reports/inventory';
+    $resolvedProductId = (string) ($productId ?? request()->query('product_id', ''));
+@endphp
+
 @section('header')
-        <x-page-header title="Kartu Stok Produk" backUrl="/menu/reports">
+        <x-page-header title="Kartu Stok Produk" :backUrl="$stockCardBackUrl">
             <x-slot name="actions">
                 <button class="flex size-9 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
                     <span class="material-symbols-outlined text-[20px]">search</span>
@@ -74,6 +80,26 @@
         </div>
         <div class="px-4 pb-2">
             <x-period-filter id="stock-card-period" defaultPreset="last30" />
+            <div class="mt-3 flex items-center gap-2 overflow-x-auto no-scrollbar">
+                <button class="relative flex shrink-0 items-center gap-2 rounded-full bg-slate-100 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-700" type="button">
+                    <span class="material-symbols-outlined text-sm">location_on</span>
+                    <span id="stock-card-location-label">Semua Lokasi</span>
+                    <span class="material-symbols-outlined text-sm">expand_more</span>
+                    <select id="stock-card-location-filter" class="absolute inset-0 cursor-pointer opacity-0"></select>
+                </button>
+            </div>
+            <div class="mt-3 flex items-center gap-2">
+                <label class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Tipe Movement</label>
+                <select id="ledger-type-filter" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                    <option value="all">Semua</option>
+                    <option value="purchase_receive">Pembelian</option>
+                    <option value="sale">Penjualan</option>
+                    <option value="stock_adjustment">Penyesuaian</option>
+                    <option value="stock_transfer_in">Mutasi Masuk</option>
+                    <option value="stock_transfer_out">Mutasi Keluar</option>
+                </select>
+                <span id="movement-count" class="text-[11px] text-slate-400">0 movement</span>
+            </div>
             <p id="range-warning" class="hidden text-[11px] text-amber-600 mt-2">Rentang dibatasi otomatis (maksimum 90 hari).</p>
         </div>
         <div class="px-4 pt-2">
@@ -131,8 +157,8 @@
                 const tenantId = document.querySelector('meta[name="tenant-id"]')?.content;
                 const headers = tenantId ? { 'X-Tenant-Id': tenantId } : {};
                 const params = new URLSearchParams(window.location.search);
-                const productId = params.get('product_id');
-                const locationId = params.get('location_id');
+                const productId = @json($resolvedProductId) || params.get('product_id');
+                const initialLocationId = params.get('location_id') || '';
 
                 const el = {
                     image: document.getElementById('product-image'),
@@ -146,6 +172,10 @@
                     rangeLabels: document.querySelectorAll('[data-range-label]'),
                     rangeChip: document.getElementById('range-chip'),
                     period: document.getElementById('stock-card-period'),
+                    locationFilter: document.getElementById('stock-card-location-filter'),
+                    locationLabel: document.getElementById('stock-card-location-label'),
+                    ledgerType: document.getElementById('ledger-type-filter'),
+                    movementCount: document.getElementById('movement-count'),
                     warning: document.getElementById('range-warning'),
                     fifoMethod: document.getElementById('fifo-method'),
                     fifoWarning: document.getElementById('fifo-warning'),
@@ -228,6 +258,45 @@
                     return response.json();
                 };
 
+                const updateHistoryUrl = () => {
+                    const url = new URL(window.location.href);
+                    if (state.locationId) {
+                        url.searchParams.set('location_id', state.locationId);
+                    } else {
+                        url.searchParams.delete('location_id');
+                    }
+                    window.history.replaceState({}, '', `${url.pathname}${url.search}`);
+                };
+
+                const buildLocationOptions = (locations) => {
+                    if (!el.locationFilter) {
+                        return;
+                    }
+                    el.locationFilter.innerHTML = '';
+                    const defaultOption = document.createElement('option');
+                    defaultOption.value = '';
+                    defaultOption.textContent = 'Semua Lokasi';
+                    el.locationFilter.appendChild(defaultOption);
+
+                    locations.forEach((location) => {
+                        const option = document.createElement('option');
+                        option.value = location.id;
+                        option.textContent = location.name;
+                        el.locationFilter.appendChild(option);
+                    });
+
+                    const hasSelectedLocation = locations.some((location) => location.id === state.locationId);
+                    if (!hasSelectedLocation) {
+                        state.locationId = '';
+                    }
+
+                    el.locationFilter.value = state.locationId;
+                    const label = el.locationFilter.options[el.locationFilter.selectedIndex]?.textContent || 'Semua Lokasi';
+                    if (el.locationLabel) {
+                        el.locationLabel.textContent = label;
+                    }
+                };
+
                 const renderProductList = (products, inventory) => {
                     const term = (state.term || '').toLowerCase();
                     const list = products.filter((product) => {
@@ -251,8 +320,14 @@
                         const image = product.image_url || 'https://placehold.co/120x120?text=Produk';
                         const qtyColor = qty === 0 ? 'text-rose-600' : 'text-slate-900 dark:text-slate-100';
 
+                        const detailUrl = new URL(`/backoffice/inventory/products/${encodeURIComponent(product.id)}/stock-card`, window.location.origin);
+                        detailUrl.searchParams.set('from', @json($stockCardCurrentPath));
+                        if (state.locationId) {
+                            detailUrl.searchParams.set('location_id', state.locationId);
+                        }
+
                         const card = document.createElement('a');
-                        card.href = `/stock-card?product_id=${encodeURIComponent(product.id)}`;
+                        card.href = `${detailUrl.pathname}${detailUrl.search}`;
                         card.className = 'flex items-center gap-4 bg-white dark:bg-slate-900 px-4 py-4 border-b border-slate-50 dark:border-slate-800/50';
                         card.innerHTML = `
                             <div class="bg-center bg-no-repeat aspect-square bg-cover rounded-lg size-14 bg-slate-100 dark:bg-slate-800" style="background-image: url('${image}')"></div>
@@ -391,8 +466,8 @@
                     if (productId) {
                         url.searchParams.set('product_id', productId);
                     }
-                    if (locationId) {
-                        url.searchParams.set('location_id', locationId);
+                    if (state.locationId) {
+                        url.searchParams.set('location_id', state.locationId);
                     }
                     if (period?.preset) {
                         url.searchParams.set('preset', period.preset);
@@ -402,6 +477,9 @@
                     }
                     if (period?.end_date) {
                         url.searchParams.set('end_date', period.end_date);
+                    }
+                    if (state.ledgerType && state.ledgerType !== 'all') {
+                        url.searchParams.set('type', state.ledgerType);
                     }
                     if (state.showEmptyLayers) {
                         url.searchParams.set('include_empty_layers', '1');
@@ -437,6 +515,8 @@
 
                 const state = {
                     period: { preset: 'last30', start_date: '', end_date: '' },
+                    locationId: initialLocationId,
+                    ledgerType: 'all',
                     showEmptyLayers: false,
                     allocationType: 'all',
                     term: '',
@@ -463,10 +543,11 @@
                             el.currentStock.textContent = formatQty(data.balance || 0);
 
                             const ledger = Array.isArray(data.ledger) ? data.ledger : [];
-                            const totalIn = ledger.reduce((sum, row) => sum + Number(row.qty_in || 0), 0);
-                            const totalOut = ledger.reduce((sum, row) => sum + Number(row.qty_out || 0), 0);
-                            el.totalIn.textContent = formatQty(totalIn);
-                            el.totalOut.textContent = formatQty(totalOut);
+                            el.totalIn.textContent = formatQty(data.summary?.total_in || 0);
+                            el.totalOut.textContent = formatQty(data.summary?.total_out || 0);
+                            if (el.movementCount) {
+                                el.movementCount.textContent = `${data.summary?.movement_count || 0} movement`;
+                            }
 
                             el.fifoMethod.textContent = String(data.valuation_method || '-').toUpperCase();
                             el.fifoWarning.classList.toggle('hidden', String(data.valuation_method || '').toLowerCase() === 'fifo');
@@ -496,14 +577,85 @@
                     });
                 });
 
+                el.ledgerType?.addEventListener('change', (event) => {
+                    state.ledgerType = event.target?.value || 'all';
+                    reload()
+                        .then((data) => {
+                            const ledger = Array.isArray(data.ledger) ? data.ledger : [];
+                            el.totalIn.textContent = formatQty(data.summary?.total_in || 0);
+                            el.totalOut.textContent = formatQty(data.summary?.total_out || 0);
+                            if (el.movementCount) {
+                                el.movementCount.textContent = `${data.summary?.movement_count || 0} movement`;
+                            }
+                            renderRange(data.range);
+                            renderLedger(ledger);
+                        })
+                        .catch((error) => {
+                            el.ledgerList.innerHTML = `<div class="py-6 text-sm text-red-500">${error.message || 'Gagal memuat movement stok.'}</div>`;
+                        });
+                });
+
+                el.locationFilter?.addEventListener('change', (event) => {
+                    state.locationId = event.target?.value || '';
+                    const label = el.locationFilter.options[el.locationFilter.selectedIndex]?.textContent || 'Semua Lokasi';
+                    if (el.locationLabel) {
+                        el.locationLabel.textContent = label;
+                    }
+                    updateHistoryUrl();
+
+                    if (!productId) {
+                        loadBootstrap()
+                            .then((payload) => {
+                                const data = window.PosUi.unwrapApiPayload(payload) || payload;
+                                const products = data.products || [];
+                                const inventory = Array.isArray(data.inventory)
+                                    ? data.inventory.filter((item) => !state.locationId || item.location_id === state.locationId)
+                                    : [];
+                                state.term = el.pickerSearch?.value || '';
+                                renderProductList(products, inventory);
+                            })
+                            .catch(() => {
+                                el.pickerList.innerHTML = '<div class="px-4 py-6 text-sm text-red-500">Gagal memuat daftar produk.</div>';
+                            });
+                        return;
+                    }
+
+                    reload()
+                        .then((data) => {
+                            if (!data.product) {
+                                el.name.textContent = 'Produk tidak ditemukan';
+                                return;
+                            }
+                            el.currentStock.textContent = formatQty(data.balance || 0);
+                            el.totalIn.textContent = formatQty(data.summary?.total_in || 0);
+                            el.totalOut.textContent = formatQty(data.summary?.total_out || 0);
+                            if (el.movementCount) {
+                                el.movementCount.textContent = `${data.summary?.movement_count || 0} movement`;
+                            }
+                            renderLayers(Array.isArray(data.layers) ? data.layers : []);
+                            renderAllocations(Array.isArray(data.allocations) ? data.allocations : []);
+                            renderRange(data.range);
+                            renderLedger(Array.isArray(data.ledger) ? data.ledger : []);
+                        })
+                        .catch((error) => {
+                            el.ledgerList.innerHTML = `<div class="py-6 text-sm text-red-500">${error.message || 'Gagal memuat kartu stok.'}</div>`;
+                        });
+                });
+
                 (async () => {
                     try {
+                        const bootstrapPayload = await loadBootstrap();
+                        const bootstrapData = window.PosUi.unwrapApiPayload(bootstrapPayload) || bootstrapPayload;
+                        const locations = Array.isArray(bootstrapData.locations) ? bootstrapData.locations : [];
+                        buildLocationOptions(locations);
+
                         if (!productId) {
                             el.picker.classList.remove('hidden');
                             el.detail.classList.add('hidden');
-                            const data = await loadBootstrap();
-                            const products = data.products || [];
-                            const inventory = data.inventory || [];
+                            const products = bootstrapData.products || [];
+                            const inventory = Array.isArray(bootstrapData.inventory)
+                                ? bootstrapData.inventory.filter((item) => !state.locationId || item.location_id === state.locationId)
+                                : [];
                             renderProductList(products, inventory);
                             el.pickerSearch?.addEventListener('input', (event) => {
                                 state.term = event.target.value || '';
@@ -527,10 +679,11 @@
                         el.currentStock.textContent = formatQty(data.balance || 0);
 
                         const ledger = Array.isArray(data.ledger) ? data.ledger : [];
-                        const totalIn = ledger.reduce((sum, row) => sum + Number(row.qty_in || 0), 0);
-                        const totalOut = ledger.reduce((sum, row) => sum + Number(row.qty_out || 0), 0);
-                        el.totalIn.textContent = formatQty(totalIn);
-                        el.totalOut.textContent = formatQty(totalOut);
+                        el.totalIn.textContent = formatQty(data.summary?.total_in || 0);
+                        el.totalOut.textContent = formatQty(data.summary?.total_out || 0);
+                        if (el.movementCount) {
+                            el.movementCount.textContent = `${data.summary?.movement_count || 0} movement`;
+                        }
                         el.fifoMethod.textContent = String(data.valuation_method || '-').toUpperCase();
                         el.fifoWarning.classList.toggle('hidden', String(data.valuation_method || '').toLowerCase() === 'fifo');
                         renderLayers(Array.isArray(data.layers) ? data.layers : []);

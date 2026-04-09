@@ -1,5 +1,29 @@
 @extends('layouts.app')
 
+@php
+    $customersTenant = \App\Support\TenantContext::get();
+    $customersUser = auth()->user();
+    $customersRole = null;
+
+    if (! $customersTenant && filled($customersUser?->tenant_id)) {
+        $customersTenant = \App\Models\Tenant::query()->find($customersUser->tenant_id);
+    }
+
+    if ($customersTenant && $customersUser) {
+        $customersRole = app(\App\Services\UserRoleResolverService::class)
+            ->resolveNormalizedRole((string) $customersTenant->id, (string) $customersUser->id);
+
+        if (! $customersRole && filled($customersUser->role ?? null)) {
+            $customersRole = app(\App\Services\UserRoleResolverService::class)
+                ->normalize((string) $customersUser->role);
+        }
+    }
+
+    abort_unless(in_array($customersRole, ['warehouse', 'supervisor', 'admin', 'owner', 'superadmin'], true), 403);
+
+    $canManageCustomers = in_array($customersRole, ['admin', 'owner', 'superadmin'], true);
+@endphp
+
 @section('page_title', 'Daftar & Detail Pelanggan')
 @section('body_class', 'bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display')
 @section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-white dark:bg-slate-950 shadow-2xl')
@@ -18,11 +42,13 @@
 @endpush
 
 @section('header')
-    <x-page-header title="Pelanggan" backUrl="/menu/management">
+    <x-page-header title="Pelanggan" backUrl="/backoffice/dashboard">
         <x-slot name="actions">
-            <button class="flex size-10 cursor-pointer items-center justify-center rounded-full bg-primary text-white" type="button">
-                <span class="material-symbols-outlined">person_add</span>
-            </button>
+            @if ($canManageCustomers)
+                <button class="flex size-10 cursor-pointer items-center justify-center rounded-full bg-primary text-white" type="button">
+                    <span class="material-symbols-outlined">person_add</span>
+                </button>
+            @endif
         </x-slot>
     </x-page-header>
 @endsection

@@ -1,5 +1,43 @@
 @extends('layouts.app')
 
+@php
+    $productsTenant = \App\Support\TenantContext::get();
+    $productsUser = auth()->user();
+    $productsRole = null;
+
+    if (! $productsTenant && filled($productsUser?->tenant_id)) {
+        $productsTenant = \App\Models\Tenant::query()->find($productsUser->tenant_id);
+    }
+
+    if ($productsTenant && $productsUser) {
+        $productsRole = app(\App\Services\UserRoleResolverService::class)
+            ->resolveNormalizedRole((string) $productsTenant->id, (string) $productsUser->id);
+
+        if (! $productsRole && filled($productsUser->role ?? null)) {
+            $productsRole = app(\App\Services\UserRoleResolverService::class)
+                ->normalize((string) $productsUser->role);
+        }
+    }
+
+    abort_unless(in_array($productsRole, ['warehouse', 'supervisor', 'admin', 'owner', 'superadmin'], true), 403);
+
+    $canManageProducts = in_array($productsRole, ['admin', 'owner', 'superadmin'], true);
+    $productsFrom = trim((string) request()->query('from', ''));
+    $productsCurrentPath = '/backoffice/products';
+    if ($productsFrom !== '') {
+        $productsCurrentPath .= '?from='.rawurlencode($productsFrom);
+    }
+
+    $productsBackUrl = '/backoffice/dashboard';
+    if ($productsFrom !== '') {
+        if (str_starts_with($productsFrom, '/pos/')) {
+            $productsBackUrl = '/portal/switch/pos?next='.rawurlencode($productsFrom);
+        } elseif (str_starts_with($productsFrom, '/backoffice/')) {
+            $productsBackUrl = $productsFrom;
+        }
+    }
+@endphp
+
 @section('page_title', 'Daftar Produk')
 @section('body_class', 'bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 antialiased')
 @section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-background-light dark:bg-background-dark shadow-2xl')
@@ -14,11 +52,13 @@
 @endpush
 
 @section('header')
-    <x-page-header title="Daftar Produk" backUrl="/menu/management" :showMenuButton="true">
+    <x-page-header title="Daftar Produk" :backUrl="$productsBackUrl" :showMenuButton="true">
         <x-slot:actions>
-            <a class="flex items-center justify-center size-9 rounded-full bg-primary text-white" href="/products/new" aria-label="Tambah produk">
-                <span class="material-symbols-outlined">add</span>
-            </a>
+            @if ($canManageProducts)
+                <a class="flex items-center justify-center size-9 rounded-full bg-primary text-white" href="{{ '/backoffice/products/new?from='.rawurlencode($productsCurrentPath) }}" aria-label="Tambah produk">
+                    <span class="material-symbols-outlined">add</span>
+                </a>
+            @endif
         </x-slot:actions>
     </x-page-header>
 @endsection
@@ -40,6 +80,7 @@
     (() => {
         const tenantId = document.querySelector('meta[name="tenant-id"]').content;
         const headers = tenantId ? { 'X-Tenant-Id': tenantId } : {};
+        const currentPath = @json($productsCurrentPath);
 
         const el = {
             list: document.getElementById('product-list'),
@@ -118,10 +159,10 @@
                         </div>
                     </div>
                     <div class="flex items-center gap-2">
-                        <a class="flex items-center justify-center size-9 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors" href="/products/${product.id}/edit" aria-label="Edit produk" title="Edit produk">
+                        <a class="flex items-center justify-center size-9 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors" href="/backoffice/products/${product.id}/edit?from=${encodeURIComponent(currentPath)}" aria-label="Edit produk" title="Edit produk">
                             <span class="material-symbols-outlined text-[20px]">edit</span>
                         </a>
-                        <a class="flex items-center justify-center size-9 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors" href="/products/detail?product_id=${product.id}" aria-label="Detail produk" title="Detail produk">
+                        <a class="flex items-center justify-center size-9 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors" href="/backoffice/products/${product.id}?from=${encodeURIComponent(currentPath)}" aria-label="Detail produk" title="Detail produk">
                             <span class="material-symbols-outlined text-[20px]">info</span>
                         </a>
                     </div>
@@ -175,9 +216,6 @@
     })();
 </script>
 @endpush
-
-
-
 
 
 

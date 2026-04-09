@@ -1,5 +1,27 @@
 @extends('layouts.app')
 
+@php
+    $stockAdjustmentTenant = \App\Support\TenantContext::get();
+    $stockAdjustmentUser = auth()->user();
+    $stockAdjustmentRole = null;
+
+    if (! $stockAdjustmentTenant && filled($stockAdjustmentUser?->tenant_id)) {
+        $stockAdjustmentTenant = \App\Models\Tenant::query()->find($stockAdjustmentUser->tenant_id);
+    }
+
+    if ($stockAdjustmentTenant && $stockAdjustmentUser) {
+        $stockAdjustmentRole = app(\App\Services\UserRoleResolverService::class)
+            ->resolveNormalizedRole((string) $stockAdjustmentTenant->id, (string) $stockAdjustmentUser->id);
+
+        if (! $stockAdjustmentRole && filled($stockAdjustmentUser->role ?? null)) {
+            $stockAdjustmentRole = app(\App\Services\UserRoleResolverService::class)
+                ->normalize((string) $stockAdjustmentUser->role);
+        }
+    }
+
+    abort_unless(in_array($stockAdjustmentRole, ['warehouse', 'supervisor', 'admin', 'owner', 'superadmin'], true), 403);
+@endphp
+
 @section('page_title', 'Penyesuaian Stok')
 @section('body_class', 'bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 antialiased')
 @section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-background-light dark:bg-background-dark shadow-2xl')
@@ -9,13 +31,13 @@
 @endpush
 
 @section('header')
-        <x-page-header title="Penyesuaian Stok" backUrl="/menu/management">
-            <x-slot name="actions">
-                <button class="flex items-center justify-center rounded-lg h-10 bg-primary px-4 text-white gap-2 text-sm font-bold leading-normal transition-colors hover:bg-primary/90">
-                    <span>Simpan</span>
-                </button>
-            </x-slot>
-        </x-page-header>
+    <x-page-header title="Penyesuaian Stok" backUrl="/backoffice/inventory">
+        <x-slot name="actions">
+            <button class="flex items-center justify-center rounded-lg h-10 bg-primary px-4 text-white gap-2 text-sm font-bold leading-normal transition-colors hover:bg-primary/90">
+                <span>Simpan</span>
+            </button>
+        </x-slot>
+    </x-page-header>
 @endsection
 
 @section('content')

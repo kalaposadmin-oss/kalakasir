@@ -1,5 +1,27 @@
 @extends('layouts.app')
 
+@php
+    $receivingActionTenant = \App\Support\TenantContext::get();
+    $receivingActionUser = auth()->user();
+    $receivingActionRole = null;
+
+    if (! $receivingActionTenant && filled($receivingActionUser?->tenant_id)) {
+        $receivingActionTenant = \App\Models\Tenant::query()->find($receivingActionUser->tenant_id);
+    }
+
+    if ($receivingActionTenant && $receivingActionUser) {
+        $receivingActionRole = app(\App\Services\UserRoleResolverService::class)
+            ->resolveNormalizedRole((string) $receivingActionTenant->id, (string) $receivingActionUser->id);
+
+        if (! $receivingActionRole && filled($receivingActionUser->role ?? null)) {
+            $receivingActionRole = app(\App\Services\UserRoleResolverService::class)
+                ->normalize((string) $receivingActionUser->role);
+        }
+    }
+
+    abort_unless(in_array($receivingActionRole, ['admin', 'owner', 'superadmin'], true), 403);
+@endphp
+
 @section('page_title', 'Aksi Terima Barang PO')
 @section('body_class', 'bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display')
 @section('main_class', 'flex-1 overflow-y-auto pb-32')
@@ -17,8 +39,14 @@
         </style>
 @endpush
 
+@php
+    $receivingCurrentPath = $currentPath ?? '/backoffice/receiving/'.((string) ($purchaseId ?? request()->query('purchase_id', ''))).'/action';
+    $receivingBackUrl = $backUrl ?? '/backoffice/receiving';
+    $resolvedPurchaseId = (string) ($purchaseId ?? request()->query('purchase_id', ''));
+@endphp
+
 @section('header')
-    <x-page-header title="Terima Barang" subtitle="PO -" subtitleId="po-subtitle" backUrl="/menu/purchases" :showMenuButton="true">
+    <x-page-header title="Terima Barang" subtitle="PO -" subtitleId="po-subtitle" :backUrl="$receivingBackUrl" :showMenuButton="true">
         <x-slot:actions>
             <button class="flex items-center justify-center size-9 rounded-full bg-slate-100 dark:bg-slate-800">
                 <span class="material-symbols-outlined text-slate-600 dark:text-slate-400 text-[20px]">qr_code_scanner</span>
@@ -224,7 +252,7 @@
 
                 (async () => {
                     const purchases = await loadPurchases();
-                    const selectedId = getParam('purchase_id') || (purchases[0]?.id || null);
+                    const selectedId = @json($resolvedPurchaseId) || getParam('purchase_id') || (purchases[0]?.id || null);
                     if (!selectedId) {
                         el.list.innerHTML = '<div class="text-sm text-slate-400">Belum ada PO.</div>';
                         return;
@@ -244,8 +272,5 @@
             })();
         </script>
     @endsection
-
-
-
 
 

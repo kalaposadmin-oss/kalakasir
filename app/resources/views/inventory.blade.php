@@ -1,11 +1,43 @@
 @extends('layouts.app')
 
+@php
+    $inventoryTenant = \App\Support\TenantContext::get();
+    $inventoryUser = auth()->user();
+    $inventoryRole = null;
+
+    if (! $inventoryTenant && filled($inventoryUser?->tenant_id)) {
+        $inventoryTenant = \App\Models\Tenant::query()->find($inventoryUser->tenant_id);
+    }
+
+    if ($inventoryTenant && $inventoryUser) {
+        $inventoryRole = app(\App\Services\UserRoleResolverService::class)
+            ->resolveNormalizedRole((string) $inventoryTenant->id, (string) $inventoryUser->id);
+
+        if (! $inventoryRole && filled($inventoryUser->role ?? null)) {
+            $inventoryRole = app(\App\Services\UserRoleResolverService::class)
+                ->normalize((string) $inventoryUser->role);
+        }
+    }
+
+    abort_unless(in_array($inventoryRole, ['warehouse', 'supervisor', 'admin', 'owner', 'superadmin'], true), 403);
+
+    $inventoryFrom = trim((string) request()->query('from', ''));
+    $inventoryBackUrl = '/backoffice/dashboard';
+    if ($inventoryFrom !== '') {
+        if (str_starts_with($inventoryFrom, '/pos/')) {
+            $inventoryBackUrl = '/portal/switch/pos?next='.rawurlencode($inventoryFrom);
+        } elseif (str_starts_with($inventoryFrom, '/backoffice/')) {
+            $inventoryBackUrl = $inventoryFrom;
+        }
+    }
+@endphp
+
 @section('page_title', 'Daftar Stok Inventaris')
 @section('body_class', 'bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display')
 @section('main_class', 'relative flex-1 overflow-y-auto pb-24')
 
 @section('header')
-    <x-page-header title="Stok Inventaris" :breadcrumbs="['Inventaris']" :showMenuButton="true">
+    <x-page-header title="Stok Inventaris" :breadcrumbs="['Inventaris']" :backUrl="$inventoryBackUrl" :showMenuButton="true">
         <x-slot:actions>
             <button class="flex cursor-pointer items-center justify-center rounded-lg h-10 bg-transparent text-slate-900 dark:text-slate-100">
                 <span class="material-symbols-outlined text-2xl">notifications</span>

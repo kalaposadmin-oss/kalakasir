@@ -1,3 +1,30 @@
+@php
+    $receivingTenant = \App\Support\TenantContext::get();
+    $receivingUser = auth()->user();
+    $receivingRole = null;
+
+    if (! $receivingTenant && filled($receivingUser?->tenant_id)) {
+        $receivingTenant = \App\Models\Tenant::query()->find($receivingUser->tenant_id);
+    }
+
+    if ($receivingTenant && $receivingUser) {
+        $receivingRole = app(\App\Services\UserRoleResolverService::class)
+            ->resolveNormalizedRole((string) $receivingTenant->id, (string) $receivingUser->id);
+
+        if (! $receivingRole && filled($receivingUser->role ?? null)) {
+            $receivingRole = app(\App\Services\UserRoleResolverService::class)
+                ->normalize((string) $receivingUser->role);
+        }
+    }
+
+    abort_unless(in_array($receivingRole, ['warehouse', 'supervisor', 'admin', 'owner', 'superadmin'], true), 403);
+
+    $canManageReceivingFlow = in_array($receivingRole, ['admin', 'owner', 'superadmin'], true);
+    $receivingPurchaseId = (string) ($purchaseId ?? request()->query('purchase_id', ''));
+    $receivingCurrentPath = $currentPath ?? ($receivingPurchaseId !== '' ? '/backoffice/receiving/'.$receivingPurchaseId : '/backoffice/receiving');
+    $receivingBackUrl = $backUrl ?? ($receivingPurchaseId !== '' ? '/backoffice/receiving' : '/backoffice/suppliers');
+@endphp
+
 @extends('layouts.app')
 
 @section('page_title', 'Terima Barang')
@@ -8,47 +35,75 @@
 @endpush
 
 @section('header')
-    <x-page-header title="Terima Barang" backUrl="/menu/purchases" :showMenuButton="true">
+    <x-page-header title="Terima Barang" :backUrl="$receivingBackUrl" :showMenuButton="true">
         <x-slot:actions>
-            <button class="flex items-center justify-center rounded-lg h-10 w-10 bg-primary/10 text-primary hover:bg-primary/20 transition-colors">
-                <span class="material-symbols-outlined">done_all</span>
-            </button>
+            @if ($canManageReceivingFlow)
+                <a id="receiving-action-link" class="hidden items-center justify-center rounded-lg h-10 w-10 bg-primary/10 text-primary hover:bg-primary/20 transition-colors" href="#">
+                    <span class="material-symbols-outlined">done_all</span>
+                </a>
+            @endif
         </x-slot:actions>
     </x-page-header>
 @endsection
 
 @section('content')
-    <div class="p-4">
-        <div class="flex flex-col items-stretch justify-start rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-            <div class="w-full bg-center bg-no-repeat aspect-[21/9] bg-cover" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuDeHfyqGdfkFnMuGFtIXN_QbsR4upghE3THdltvYScctXSrIEj05qdye1sgytKEsnMEwLh6z6x8vfGyMcXVe7cducZI7poWvT9gOHvVEC0h41M2yiaBhin41LNSqQb-AOhrnzwT36lS3QDDfrvrYUT-ekEHGR0HnXLqdhSsS2HUjxrEPrzMQyg2_nJYNrvQT2JpJkk-VmsuHYUD9rmTH-tISLFnQW8Ylpw0F1s6rolJRx1PCrFflUd-2qTegqQykP2zvk7vYhpwGA");'></div>
-            <div class="flex w-full flex-col p-4" id="purchase-header"></div>
+    <div id="receiving-list-view" class="hidden">
+        <div class="px-4 pt-4">
+            <div class="rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm p-4">
+                <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Daftar Penerimaan</p>
+                <p class="mt-1 text-sm text-slate-500">Pilih purchase order yang ingin diproses penerimaannya.</p>
+            </div>
         </div>
-    </div>
-
-    <div class="px-4 py-2 flex items-center justify-between">
-        <h3 class="text-slate-900 dark:text-slate-100 text-base font-bold leading-tight">Daftar Barang Dipesan</h3>
-        <span class="text-slate-500 text-xs font-medium" id="item-count">0 Item</span>
-    </div>
-
-    <div class="flex flex-col gap-3 px-4 pb-24" id="item-list"></div>
-
-    <div class="fixed bottom-0 left-0 right-0 p-4 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 z-20">
-        <div class="max-w-md mx-auto flex gap-3">
-            <button class="flex-1 flex items-center justify-center h-12 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-sm tracking-wide shadow-sm">
-                SIMPAN DRAFT
-            </button>
-            <button class="flex-[1.5] flex items-center justify-center h-12 rounded-xl bg-primary text-white font-bold text-sm tracking-wide shadow-lg shadow-primary/30">
-                KONFIRMASI STOK
-            </button>
+        <div class="px-4 py-4">
+            <h3 class="text-slate-900 dark:text-slate-100 text-base font-bold leading-tight">Purchase Order Tersedia</h3>
+            <p class="text-slate-500 text-xs font-medium mt-1" id="purchase-list-count">0 PO</p>
         </div>
+        <div class="flex flex-col gap-3 px-4 pb-24" id="purchase-list"></div>
     </div>
 
-        <script>
+    <div id="receiving-detail-view" class="hidden">
+        <div class="p-4">
+            <div class="flex flex-col items-stretch justify-start rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+                <div class="w-full bg-center bg-no-repeat aspect-[21/9] bg-cover" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuDeHfyqGdfkFnMuGFtIXN_QbsR4upghE3THdltvYScctXSrIEj05qdye1sgytKEsnMEwLh6z6x8vfGyMcXVe7cducZI7poWvT9gOHvVEC0h41M2yiaBhin41LNSqQb-AOhrnzwT36lS3QDDfrvrYUT-ekEHGR0HnXLqdhSsS2HUjxrEPrzMQyg2_nJYNrvQT2JpJkk-VmsuHYUD9rmTH-tISLFnQW8Ylpw0F1s6rolJRx1PCrFflUd-2qTegqQykP2zvk7vYhpwGA");'></div>
+                <div class="flex w-full flex-col p-4" id="purchase-header"></div>
+            </div>
+        </div>
+
+        <div class="px-4 py-2 flex items-center justify-between">
+            <h3 class="text-slate-900 dark:text-slate-100 text-base font-bold leading-tight">Daftar Barang Dipesan</h3>
+            <span class="text-slate-500 text-xs font-medium" id="item-count">0 Item</span>
+        </div>
+
+        <div class="flex flex-col gap-3 px-4 pb-24" id="item-list"></div>
+
+        @if ($canManageReceivingFlow)
+            <div class="fixed bottom-0 left-0 right-0 p-4 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 z-20">
+                <div class="max-w-md mx-auto flex gap-3">
+                    <button class="flex-1 flex items-center justify-center h-12 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-sm tracking-wide shadow-sm">
+                        SIMPAN DRAFT
+                    </button>
+                    <a id="detail-action-button" class="hidden flex-[1.5] items-center justify-center h-12 rounded-xl bg-primary text-white font-bold text-sm tracking-wide shadow-lg shadow-primary/30" href="#">
+                        KONFIRMASI STOK
+                    </a>
+                </div>
+            </div>
+        @endif
+    </div>
+
+    <script>
             (() => {
                 const tenantId = document.querySelector('meta[name="tenant-id"]').content;
                 const headers = tenantId ? { 'X-Tenant-Id': tenantId } : {};
+                const purchaseId = @json($receivingPurchaseId) || new URLSearchParams(window.location.search).get('purchase_id');
+                const currentPath = @json($receivingCurrentPath);
 
                 const el = {
+                    listView: document.getElementById('receiving-list-view'),
+                    detailView: document.getElementById('receiving-detail-view'),
+                    actionLink: document.getElementById('receiving-action-link'),
+                    detailActionButton: document.getElementById('detail-action-button'),
+                    purchaseList: document.getElementById('purchase-list'),
+                    purchaseListCount: document.getElementById('purchase-list-count'),
                     header: document.getElementById('purchase-header'),
                     list: document.getElementById('item-list'),
                     count: document.getElementById('item-count'),
@@ -59,8 +114,6 @@
                     month: 'short',
                     year: 'numeric',
                 }).format(new Date(value));
-
-                const getParam = (key) => new URLSearchParams(window.location.search).get(key);
 
                 const loadPurchases = async () => {
                     const response = await fetch('/api/v1/purchases', { headers });
@@ -78,6 +131,9 @@
                     }
                     return response.json();
                 };
+
+                const buildDetailUrl = (selectedPurchaseId) => `/backoffice/receiving/${encodeURIComponent(selectedPurchaseId)}?from=${encodeURIComponent('/backoffice/receiving')}`;
+                const buildActionUrl = (selectedPurchaseId) => `/backoffice/receiving/${encodeURIComponent(selectedPurchaseId)}/action?from=${encodeURIComponent(currentPath)}`;
 
                 const renderHeader = (data) => {
                     const supplier = data.supplier?.name || 'Pemasok';
@@ -98,6 +154,37 @@
                             <p class="text-sm font-normal">Estimasi: ${formatDate(data.purchase.created_at)}</p>
                         </div>
                     `;
+                };
+
+                const renderPurchaseList = (purchases) => {
+                    el.purchaseList.innerHTML = '';
+                    el.purchaseListCount.textContent = `${purchases.length} PO`;
+
+                    if (!purchases.length) {
+                        el.purchaseList.innerHTML = '<div class="text-sm text-slate-400">Belum ada PO.</div>';
+                        return;
+                    }
+
+                    purchases.forEach((purchase) => {
+                        const row = document.createElement('a');
+                        row.href = buildDetailUrl(purchase.id);
+                        row.className = 'block bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm';
+                        row.innerHTML = `
+                            <div class="flex items-start justify-between gap-3">
+                                <div>
+                                    <p class="text-[10px] uppercase tracking-wider font-bold text-slate-400">Purchase Order</p>
+                                    <h4 class="mt-1 text-sm font-bold text-slate-900 dark:text-slate-100">PO-${String(purchase.id).slice(0, 6).toUpperCase()}</h4>
+                                    <p class="mt-1 text-xs text-slate-500">${purchase.supplier_name || 'Pemasok'}</p>
+                                </div>
+                                <span class="px-2 py-1 rounded bg-primary/10 text-primary text-[10px] font-bold uppercase">${purchase.status || 'draft'}</span>
+                            </div>
+                            <div class="mt-3 flex items-center justify-between text-xs text-slate-500">
+                                <span>${formatDate(purchase.created_at)}</span>
+                                <span class="font-semibold text-primary">Lihat Detail</span>
+                            </div>
+                        `;
+                        el.purchaseList.appendChild(row);
+                    });
                 };
 
                 const renderItems = (items) => {
@@ -152,23 +239,41 @@
                 (async () => {
                     try {
                         const purchases = await loadPurchases();
-                        const selectedId = getParam('purchase_id') || (purchases[0]?.id || null);
-                        if (!selectedId) {
-                            el.list.innerHTML = '<div class="text-sm text-slate-400">Belum ada PO.</div>';
+                        if (!purchaseId) {
+                            el.detailView.classList.add('hidden');
+                            el.listView.classList.remove('hidden');
+                            renderPurchaseList(purchases);
                             return;
                         }
-                        const data = await loadPurchaseDetail(selectedId);
+
+                        el.listView.classList.add('hidden');
+                        el.detailView.classList.remove('hidden');
+                        if (el.actionLink) {
+                            el.actionLink.classList.remove('hidden');
+                            el.actionLink.classList.add('flex');
+                            el.actionLink.href = buildActionUrl(purchaseId);
+                        }
+
+                        if (el.detailActionButton) {
+                            el.detailActionButton.classList.remove('hidden');
+                            el.detailActionButton.classList.add('flex');
+                            el.detailActionButton.href = buildActionUrl(purchaseId);
+                        }
+
+                        const data = await loadPurchaseDetail(purchaseId);
                         renderHeader(data);
                         renderItems(data.items || []);
                     } catch (error) {
+                        if (!purchaseId) {
+                            el.purchaseList.innerHTML = `<div class="text-sm text-red-500">${error.message}</div>`;
+                            return;
+                        }
+
                         el.list.innerHTML = `<div class="text-sm text-red-500">${error.message}</div>`;
                     }
                 })();
             })();
-        </script>
+    </script>
 @endsection
-
-
-
 
 

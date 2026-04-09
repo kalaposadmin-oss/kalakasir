@@ -1,5 +1,27 @@
 @extends('layouts.app')
 
+@php
+    $categoryCreateTenant = \App\Support\TenantContext::get();
+    $categoryCreateUser = auth()->user();
+    $categoryCreateRole = null;
+
+    if (! $categoryCreateTenant && filled($categoryCreateUser?->tenant_id)) {
+        $categoryCreateTenant = \App\Models\Tenant::query()->find($categoryCreateUser->tenant_id);
+    }
+
+    if ($categoryCreateTenant && $categoryCreateUser) {
+        $categoryCreateRole = app(\App\Services\UserRoleResolverService::class)
+            ->resolveNormalizedRole((string) $categoryCreateTenant->id, (string) $categoryCreateUser->id);
+
+        if (! $categoryCreateRole && filled($categoryCreateUser->role ?? null)) {
+            $categoryCreateRole = app(\App\Services\UserRoleResolverService::class)
+                ->normalize((string) $categoryCreateUser->role);
+        }
+    }
+
+    abort_unless(in_array($categoryCreateRole, ['admin', 'owner', 'superadmin'], true), 403);
+@endphp
+
 @section('page_title', 'Tambah Kategori')
 @section('body_class', 'bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 antialiased')
 @section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-white dark:bg-background-dark shadow-2xl')
@@ -16,13 +38,7 @@
 @endpush
 
 @section('header')
-    <x-page-header title="Tambah Kategori" backUrl="/menu/management" :showMenuButton="false">
-        <x-slot name="actions">
-            <button class="flex items-center justify-center size-10 rounded-full bg-slate-100 text-slate-600" type="button" data-menu-trigger>
-                <span class="material-symbols-outlined">menu</span>
-            </button>
-        </x-slot>
-    </x-page-header>
+    <x-page-header title="Tambah Kategori" backUrl="/backoffice/categories" :showMenuButton="true" />
 @endsection
 
 @section('content')
@@ -134,7 +150,7 @@
                         return;
                     }
 
-                    window.location.href = '/categories';
+                    window.location.href = '/backoffice/categories';
                 };
 
                 el.save.addEventListener('click', createCategory);

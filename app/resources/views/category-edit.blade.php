@@ -1,5 +1,27 @@
 @extends('layouts.app')
 
+@php
+    $categoryEditTenant = \App\Support\TenantContext::get();
+    $categoryEditUser = auth()->user();
+    $categoryEditRole = null;
+
+    if (! $categoryEditTenant && filled($categoryEditUser?->tenant_id)) {
+        $categoryEditTenant = \App\Models\Tenant::query()->find($categoryEditUser->tenant_id);
+    }
+
+    if ($categoryEditTenant && $categoryEditUser) {
+        $categoryEditRole = app(\App\Services\UserRoleResolverService::class)
+            ->resolveNormalizedRole((string) $categoryEditTenant->id, (string) $categoryEditUser->id);
+
+        if (! $categoryEditRole && filled($categoryEditUser->role ?? null)) {
+            $categoryEditRole = app(\App\Services\UserRoleResolverService::class)
+                ->normalize((string) $categoryEditUser->role);
+        }
+    }
+
+    abort_unless(in_array($categoryEditRole, ['admin', 'owner', 'superadmin'], true), 403);
+@endphp
+
 @section('page_title', 'Ubah Kategori')
 @section('body_class', 'bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 antialiased')
 @section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-white dark:bg-background-dark shadow-2xl')
@@ -9,13 +31,7 @@
 @endpush
 
 @section('header')
-    <x-page-header title="Ubah Kategori" backUrl="/categories" :showMenuButton="false">
-        <x-slot name="actions">
-            <button class="flex items-center justify-center size-10 rounded-full bg-slate-100 text-slate-600" type="button" data-menu-trigger>
-                <span class="material-symbols-outlined">menu</span>
-            </button>
-        </x-slot>
-    </x-page-header>
+    <x-page-header title="Ubah Kategori" backUrl="/backoffice/categories" :showMenuButton="true" />
 @endsection
 
 @section('content')
@@ -118,7 +134,7 @@
                 };
 
                 const goBack = () => {
-                    window.location.href = '/categories';
+                    window.location.href = '/backoffice/categories';
                 };
 
                 const loadCategory = async () => {
