@@ -8,6 +8,7 @@ use App\Events\PurchaseReceived;
 use App\Events\PurchaseReturned;
 use App\Events\SaleCompleted;
 use App\Events\SaleVoided;
+use App\Events\SubscriptionPlanChanged;
 use App\Events\TransferReceived;
 use App\Events\TransferShipped;
 use App\Listeners\AggregateDailySales;
@@ -19,6 +20,7 @@ use App\Listeners\AuditSaleCompleted;
 use App\Listeners\AuditSaleVoided;
 use App\Listeners\AuditTransferReceived;
 use App\Listeners\AuditTransferShipped;
+use App\Listeners\HandleSubscriptionPlanChanged;
 use App\Listeners\RefreshInventorySummaryFromAdjustment;
 use App\Listeners\RefreshInventorySummaryFromPurchase;
 use App\Listeners\RefreshInventorySummaryFromReturn;
@@ -80,6 +82,7 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(TransferReceived::class, [RefreshInventorySummaryFromTransferReceive::class, 'handle']);
         Event::listen(AdjustmentPosted::class, [AuditAdjustmentPosted::class, 'handle']);
         Event::listen(AdjustmentPosted::class, [RefreshInventorySummaryFromAdjustment::class, 'handle']);
+        Event::listen(SubscriptionPlanChanged::class, [HandleSubscriptionPlanChanged::class, 'handle']);
         Event::listen(Login::class, [SetCurrentTenantOnLogin::class, 'handle']);
     }
 }
