@@ -1,5 +1,135 @@
-<div id="menu-overlay" class="fixed inset-0 z-50 hidden">
-    <div class="relative mx-auto h-full max-w-[430px]">
+@php
+    $activePortal = session('auth_portal', 'pos') === 'backoffice' ? 'backoffice' : 'pos';
+    $menuCurrentPath = '/'.ltrim(request()->path(), '/');
+    $menuDrawerTenant = \App\Support\TenantContext::get();
+    $menuDrawerUser = auth()->user();
+    $menuDrawerRole = null;
+    $roleLabels = [
+        'cashier' => 'Kasir',
+        'staff' => 'Staff',
+        'warehouse' => 'Gudang',
+        'supervisor' => 'Supervisor',
+        'admin' => 'Admin',
+        'owner' => 'Owner',
+        'superadmin' => 'Superadmin',
+    ];
+
+    if (! $menuDrawerTenant && filled($menuDrawerUser?->tenant_id)) {
+        $menuDrawerTenant = \App\Models\Tenant::query()->find($menuDrawerUser->tenant_id);
+    }
+
+    if ($menuDrawerTenant && $menuDrawerUser) {
+        $menuDrawerRole = app(\App\Services\UserRoleResolverService::class)
+            ->resolveNormalizedRole((string) $menuDrawerTenant->id, (string) $menuDrawerUser->id);
+
+        if (! $menuDrawerRole && filled($menuDrawerUser->role ?? null)) {
+            $menuDrawerRole = app(\App\Services\UserRoleResolverService::class)
+                ->normalize((string) $menuDrawerUser->role);
+        }
+    }
+
+    $menuDrawerRoleLabel = $roleLabels[$menuDrawerRole] ?? 'Pengguna';
+    $menuDrawerUserName = $menuDrawerUser?->name ?: 'Pengguna Toko';
+    $canManageProducts = in_array($menuDrawerRole, ['admin', 'owner', 'superadmin'], true);
+    $canManageSettings = in_array($menuDrawerRole, ['supervisor', 'admin', 'owner', 'superadmin'], true);
+    $canManageUsers = in_array($menuDrawerRole, ['admin', 'owner', 'superadmin'], true);
+    $posPortalOriginPath = $menuCurrentPath !== '/' ? $menuCurrentPath : '/pos/dashboard';
+    $posBackofficeHref = static function (string $targetPath) use ($posPortalOriginPath): string {
+        $separator = str_contains($targetPath, '?') ? '&' : '?';
+
+        return '/portal/switch/backoffice?next='.rawurlencode($targetPath.$separator.'from='.rawurlencode($posPortalOriginPath));
+    };
+
+    $isMenuItemActive = static function (array $item) use ($menuCurrentPath): bool {
+        $match = trim((string) ($item['match'] ?? $item['href'] ?? ''));
+        if ($match === '') {
+            return false;
+        }
+
+        $match = preg_replace('/\?.*$/', '', $match);
+        if ($match === $menuCurrentPath) {
+            return true;
+        }
+
+        return $match !== '/' && str_starts_with($menuCurrentPath, rtrim($match, '/').'/');
+    };
+
+    $backofficeMenuSections = [
+        [
+            'title' => 'Operasional',
+            'items' => array_values(array_filter([
+                ['href' => '/backoffice/dashboard', 'match' => '/backoffice/dashboard', 'icon' => 'dashboard', 'label' => 'Dashboard', 'description' => 'Ringkasan bisnis'],
+                ['href' => '/backoffice/products', 'match' => '/backoffice/products', 'icon' => 'inventory_2', 'label' => 'Daftar Produk', 'description' => 'Lihat katalog barang'],
+                $canManageProducts ? ['href' => '/backoffice/products/new', 'match' => '/backoffice/products/new', 'icon' => 'add_box', 'label' => 'Tambah Produk', 'description' => 'Buat produk baru'] : null,
+                ['href' => '/backoffice/categories', 'match' => '/backoffice/categories', 'icon' => 'grid_view', 'label' => 'Kategori', 'description' => 'Kelompokkan produk'],
+                ['href' => '/backoffice/inventory', 'match' => '/backoffice/inventory', 'icon' => 'warehouse', 'label' => 'Stok & Inventaris', 'description' => 'Pantau stok aktif'],
+                $canManageProducts ? ['href' => '/backoffice/purchases/new', 'match' => '/backoffice/purchases', 'icon' => 'local_shipping', 'label' => 'Pembelian', 'description' => 'Buat dan kelola PO'] : null,
+                ['href' => '/backoffice/branches', 'match' => '/backoffice/branches', 'icon' => 'storefront', 'label' => 'Toko & Cabang', 'description' => 'Atur lokasi operasional'],
+                $canManageUsers ? ['href' => '/backoffice/users', 'match' => '/backoffice/users', 'icon' => 'groups', 'label' => 'Pengguna', 'description' => 'Atur staff dan role'] : null,
+            ])),
+        ],
+        [
+            'title' => 'Laporan',
+            'items' => [
+                ['href' => '/backoffice/reports', 'match' => '/backoffice/reports', 'icon' => 'bar_chart', 'label' => 'Laporan', 'description' => 'Penjualan dan inventaris'],
+            ],
+        ],
+        [
+            'title' => 'Pengaturan',
+            'items' => array_values(array_filter([
+                $canManageSettings ? ['href' => '/backoffice/settings/chart-of-accounts', 'match' => '/backoffice/settings/chart-of-accounts', 'icon' => 'account_balance', 'label' => 'Akun Kas & Bank', 'description' => 'COA dan akun pembayaran'] : null,
+                $canManageSettings ? ['href' => '/backoffice/settings/tax-promo', 'match' => '/backoffice/settings/tax-promo', 'icon' => 'percent', 'label' => 'Pajak & Promo', 'description' => 'Atur pajak dan diskon'] : null,
+                $canManageSettings ? ['href' => '/backoffice/settings/preferences', 'match' => '/backoffice/settings/preferences', 'icon' => 'tune', 'label' => 'Preferensi', 'description' => 'Pengaturan toko'] : null,
+                $canManageSettings ? ['href' => '/backoffice/settings/integrations', 'match' => '/backoffice/settings/integrations', 'icon' => 'integration_instructions', 'label' => 'Integrasi', 'description' => 'Perangkat dan koneksi'] : null,
+                $canManageSettings ? ['href' => '/backoffice/settings/subscription', 'match' => '/backoffice/settings/subscription', 'icon' => 'workspace_premium', 'label' => 'Langganan', 'description' => 'Billing dan paket'] : null,
+            ])),
+        ],
+        [
+            'title' => 'Portal',
+            'items' => [
+                ['href' => '/portal/switch/pos?next=/pos/checkout', 'match' => '/portal/switch/pos', 'icon' => 'point_of_sale', 'label' => 'Buka POS', 'description' => 'Masuk ke kasir'],
+                ['href' => '/logout', 'match' => '/logout', 'icon' => 'logout', 'label' => 'Keluar', 'description' => 'Akhiri sesi login'],
+            ],
+        ],
+    ];
+
+    $posMenuSections = [
+        [
+            'title' => 'Transaksi',
+            'items' => [
+                ['href' => '/pos/dashboard', 'match' => '/pos/dashboard', 'icon' => 'home', 'label' => 'Beranda', 'description' => 'Ringkasan kasir'],
+                ['href' => '/pos/checkout', 'match' => '/pos/checkout', 'icon' => 'point_of_sale', 'label' => 'Kasir', 'description' => 'Mulai transaksi'],
+                ['href' => '/pos/history', 'match' => '/pos/history', 'icon' => 'history', 'label' => 'Riwayat', 'description' => 'Lihat transaksi selesai'],
+                ['href' => '/pos/shifts/open', 'match' => '/pos/shifts/open', 'icon' => 'schedule', 'label' => 'Buka Shift', 'description' => 'Mulai shift kasir'],
+                ['href' => '/pos/shifts/summary', 'match' => '/pos/shifts', 'icon' => 'summarize', 'label' => 'Ringkasan Shift', 'description' => 'Riwayat buka/tutup shift'],
+            ],
+        ],
+        [
+            'title' => 'Akses Cepat',
+            'items' => array_values(array_filter([
+                $canManageSettings ? ['href' => $posBackofficeHref('/backoffice/products'), 'match' => '/portal/switch/backoffice', 'icon' => 'inventory_2', 'label' => 'Kelola Produk', 'description' => 'Buka daftar produk di backoffice'] : null,
+                $canManageProducts ? ['href' => $posBackofficeHref('/backoffice/products/new'), 'match' => '/portal/switch/backoffice', 'icon' => 'add_box', 'label' => 'Tambah Produk', 'description' => 'Tambah produk baru'] : null,
+                $canManageSettings ? ['href' => $posBackofficeHref('/backoffice/inventory'), 'match' => '/portal/switch/backoffice', 'icon' => 'warehouse', 'label' => 'Stok & Inventaris', 'description' => 'Cek stok dan pergerakan barang'] : null,
+                $canManageSettings ? ['href' => $posBackofficeHref('/backoffice/settings/preferences'), 'match' => '/portal/switch/backoffice', 'icon' => 'settings', 'label' => 'Pengaturan Toko', 'description' => 'Akses setelan backoffice'] : null,
+                $canManageSettings ? ['href' => $posBackofficeHref('/backoffice/settings/chart-of-accounts'), 'match' => '/portal/switch/backoffice', 'icon' => 'account_balance', 'label' => 'Akun Kas & Bank', 'description' => 'Kelola akun pembayaran'] : null,
+            ])),
+        ],
+        [
+            'title' => 'Portal',
+            'items' => [
+                ['href' => $posBackofficeHref('/backoffice/dashboard'), 'match' => '/portal/switch/backoffice', 'icon' => 'storefront', 'label' => 'Backoffice', 'description' => 'Pindah ke manajemen toko'],
+                ['href' => '/logout', 'match' => '/logout', 'icon' => 'logout', 'label' => 'Keluar', 'description' => 'Akhiri sesi login'],
+            ],
+        ],
+    ];
+
+    $menuSections = $activePortal === 'backoffice'
+        ? $backofficeMenuSections
+        : $posMenuSections;
+@endphp
+
+<div id="menu-overlay" class="absolute inset-0 z-50 hidden overflow-hidden">
+    <div class="relative h-full w-full">
         <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"></div>
         <aside id="menu-drawer" class="absolute left-0 top-0 h-full w-[85%] max-w-[320px] flex-col bg-white dark:bg-slate-900 shadow-2xl flex overflow-hidden -translate-x-full transition-transform">
             <header class="relative p-6 pt-12 border-b border-primary/10 bg-primary/5">
@@ -20,63 +150,38 @@
                         <img alt="User profile" class="w-full h-full object-cover" src="https://placehold.co/80x80?text=User" />
                     </div>
                     <div class="flex-1 min-w-0">
-                        <p class="text-slate-900 dark:text-slate-100 text-sm font-semibold truncate">Admin</p>
-                        <p class="text-slate-500 dark:text-slate-400 text-xs">Administrator</p>
+                        <p class="text-slate-900 dark:text-slate-100 text-sm font-semibold truncate">{{ $menuDrawerUserName }}</p>
+                        <p class="text-slate-500 dark:text-slate-400 text-xs">{{ $menuDrawerRoleLabel }} • {{ $activePortal === 'backoffice' ? 'Backoffice' : 'POS' }}</p>
                     </div>
                     <span class="material-symbols-outlined text-primary text-sm">verified_user</span>
                 </div>
             </header>
             <nav class="flex-1 overflow-y-auto px-4 py-6">
-                <ul class="space-y-2">
-                    <li data-menu-role-min="admin">
-                        <a class="flex items-center gap-4 px-4 py-4 rounded-2xl bg-primary/10 text-primary transition-colors" href="/menu/management">
-                            <span class="material-symbols-outlined text-[26px]">inventory_2</span>
-                            <span class="font-semibold text-base">Manajemen</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a class="flex items-center gap-4 px-4 py-4 rounded-2xl text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" href="/menu/sales">
-                            <span class="material-symbols-outlined text-[26px]">point_of_sale</span>
-                            <span class="font-semibold text-base">Transaksi Penjualan</span>
-                        </a>
-                    </li>
-                    <li data-menu-role-min="admin">
-                        <a class="flex items-center gap-4 px-4 py-4 rounded-2xl text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" href="/menu/purchases">
-                            <span class="material-symbols-outlined text-[26px]">local_shipping</span>
-                            <span class="font-semibold text-base">Pembelian ke Supplier</span>
-                        </a>
-                    </li>
-                    <li data-menu-role-min="admin">
-                        <a class="flex items-center gap-4 px-4 py-4 rounded-2xl text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" href="/menu/finance">
-                            <span class="material-symbols-outlined text-[26px]">account_balance_wallet</span>
-                            <span class="font-semibold text-base">Keuangan</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a class="flex items-center gap-4 px-4 py-4 rounded-2xl text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" href="/menu/shift">
-                            <span class="material-symbols-outlined text-[26px]">schedule</span>
-                            <span class="font-semibold text-base">Shift</span>
-                        </a>
-                    </li>
-                    <li data-menu-role-min="admin">
-                        <a class="flex items-center gap-4 px-4 py-4 rounded-2xl text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" href="/menu/reports">
-                            <span class="material-symbols-outlined text-[26px]">bar_chart</span>
-                            <span class="font-semibold text-base">Laporan</span>
-                        </a>
-                    </li>
-                    <li data-menu-role-min="admin">
-                        <a class="flex items-center gap-4 px-4 py-4 rounded-2xl text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" href="/menu/settings">
-                            <span class="material-symbols-outlined text-[26px]">settings</span>
-                            <span class="font-semibold text-base">Pengaturan</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a class="flex items-center gap-4 px-4 py-4 rounded-2xl text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" href="/menu/other">
-                            <span class="material-symbols-outlined text-[26px]">more_horiz</span>
-                            <span class="font-semibold text-base">Lainnya</span>
-                        </a>
-                    </li>
-                </ul>
+                <div class="space-y-6">
+                    @foreach ($menuSections as $section)
+                        @if (!empty($section['items']))
+                            <section>
+                                <p class="mb-2 px-2 text-[11px] font-bold uppercase tracking-[0.22em] text-slate-400">{{ $section['title'] }}</p>
+                                <ul class="space-y-2">
+                                    @foreach ($section['items'] as $item)
+                                        @php($isActive = $isMenuItemActive($item))
+                                        <li>
+                                            <a class="flex items-center gap-4 rounded-2xl px-4 py-3 transition-colors {{ $isActive ? 'bg-primary/10 text-primary ring-1 ring-primary/15' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800' }}" href="{{ $item['href'] }}">
+                                                <span class="material-symbols-outlined text-[24px] {{ $isActive ? 'text-primary' : '' }}">{{ $item['icon'] }}</span>
+                                                <span class="min-w-0 flex-1">
+                                                    <span class="block truncate text-sm font-semibold">{{ $item['label'] }}</span>
+                                                    @if (!empty($item['description']))
+                                                        <span class="block truncate text-[11px] {{ $isActive ? 'text-primary/80' : 'text-slate-500 dark:text-slate-400' }}">{{ $item['description'] }}</span>
+                                                    @endif
+                                                </span>
+                                            </a>
+                                        </li>
+                                    @endforeach
+                                </ul>
+                            </section>
+                        @endif
+                    @endforeach
+                </div>
             </nav>
          </aside>
      </div>
@@ -166,21 +271,8 @@
                         storeName.textContent = data.tenant?.name || 'Toko';
                         branchName.textContent = data.branches?.[0]?.name || 'Cabang';
 
-                        const role = data.user?.role || null;
-                        if (role) {
-                            const isAdminMenuVisible = ['admin', 'owner'].includes(String(role).toLowerCase());
-                            setAdminMenuVisible(isAdminMenuVisible);
-                        } else {
-                            setAdminMenuVisible(true);
-                        }
                     })
                     .catch(() => {});
-
-                const setAdminMenuVisible = (visible) => {
-                    document.querySelectorAll('[data-menu-role-min="admin"]').forEach((item) => {
-                        item.classList.toggle('hidden', !visible);
-                    });
-                };
             }
         })();
     </script>

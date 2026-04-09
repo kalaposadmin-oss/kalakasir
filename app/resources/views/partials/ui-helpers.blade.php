@@ -1,5 +1,7 @@
 <script>
     (() => {
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+
         const errorMap = {
             LOCK_PERIOD: 'Periode transaksi terkunci. Gunakan tanggal yang diizinkan atau hubungi admin.',
             OUT_OF_STOCK: 'Stok tidak mencukupi. Kurangi jumlah item atau pilih lokasi lain.',
@@ -22,6 +24,49 @@
             }
         };
 
+        const unwrapApiPayload = (payload) => {
+            if (!payload || typeof payload !== 'object') {
+                return payload;
+            }
+
+            if (payload.data && typeof payload.data === 'object' && !Array.isArray(payload.data)) {
+                return payload.data;
+            }
+
+            return payload;
+        };
+
+        const unwrapApiList = (payload, key) => {
+            const root = unwrapApiPayload(payload);
+            const candidate = key && root && typeof root === 'object' ? root[key] : root;
+
+            if (Array.isArray(candidate)) {
+                return candidate;
+            }
+
+            if (candidate && Array.isArray(candidate.data)) {
+                return candidate.data;
+            }
+
+            return [];
+        };
+
+        const unwrapApiMeta = (payload) => {
+            if (!payload || typeof payload !== 'object') {
+                return {};
+            }
+
+            if (payload.meta && typeof payload.meta === 'object') {
+                return payload.meta;
+            }
+
+            if (payload.data && payload.data.meta && typeof payload.data.meta === 'object') {
+                return payload.data.meta;
+            }
+
+            return {};
+        };
+
         const mapApiError = async (response, fallbackMessage = 'Permintaan gagal.') => {
             const payload = await parseJsonSafe(response);
             const code = payload?.code || null;
@@ -41,10 +86,18 @@
         const fetchWithTimeout = async (url, init = {}, timeoutMs = 15000) => {
             const controller = new AbortController();
             const timer = setTimeout(() => controller.abort(), Math.max(1000, timeoutMs));
+            const headers = {
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                ...(csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}),
+                ...(init.headers || {}),
+            };
 
             try {
                 return await fetch(url, {
                     ...init,
+                    credentials: init.credentials || 'same-origin',
+                    headers,
                     signal: controller.signal,
                 });
             } finally {
@@ -84,6 +137,9 @@
             confirmRiskAction,
             fetchWithTimeout,
             runWithSubmitGuard,
+            unwrapApiPayload,
+            unwrapApiList,
+            unwrapApiMeta,
         };
     })();
 </script>

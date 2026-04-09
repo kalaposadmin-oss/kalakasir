@@ -2,6 +2,94 @@
 
 use Illuminate\Support\Str;
 
+$normalizeSessionHost = static function (?string $host): string {
+    $host = strtolower(trim((string) $host));
+    if ($host === '') {
+        return '';
+    }
+
+    if (str_contains($host, '://')) {
+        $host = (string) parse_url($host, PHP_URL_HOST);
+    }
+
+    return explode(':', $host)[0] ?? '';
+};
+
+$portalHostsFromEnv = static function (string $key) use ($normalizeSessionHost): array {
+    $raw = trim((string) env($key, ''));
+    if ($raw === '') {
+        return [];
+    }
+
+    $hosts = [];
+    foreach (preg_split('/[\s,]+/', $raw) ?: [] as $host) {
+        $normalized = $normalizeSessionHost($host);
+        if ($normalized === '' || in_array($normalized, $hosts, true)) {
+            continue;
+        }
+
+        $hosts[] = $normalized;
+    }
+
+    return $hosts;
+};
+
+$inferSharedSessionDomain = static function () use ($portalHostsFromEnv): ?string {
+    $explicit = trim((string) env('SESSION_DOMAIN', ''));
+    if ($explicit !== '') {
+        return $explicit;
+    }
+
+    $hosts = array_values(array_unique(array_merge(
+        $portalHostsFromEnv('POS_PORTAL_HOSTS'),
+        $portalHostsFromEnv('BACKOFFICE_PORTAL_HOSTS'),
+    )));
+
+    if (count($hosts) < 2) {
+        return null;
+    }
+
+    $segments = array_map(static fn (string $host) => explode('.', $host), $hosts);
+    $commonSegments = [];
+    $index = 1;
+
+    while (true) {
+        $candidate = [];
+        foreach ($segments as $parts) {
+            if (count($parts) < $index) {
+                $candidate = [];
+                break;
+            }
+
+            $candidate[] = $parts[count($parts) - $index];
+        }
+
+        if ($candidate === [] || count(array_unique($candidate)) !== 1) {
+            break;
+        }
+
+        array_unshift($commonSegments, $candidate[0]);
+        $index++;
+    }
+
+    if (count($commonSegments) < 2) {
+        return null;
+    }
+
+    $sharedDomain = implode('.', $commonSegments);
+    if ($sharedDomain === 'localhost' || filter_var($sharedDomain, FILTER_VALIDATE_IP)) {
+        return null;
+    }
+
+    foreach ($hosts as $host) {
+        if ($host === $sharedDomain) {
+            return null;
+        }
+    }
+
+    return '.'.$sharedDomain;
+};
+
 return [
 
     /*
@@ -156,7 +244,7 @@ return [
     |
     */
 
-    'domain' => env('SESSION_DOMAIN'),
+    'domain' => $inferSharedSessionDomain(),
 
     /*
     |--------------------------------------------------------------------------

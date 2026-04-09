@@ -3,6 +3,7 @@
     <head>
         <meta charset="utf-8" />
         <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+        <meta name="csrf-token" content="{{ csrf_token() }}" />
         <meta name="tenant-id" content="{{ $tenantId ?? '' }}" />
         <title>@yield('page_title', 'POS SaaS')</title>
         <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
@@ -44,16 +45,25 @@
         @stack('head')
     </head>
     <body class="@yield('body_class', 'bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100')">
-        <div class="@yield('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-background-light dark:bg-background-dark shadow-2xl')">
+        @php
+            $layoutMainClass = trim($__env->yieldContent('main_class', 'flex-1 overflow-y-auto pb-24'));
+            $layoutUiMode = trim($__env->yieldContent('ui_mode', ''));
+            $usesWideBackofficeShell = $layoutUiMode === 'backoffice' && str_contains($layoutMainClass, 'lg:pl-72');
+            $defaultShellClass = $usesWideBackofficeShell
+                ? 'relative flex h-screen w-full flex-col overflow-hidden bg-background-light dark:bg-background-dark'
+                : 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-background-light dark:bg-background-dark shadow-2xl';
+        @endphp
+
+        <div class="@yield('app_shell_class', $defaultShellClass)">
             @yield('header')
             <main class="@yield('main_class', 'flex-1 overflow-y-auto pb-24')">
                 @yield('content')
             </main>
-        </div>
 
-        @if(($showMenu ?? true) === true)
-            @include('partials.menu-drawer')
-        @endif
+            @if(($showMenu ?? true) === true)
+                @include('partials.menu-drawer')
+            @endif
+        </div>
 
         @stack('scripts')
     </body>

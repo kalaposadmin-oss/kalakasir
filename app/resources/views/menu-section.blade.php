@@ -27,11 +27,17 @@
     
 @endpush
 
+@php
+    $menuBackUrl = session('auth_portal', 'pos') === 'backoffice'
+        ? '/backoffice/dashboard'
+        : '/pos/dashboard';
+@endphp
+
 @section('header')
     <x-page-header
         :title="$title"
         :breadcrumbs="['Menu']"
-        backUrl="{{ url('/') }}"
+        :backUrl="$menuBackUrl"
         :showMenuButton="true"
     />
 @endsection
