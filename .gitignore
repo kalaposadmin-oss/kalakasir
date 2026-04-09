@@ -25,3 +25,15 @@ Thumbs.db
 /app/.idea/
 /app/.vscode/
 /app/.zed/
+
+# Local web artifacts
+/app/storage/framework/testing-views/
+/app/tmp-*.txt
+/app/tmp-*.blade.php
+
+# Local workspace reports
+/changed-files.txt
+/non-parity-files.txt
+/parity-candidate-files.txt
+/tmp-assemble-check.log
+/tmp-pos-compile.log
