@@ -11,6 +11,7 @@ use App\Models\PurchaseItem;
 use App\Models\StockLedger;
 use App\Services\LockPeriodService;
 use App\Services\InventoryValuationService;
+use App\Support\Decimal;
 use App\Support\TenantContext;
 use App\Events\PurchaseReceived;
 use Carbon\CarbonImmutable;
@@ -134,30 +135,30 @@ class PurchaseService
                 ->keyBy('product_id');
 
             $ledgerRows = [];
-            $totalReceivedValue = 0.0;
+            $totalReceivedValue = Decimal::money(0);
             $receivedCount = 0;
 
             foreach ($items as $item) {
-                $remaining = (float) $item->qty - (float) ($item->received_qty ?? 0);
-                if ($remaining <= 0) {
+                $remaining = Decimal::subtract($item->qty, $item->received_qty ?? 0, Decimal::QTY_SCALE);
+                if (Decimal::compare($remaining, 0) <= 0) {
                     continue;
                 }
 
                 $receiveQty = $remaining;
                 if ($requested->has($item->product_id)) {
-                    $receiveQty = (float) $requested->get($item->product_id)['qty'];
+                    $receiveQty = Decimal::qty($requested->get($item->product_id)['qty']);
                 }
 
-                if ($receiveQty <= 0) {
+                if (Decimal::compare($receiveQty, 0) <= 0) {
                     continue;
                 }
 
-                if ($receiveQty > $remaining) {
+                if (Decimal::compare($receiveQty, $remaining) > 0) {
                     throw new RuntimeException('Qty received melebihi sisa untuk produk tertentu.');
                 }
 
                 $item->update([
-                    'received_qty' => (float) $item->received_qty + $receiveQty,
+                    'received_qty' => Decimal::add($item->received_qty ?? 0, $receiveQty, Decimal::QTY_SCALE),
                 ]);
 
                 InventoryBalance::query()->firstOrCreate(
@@ -176,16 +177,22 @@ class PurchaseService
                     [$receiveQty, $tenantId, $item->product_id, $purchase->location_id]
                 );
 
-                $balanceAfter = (float) InventoryBalance::query()
+                $balanceAfter = Decimal::qty(InventoryBalance::query()
                     ->where('tenant_id', $tenantId)
                     ->where('product_id', $item->product_id)
                     ->where('location_id', $purchase->location_id)
-                    ->value('qty_on_hand');
+                    ->when($item->product_variant_id, function ($query) use ($item) {
+                        $query->where('product_variant_id', $item->product_variant_id);
+                    }, function ($query) {
+                        $query->whereNull('product_variant_id');
+                    })
+                    ->value('qty_on_hand'));
 
                 $ledgerRows[] = [
                     'id' => (string) Str::uuid(),
                     'tenant_id' => $tenantId,
                     'product_id' => $item->product_id,
+                    'product_variant_id' => $item->product_variant_id,
                     'location_id' => $purchase->location_id,
                     'reference_type' => 'purchase',
                     'reference_id' => $purchase->id,
@@ -200,15 +207,21 @@ class PurchaseService
                 $valuationService->receive(
                     tenantId: $tenantId,
                     productId: $item->product_id,
+                    productVariantId: $item->product_variant_id,
                     locationId: $purchase->location_id,
                     qty: $receiveQty,
-                    unitCost: (float) $item->price,
+                    unitCost: Decimal::float($item->price, Decimal::COST_SCALE),
                     sourceType: 'purchase',
                     sourceId: $purchase->id,
+                    sourceItemId: $item->id,
                     at: $now
                 );
 
-                $totalReceivedValue += $receiveQty * (float) $item->price;
+                $totalReceivedValue = Decimal::add(
+                    $totalReceivedValue,
+                    Decimal::multiply($receiveQty, $item->price, Decimal::MONEY_SCALE),
+                    Decimal::MONEY_SCALE
+                );
                 $receivedCount++;
             }
 
@@ -221,7 +234,7 @@ class PurchaseService
             $this->createJournalEntries(
                 tenantId: $tenantId,
                 purchaseId: $purchase->id,
-                total: $totalReceivedValue,
+                total: Decimal::float($totalReceivedValue, Decimal::MONEY_SCALE),
                 userId: $userId,
                 now: $now,
                 transactionDate: $transactionDate
@@ -243,14 +256,14 @@ class PurchaseService
             event(new PurchaseReceived(
                 purchaseId: $purchase->id,
                 tenantId: $tenantId,
-                total: $totalReceivedValue,
+                total: Decimal::float($totalReceivedValue, Decimal::MONEY_SCALE),
                 actorId: $userId,
                 occurredAt: $now->toIso8601String()
             ));
 
             return [
                 'status' => $purchase->status,
-                'received_total' => $totalReceivedValue,
+                'received_total' => Decimal::float($totalReceivedValue, Decimal::MONEY_SCALE),
             ];
         });
     }

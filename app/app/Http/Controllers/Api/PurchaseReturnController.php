@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Exceptions\PurchaseReturnValuationException;
 use App\Http\Controllers\Controller;
 use App\Models\AccountMapping;
 use App\Models\InventoryBalance;
 use App\Models\JournalEntry;
 use App\Models\JournalItem;
 use App\Models\Purchase;
+use App\Models\PurchaseItem;
 use App\Models\PurchaseReturn;
 use App\Models\PurchaseReturnItem;
 use App\Models\StockLedger;
@@ -17,11 +19,15 @@ use App\Services\InventoryValuationService;
 use App\Events\PurchaseReturned;
 use App\Services\AnomalyService;
 use App\Services\TransactionDateService;
+use App\Support\Decimal;
 use App\Support\TenantContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use InvalidArgumentException;
 use RuntimeException;
 
@@ -32,12 +38,18 @@ class PurchaseReturnController extends Controller
         $tenantId = TenantContext::id();
 
         $validated = $request->validate([
-            'purchase_id' => ['required', 'uuid'],
-            'supplier_id' => ['required', 'uuid'],
+            'purchase_id' => ['required', 'uuid', $tenantId
+                ? Rule::exists('purchases', 'id')->where('tenant_id', $tenantId)
+                : 'exists:purchases,id'],
+            'supplier_id' => ['required', 'uuid', $tenantId
+                ? Rule::exists('suppliers', 'id')->where('tenant_id', $tenantId)
+                : 'exists:suppliers,id'],
             'transaction_date' => ['nullable', 'date'],
             'notes' => ['nullable', 'string', 'max:500'],
             'items' => ['required', 'array', 'min:1'],
-            'items.*.product_id' => ['required', 'uuid'],
+            'items.*.purchase_item_id' => ['required', 'uuid', $tenantId
+                ? Rule::exists('purchase_items', 'id')->where('tenant_id', $tenantId)
+                : 'exists:purchase_items,id'],
             'items.*.qty' => ['required', 'numeric', 'min:0.01'],
             'items.*.price' => ['required', 'numeric', 'min:0'],
             'items.*.reason' => ['nullable', 'string', 'max:100'],
@@ -63,9 +75,9 @@ class PurchaseReturnController extends Controller
             ], 422);
         }
 
-        $total = collect($validated['items'])->sum(function ($item) {
-            return (float) $item['qty'] * (float) $item['price'];
-        });
+        $total = collect($validated['items'])->reduce(function (string $carry, array $item) {
+            return Decimal::add($carry, Decimal::multiply($item['qty'], $item['price'], Decimal::MONEY_SCALE), Decimal::MONEY_SCALE);
+        }, Decimal::money('0'));
 
         $now = CarbonImmutable::now('UTC');
         $transactionDate = (new TransactionDateService())
@@ -101,6 +113,7 @@ class PurchaseReturnController extends Controller
         try {
             $result = app(\App\Services\DatabaseTransactionService::class)->run(function () use ($tenantId, $validated, $purchase, $total, $now, $request, $transactionDate) {
                 $valuationService = app(InventoryValuationService::class);
+                $purchaseItems = $this->loadPurchaseItemsForReturn($tenantId, $purchase->id, Arr::pluck($validated['items'], 'purchase_item_id'));
 
                 $returnId = (string) Str::uuid();
                 PurchaseReturn::query()->create([
@@ -115,14 +128,22 @@ class PurchaseReturnController extends Controller
                     'transaction_date' => $transactionDate->toDateString(),
                 ]);
 
-                $items = collect($validated['items'])->map(function ($item) use ($tenantId, $returnId) {
+                $items = collect($validated['items'])->map(function ($item) use ($tenantId, $returnId, $purchaseItems) {
+                    $purchaseItem = $purchaseItems->get((string) $item['purchase_item_id']);
+
+                    if (! $purchaseItem) {
+                        throw new RuntimeException('Item retur harus berasal dari purchase yang sama.');
+                    }
+
                     return [
                         'id' => (string) Str::uuid(),
                         'tenant_id' => $tenantId,
                         'purchase_return_id' => $returnId,
-                        'product_id' => $item['product_id'],
-                        'qty' => (float) $item['qty'],
-                        'price' => (float) $item['price'],
+                        'purchase_item_id' => (string) $purchaseItem->id,
+                        'product_id' => (string) $purchaseItem->product_id,
+                        'product_variant_id' => $purchaseItem->product_variant_id ? (string) $purchaseItem->product_variant_id : null,
+                        'qty' => Decimal::float(Decimal::qty($item['qty']), Decimal::QTY_SCALE),
+                        'price' => Decimal::float(Decimal::money($item['price']), Decimal::MONEY_SCALE),
                         'reason' => $item['reason'] ?? null,
                     ];
                 })->all();
@@ -130,14 +151,18 @@ class PurchaseReturnController extends Controller
                 PurchaseReturnItem::query()->insert($items);
 
                 $ledgerRows = [];
-                $totalValuationCost = 0.0;
+                $totalValuationCost = Decimal::money('0');
 
                 foreach ($items as $item) {
-                    $qty = (float) $item['qty'];
+                    $qty = Decimal::qty($item['qty']);
+                    $productVariantId = $item['product_variant_id'] ? (string) $item['product_variant_id'] : null;
 
-                    $affected = DB::update(
-                        'UPDATE inventory_balances SET qty_on_hand = qty_on_hand - ? WHERE tenant_id = ? AND product_id = ? AND location_id = ? AND qty_on_hand >= ?',
-                        [$qty, $tenantId, $item['product_id'], $purchase->location_id, $qty]
+                    $affected = $this->decrementInventory(
+                        tenantId: $tenantId,
+                        productId: (string) $item['product_id'],
+                        productVariantId: $productVariantId,
+                        locationId: (string) $purchase->location_id,
+                        qty: Decimal::float($qty, Decimal::QTY_SCALE)
                     );
 
                     if ($affected === 0) {
@@ -150,30 +175,36 @@ class PurchaseReturnController extends Controller
                                 'purchase_return_id' => $returnId,
                                 'product_id' => $item['product_id'],
                                 'location_id' => $purchase->location_id,
-                                'requested_qty' => $qty,
+                                'requested_qty' => Decimal::float($qty, Decimal::QTY_SCALE),
                             ],
                             referenceId: $returnId
                         );
                         throw new RuntimeException('Stok tidak mencukupi untuk retur.');
                     }
 
-                    $balanceAfter = (float) InventoryBalance::query()
+                    $balanceAfter = Decimal::qty(InventoryBalance::query()
                         ->where('tenant_id', $tenantId)
                         ->where('product_id', $item['product_id'])
                         ->where('location_id', $purchase->location_id)
-                        ->value('qty_on_hand');
+                        ->when($productVariantId, function ($query) use ($productVariantId) {
+                            $query->where('product_variant_id', $productVariantId);
+                        }, function ($query) {
+                            $query->whereNull('product_variant_id');
+                        })
+                        ->value('qty_on_hand'));
 
                     $ledgerRows[] = [
                         'id' => (string) Str::uuid(),
                         'tenant_id' => $tenantId,
                         'product_id' => $item['product_id'],
+                        'product_variant_id' => $productVariantId,
                         'location_id' => $purchase->location_id,
                         'reference_type' => 'purchase_return',
                         'reference_id' => $returnId,
                         'reference_item_id' => $item['id'],
                         'qty_in' => 0,
-                        'qty_out' => $qty,
-                        'balance_after' => $balanceAfter,
+                        'qty_out' => Decimal::float($qty, Decimal::QTY_SCALE),
+                        'balance_after' => Decimal::float($balanceAfter, Decimal::QTY_SCALE),
                         'created_at' => $now,
                         'created_by' => $request->user()?->id,
                     ];
@@ -181,15 +212,16 @@ class PurchaseReturnController extends Controller
                     $valuationResult = $valuationService->issue(
                         tenantId: $tenantId,
                         productId: $item['product_id'],
+                        productVariantId: $productVariantId,
                         locationId: $purchase->location_id,
-                        qty: $qty,
+                        qty: Decimal::float($qty, Decimal::QTY_SCALE),
                         referenceType: 'purchase_return',
                         referenceId: $returnId,
                         referenceItemId: $item['id'],
                         at: $now
                     );
 
-                    $totalValuationCost += (float) ($valuationResult['total_cost'] ?? 0);
+                    $totalValuationCost = Decimal::add($totalValuationCost, Decimal::money($valuationResult['total_cost'] ?? 0), Decimal::MONEY_SCALE);
                 }
 
                 StockLedger::query()->insert($ledgerRows);
@@ -212,9 +244,9 @@ class PurchaseReturnController extends Controller
                     'created_at' => $now,
                 ]);
 
-                $documentTotal = round($total, 2);
-                $inventoryTotal = round($totalValuationCost, 2);
-                $variance = round($documentTotal - $inventoryTotal, 2);
+                $documentTotal = Decimal::money($total);
+                $inventoryTotal = Decimal::money($totalValuationCost);
+                $variance = Decimal::subtract($documentTotal, $inventoryTotal, Decimal::MONEY_SCALE);
 
                 $journalItems = [
                     [
@@ -222,7 +254,7 @@ class PurchaseReturnController extends Controller
                         'journal_entry_id' => $journalEntryId,
                         'tenant_id' => $tenantId,
                         'account_id' => $mapping->payable_account_id,
-                        'debit' => $documentTotal,
+                        'debit' => Decimal::float($documentTotal, Decimal::MONEY_SCALE),
                         'credit' => 0,
                         'is_reversal' => false,
                     ],
@@ -232,28 +264,28 @@ class PurchaseReturnController extends Controller
                         'tenant_id' => $tenantId,
                         'account_id' => $mapping->inventory_account_id,
                         'debit' => 0,
-                        'credit' => $inventoryTotal,
+                        'credit' => Decimal::float($inventoryTotal, Decimal::MONEY_SCALE),
                         'is_reversal' => false,
                     ],
                 ];
 
-                if ($variance > 0) {
+                if (Decimal::compare($variance, '0') > 0) {
                     $journalItems[] = [
                         'id' => (string) Str::uuid(),
                         'journal_entry_id' => $journalEntryId,
                         'tenant_id' => $tenantId,
                         'account_id' => $mapping->cogs_account_id,
                         'debit' => 0,
-                        'credit' => $variance,
+                        'credit' => Decimal::float($variance, Decimal::MONEY_SCALE),
                         'is_reversal' => false,
                     ];
-                } elseif ($variance < 0) {
+                } elseif (Decimal::compare($variance, '0') < 0) {
                     $journalItems[] = [
                         'id' => (string) Str::uuid(),
                         'journal_entry_id' => $journalEntryId,
                         'tenant_id' => $tenantId,
                         'account_id' => $mapping->cogs_account_id,
-                        'debit' => abs($variance),
+                        'debit' => Decimal::float(Decimal::abs($variance, Decimal::MONEY_SCALE), Decimal::MONEY_SCALE),
                         'credit' => 0,
                         'is_reversal' => false,
                     ];
@@ -265,6 +297,21 @@ class PurchaseReturnController extends Controller
                     'purchase_return_id' => $returnId,
                 ];
             });
+        } catch (PurchaseReturnValuationException $exception) {
+            app(\App\Services\ValuationAuditService::class)->log($tenantId, $exception->type(), $exception->payload());
+            app(AnomalyService::class)->raise(
+                tenantId: $tenantId,
+                severity: 'high',
+                type: $exception->type(),
+                payload: $exception->payload(),
+                referenceId: $exception->referenceId(),
+            );
+
+            return response()->json([
+                'code' => 'PURCHASE_RETURN_FAILED',
+                'message' => $exception->getMessage(),
+                'details' => [],
+            ], 422);
         } catch (RuntimeException $exception) {
             return response()->json([
                 'code' => 'PURCHASE_RETURN_FAILED',
@@ -283,5 +330,30 @@ class PurchaseReturnController extends Controller
         ));
 
         return response()->json($result, 201);
+    }
+
+    private function loadPurchaseItemsForReturn(string $tenantId, string $purchaseId, array $purchaseItemIds): Collection
+    {
+        return PurchaseItem::query()
+            ->where('tenant_id', $tenantId)
+            ->where('purchase_id', $purchaseId)
+            ->whereIn('id', $purchaseItemIds)
+            ->get(['id', 'product_id', 'product_variant_id'])
+            ->keyBy('id');
+    }
+
+    private function decrementInventory(string $tenantId, string $productId, ?string $productVariantId, string $locationId, float $qty): int
+    {
+        if ($productVariantId) {
+            return DB::update(
+                'UPDATE inventory_balances SET qty_on_hand = qty_on_hand - ? WHERE tenant_id = ? AND product_id = ? AND product_variant_id = ? AND location_id = ? AND qty_on_hand >= ?',
+                [$qty, $tenantId, $productId, $productVariantId, $locationId, $qty]
+            );
+        }
+
+        return DB::update(
+            'UPDATE inventory_balances SET qty_on_hand = qty_on_hand - ? WHERE tenant_id = ? AND product_id = ? AND location_id = ? AND product_variant_id IS NULL AND qty_on_hand >= ?',
+            [$qty, $tenantId, $productId, $locationId, $qty]
+        );
     }
 }
