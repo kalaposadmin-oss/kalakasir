@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="id"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "primary": "#7BAE9E", // Muted Sage/Teal
+              "accent-blue": "#94B3C5", // Soft Blue
+              "background-light": "#F8FAF9",
+              "background-dark": "#121816",
+            },
+            fontFamily: {
+              "display": ["Inter", "sans-serif"]
+            },
+            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "2xl": "1rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style type="text/tailwindcss">
+        body {
+            min-height: max(800px, 100dvh);
+            -webkit-tap-highlight-color: transparent;
+        }
+        .ios-shadow {
+            box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.05);
+        }
+        .ios-shadow-sm {
+            box-shadow: 0 2px 8px -1px rgba(0, 0, 0, 0.04);
+        }
+        .pb-safe {
+          padding-bottom: env(safe-area-inset-bottom);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-800 dark:text-slate-100 antialiased">
+<div class="relative flex min-h-screen w-full flex-col overflow-x-hidden">
+<header class="sticky top-0 z-30 flex items-center justify-between bg-white/70 dark:bg-background-dark/80 backdrop-blur-xl px-4 py-4 border-b border-slate-200/50 dark:border-slate-800/50">
+<div class="flex items-center gap-3">
+<button class="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 active:scale-95 transition-transform">
+<span class="material-symbols-outlined">arrow_back</span>
+</button>
+<div>
+<h1 class="text-lg font-bold leading-tight tracking-tight">Pembelian Stok</h1>
+<p class="text-[10px] font-bold uppercase tracking-widest text-primary/80">PLAN PRO ACTIVE</p>
+</div>
+</div>
+<button class="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+<span class="material-symbols-outlined">help_outline</span>
+</button>
+</header>
+<main class="flex flex-col gap-5 p-4 pb-40">
+<section class="rounded-2xl bg-white dark:bg-slate-900 p-4 ios-shadow border border-slate-100 dark:border-slate-800">
+<div class="flex items-center justify-between mb-3">
+<h2 class="text-xs font-bold uppercase tracking-wider text-slate-400">Supplier Terpilih</h2>
+<button class="text-xs font-bold text-primary">Ganti</button>
+</div>
+<div class="flex items-center gap-3">
+<div class="flex size-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+<span class="material-symbols-outlined text-3xl">local_shipping</span>
+</div>
+<div>
+<p class="text-base font-bold text-slate-800 dark:text-slate-100">PT. Sumber Makmur</p>
+<p class="text-xs text-slate-500">Grosir Sembako &amp; Minuman</p>
+</div>
+</div>
+</section>
+<section>
+<div class="flex items-center justify-between mb-3 px-1">
+<h2 class="text-xs font-bold uppercase tracking-wider text-slate-400">Daftar Produk</h2>
+<button class="flex items-center gap-1 text-xs font-bold text-primary">
+<span class="material-symbols-outlined text-sm">add_circle</span>
+                        Tambah Item
+                    </button>
+</div>
+<div class="flex flex-col gap-3">
+<div class="rounded-2xl bg-white dark:bg-slate-900 p-4 ios-shadow border border-slate-100 dark:border-slate-800">
+<div class="flex justify-between items-start">
+<div class="flex gap-3">
+<div class="size-12 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
+<span class="material-symbols-outlined">coffee</span>
+</div>
+<div>
+<h3 class="text-sm font-bold">Kopi Susu Gula Aren</h3>
+<p class="text-xs text-slate-500">Stok saat ini: 2</p>
+</div>
+</div>
+<button class="text-slate-300">
+<span class="material-symbols-outlined">close</span>
+</button>
+</div>
+<div class="mt-4 flex items-center justify-between">
+<div class="flex flex-col">
+<span class="text-[10px] font-bold text-slate-400 uppercase">Harga Beli</span>
+<span class="text-sm font-bold">Rp 12.000</span>
+</div>
+<div class="flex items-center gap-3 bg-slate-50 dark:bg-slate-800/50 p-1 rounded-xl border border-slate-100 dark:border-slate-700">
+<button class="size-8 flex items-center justify-center rounded-lg bg-white dark:bg-slate-800 shadow-sm text-primary">
+<span class="material-symbols-outlined">remove</span>
+</button>
+<span class="text-sm font-bold w-8 text-center">50</span>
+<button class="size-8 flex items-center justify-center rounded-lg bg-primary text-white shadow-sm">
+<span class="material-symbols-outlined">add</span>
+</button>
+</div>
+</div>
+</div>
+<div class="rounded-2xl bg-white dark:bg-slate-900 p-4 ios-shadow border border-slate-100 dark:border-slate-800">
+<div class="flex justify-between items-start">
+<div class="flex gap-3">
+<div class="size-12 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
+<span class="material-symbols-outlined">water_drop</span>
+</div>
+<div>
+<h3 class="text-sm font-bold">Air Mineral 600ml</h3>
+<p class="text-xs text-slate-500">Stok saat ini: 12</p>
+</div>
+</div>
+<button class="text-slate-300">
+<span class="material-symbols-outlined">close</span>
+</button>
+</div>
+<div class="mt-4 flex items-center justify-between">
+<div class="flex flex-col">
+<span class="text-[10px] font-bold text-slate-400 uppercase">Harga Beli</span>
+<span class="text-sm font-bold">Rp 3.000</span>
+</div>
+<div class="flex items-center gap-3 bg-slate-50 dark:bg-slate-800/50 p-1 rounded-xl border border-slate-100 dark:border-slate-700">
+<button class="size-8 flex items-center justify-center rounded-lg bg-white dark:bg-slate-800 shadow-sm text-primary">
+<span class="material-symbols-outlined">remove</span>
+</button>
+<span class="text-sm font-bold w-8 text-center">300</span>
+<button class="size-8 flex items-center justify-center rounded-lg bg-primary text-white shadow-sm">
+<span class="material-symbols-outlined">add</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</section>
+<section class="rounded-2xl bg-white dark:bg-slate-900 p-4 ios-shadow border border-slate-100 dark:border-slate-800">
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-slate-400 text-sm">notes</span>
+<h2 class="text-xs font-bold uppercase tracking-wider text-slate-400">Catatan (Opsional)</h2>
+</div>
+<textarea class="w-full text-sm bg-transparent border-none p-0 focus:ring-0 text-slate-600 placeholder:text-slate-300 resize-none h-12" placeholder="Tambah keterangan pembelian..."></textarea>
+</section>
+</main>
+<div class="fixed bottom-0 left-0 right-0 z-50 bg-white/90 dark:bg-slate-900/95 backdrop-blur-xl border-t border-slate-200/50 dark:border-slate-800/50 pb-safe">
+<div class="p-4 flex flex-col gap-4">
+<div class="flex items-center justify-between px-1">
+<span class="text-sm font-medium text-slate-500">Total Pembelian</span>
+<span class="text-xl font-bold text-slate-900 dark:text-white tracking-tight">Rp 1.500.000</span>
+</div>
+<button class="flex h-14 w-full items-center justify-center gap-3 rounded-2xl bg-primary text-white shadow-lg shadow-primary/20 active:scale-[0.98] transition-all">
+<span class="material-symbols-outlined font-bold">save</span>
+<span class="text-base font-bold">Simpan &amp; Tambah Stok</span>
+</button>
+</div>
+</div>
+</div>
+
+</body></html>

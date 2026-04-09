@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="id"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#7BAE9E", // Muted Sage/Teal
+                        "accent-blue": "#94B3C5",
+                        "background-light": "#F8FAF9",
+                        "background-dark": "#121816",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "2xl": "1rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style type="text/tailwindcss">
+        body {
+            min-height: 100dvh;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .ios-shadow {
+            box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.05);
+        }
+        .ios-toggle:checked + .toggle-bg {
+            background-color: #7BAE9E;
+        }
+        .ios-toggle:checked + .toggle-bg::after {
+            transform: translateX(20px);
+        }
+        .pb-safe {
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-800 dark:text-slate-100 antialiased">
+<div class="relative flex min-h-screen w-full flex-col overflow-x-hidden pb-24">
+<header class="sticky top-0 z-30 flex items-center justify-between bg-white/70 dark:bg-background-dark/80 backdrop-blur-xl px-4 py-4 border-b border-slate-200/50 dark:border-slate-800/50">
+<div class="flex items-center gap-3">
+<button class="flex items-center justify-center -ml-1 h-10 w-10 rounded-full active:bg-slate-100 dark:active:bg-slate-800">
+<span class="material-symbols-outlined text-slate-600 dark:text-slate-300">chevron_left</span>
+</button>
+<h1 class="text-lg font-bold leading-tight tracking-tight">Metode Bayar</h1>
+</div>
+<div class="flex items-center gap-2">
+<button class="text-sm font-semibold text-primary px-2">Bantuan</button>
+</div>
+</header>
+<main class="flex flex-col gap-6 p-4">
+<section class="rounded-2xl bg-primary/10 border border-primary/20 p-4 flex gap-3">
+<span class="material-symbols-outlined text-primary">info</span>
+<p class="text-xs font-medium leading-relaxed text-slate-600 dark:text-slate-300">
+                    Pilih metode pembayaran yang akan muncul di layar kasir saat melakukan transaksi.
+                </p>
+</section>
+<section class="flex flex-col gap-2">
+<h2 class="mb-2 px-1 text-xs font-bold uppercase tracking-[0.15em] text-slate-400 dark:text-slate-500">DAFTAR METODE</h2>
+<div class="flex flex-col rounded-2xl bg-white dark:bg-slate-900 overflow-hidden ios-shadow border border-slate-100 dark:border-slate-800">
+<div class="flex items-center justify-between p-4 border-b border-slate-50 dark:border-slate-800/50">
+<div class="flex items-center gap-4">
+<div class="flex size-11 items-center justify-center rounded-xl bg-green-50 text-green-600">
+<span class="material-symbols-outlined">payments</span>
+</div>
+<div>
+<p class="text-[15px] font-bold">Tunai</p>
+<p class="text-[11px] text-slate-400 font-medium">Uang kertas &amp; koin</p>
+</div>
+</div>
+<label class="relative inline-flex cursor-pointer items-center">
+<input checked="" class="ios-toggle peer sr-only" type="checkbox"/>
+<div class="toggle-bg h-7 w-12 rounded-full bg-slate-200 transition-all after:absolute after:left-[2px] after:top-[2px] after:h-6 after:w-6 after:rounded-full after:bg-white after:shadow-sm after:transition-all after:content-[''] dark:bg-slate-700"></div>
+</label>
+</div>
+<div class="flex items-center justify-between p-4 border-b border-slate-50 dark:border-slate-800/50">
+<div class="flex items-center gap-4">
+<div class="flex size-11 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+<span class="material-symbols-outlined">qr_code_2</span>
+</div>
+<div>
+<p class="text-[15px] font-bold">QRIS</p>
+<p class="text-[11px] text-slate-400 font-medium">Pembayaran Digital QR</p>
+</div>
+</div>
+<label class="relative inline-flex cursor-pointer items-center">
+<input checked="" class="ios-toggle peer sr-only" type="checkbox"/>
+<div class="toggle-bg h-7 w-12 rounded-full bg-slate-200 transition-all after:absolute after:left-[2px] after:top-[2px] after:h-6 after:w-6 after:rounded-full after:bg-white after:shadow-sm after:transition-all after:content-[''] dark:bg-slate-700"></div>
+</label>
+</div>
+<div class="flex items-center justify-between p-4 border-b border-slate-50 dark:border-slate-800/50">
+<div class="flex items-center gap-4">
+<div class="flex size-11 items-center justify-center rounded-xl bg-slate-100 text-slate-500 opacity-60">
+<span class="material-symbols-outlined">account_balance</span>
+</div>
+<div class="opacity-60">
+<p class="text-[15px] font-bold">Transfer Bank</p>
+<p class="text-[11px] text-slate-400 font-medium">Antar bank / Virtual Account</p>
+</div>
+</div>
+<label class="relative inline-flex cursor-pointer items-center">
+<input class="ios-toggle peer sr-only" type="checkbox"/>
+<div class="toggle-bg h-7 w-12 rounded-full bg-slate-200 transition-all after:absolute after:left-[2px] after:top-[2px] after:h-6 after:w-6 after:rounded-full after:bg-white after:shadow-sm after:transition-all after:content-[''] dark:bg-slate-700"></div>
+</label>
+</div>
+<div class="flex items-center justify-between p-4">
+<div class="flex items-center gap-4">
+<div class="flex size-11 items-center justify-center rounded-xl bg-purple-50 text-purple-600">
+<span class="material-symbols-outlined">account_balance_wallet</span>
+</div>
+<div>
+<p class="text-[15px] font-bold">E-Wallet</p>
+<p class="text-[11px] text-slate-400 font-medium">Gopay, OVO, Dana, dll</p>
+</div>
+</div>
+<label class="relative inline-flex cursor-pointer items-center">
+<input checked="" class="ios-toggle peer sr-only" type="checkbox"/>
+<div class="toggle-bg h-7 w-12 rounded-full bg-slate-200 transition-all after:absolute after:left-[2px] after:top-[2px] after:h-6 after:w-6 after:rounded-full after:bg-white after:shadow-sm after:transition-all after:content-[''] dark:bg-slate-700"></div>
+</label>
+</div>
+</div>
+</section>
+<section class="px-1">
+<button class="flex w-full items-center justify-center gap-2 rounded-2xl bg-white dark:bg-slate-900 p-4 text-sm font-bold text-slate-600 dark:text-slate-300 border border-dashed border-slate-300 dark:border-slate-700 active:bg-slate-50">
+<span class="material-symbols-outlined text-[20px]">add</span>
+                    Tambah Metode Kustom
+                </button>
+</section>
+</main>
+<nav class="fixed bottom-0 left-0 right-0 z-40 flex h-20 items-center border-t border-slate-200/50 dark:border-slate-800/50 bg-white/90 dark:bg-slate-900/95 backdrop-blur-xl px-2 pb-safe">
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="text-[10px] font-medium tracking-tight">Dashboard</span>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">point_of_sale</span>
+<span class="text-[10px] font-medium tracking-tight">Kasir</span>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">history</span>
+<span class="text-[10px] font-medium tracking-tight">Riwayat</span>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">inventory_2</span>
+<span class="text-[10px] font-medium tracking-tight">Produk</span>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1">settings</span>
+<span class="text-[10px] font-bold tracking-tight">Setelan</span>
+</a>
+</nav>
+</div>
+
+</body></html>

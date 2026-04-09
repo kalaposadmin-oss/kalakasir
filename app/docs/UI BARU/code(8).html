@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="id"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#7BAE9E", // Muted Sage/Teal
+                        "accent-blue": "#94B3C5",
+                        "background-light": "#F8FAF9",
+                        "background-dark": "#121816",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "2xl": "1rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style type="text/tailwindcss">
+        body {
+            min-height: 100dvh;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .ios-shadow {
+            box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.05);
+        }
+        .ios-shadow-sm {
+            box-shadow: 0 2px 8px -1px rgba(0, 0, 0, 0.04);
+        }
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        .pb-safe {
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-800 dark:text-slate-100 antialiased">
+<div class="relative flex min-h-screen w-full flex-col overflow-x-hidden pb-24">
+<header class="sticky top-0 z-30 flex flex-col bg-white/70 dark:bg-background-dark/80 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-800/50">
+<div class="flex items-center justify-between px-4 py-4">
+<div class="flex items-center gap-3">
+<button class="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+<span class="material-symbols-outlined">arrow_back_ios_new</span>
+</button>
+<div>
+<h1 class="text-lg font-bold leading-tight tracking-tight">Riwayat</h1>
+</div>
+</div>
+<button class="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+<span class="material-symbols-outlined">calendar_today</span>
+</button>
+</div>
+<div class="flex px-4 pb-0">
+<div class="flex w-full gap-8">
+<button class="pb-3 text-sm font-semibold text-slate-400 border-b-2 border-transparent">Transaksi</button>
+<button class="pb-3 text-sm font-bold text-primary border-b-2 border-primary relative">
+                        Shift
+                        <span class="absolute -bottom-0.5 left-0 right-0 h-0.5 bg-primary rounded-full"></span>
+</button>
+<button class="pb-3 text-sm font-semibold text-slate-400 border-b-2 border-transparent">Laporan</button>
+</div>
+</div>
+</header>
+<main class="flex flex-col gap-4 p-4">
+<div class="flex items-center gap-2 mb-2">
+<div class="relative flex-1">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xl">search</span>
+<input class="w-full bg-white dark:bg-slate-900 border-none rounded-2xl py-3 pl-10 pr-4 text-sm ios-shadow-sm focus:ring-2 focus:ring-primary/50" placeholder="Cari kasir atau tanggal..." type="text"/>
+</div>
+<button class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white dark:bg-slate-900 ios-shadow-sm border border-slate-100 dark:border-slate-800">
+<span class="material-symbols-outlined text-slate-600">tune</span>
+</button>
+</div>
+<div class="flex flex-col gap-4">
+<div class="bg-white dark:bg-slate-900 rounded-3xl p-5 ios-shadow border border-slate-100 dark:border-slate-800">
+<div class="flex justify-between items-start mb-4">
+<div class="flex flex-col">
+<span class="text-sm font-bold text-slate-800 dark:text-slate-100">20 Okt 2023</span>
+<span class="text-xs font-medium text-slate-400 mt-0.5">08:00 - 16:00</span>
+</div>
+<span class="bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">Sesuai</span>
+</div>
+<div class="flex items-center gap-3 mb-5 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-2xl">
+<div class="flex size-10 items-center justify-center rounded-full bg-primary/20 text-primary">
+<span class="material-symbols-outlined text-xl">person</span>
+</div>
+<div>
+<p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Kasir</p>
+<p class="text-sm font-bold text-slate-700 dark:text-slate-200">Budi</p>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div class="flex flex-col gap-1">
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Saldo Awal</span>
+<span class="text-sm font-bold">Rp 100.000</span>
+</div>
+<div class="flex flex-col gap-1">
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Saldo Akhir</span>
+<span class="text-sm font-bold text-primary">Rp 2.500.000</span>
+</div>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-900 rounded-3xl p-5 ios-shadow border border-slate-100 dark:border-slate-800">
+<div class="flex justify-between items-start mb-4">
+<div class="flex flex-col">
+<span class="text-sm font-bold text-slate-800 dark:text-slate-100">19 Okt 2023</span>
+<span class="text-xs font-medium text-slate-400 mt-0.5">08:00 - 16:00</span>
+</div>
+<span class="bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">Sesuai</span>
+</div>
+<div class="flex items-center gap-3 mb-5 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-2xl">
+<div class="flex size-10 items-center justify-center rounded-full bg-primary/20 text-primary">
+<span class="material-symbols-outlined text-xl">person</span>
+</div>
+<div>
+<p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Kasir</p>
+<p class="text-sm font-bold text-slate-700 dark:text-slate-200">Ani</p>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div class="flex flex-col gap-1">
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Saldo Awal</span>
+<span class="text-sm font-bold">Rp 100.000</span>
+</div>
+<div class="flex flex-col gap-1">
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Saldo Akhir</span>
+<span class="text-sm font-bold text-primary">Rp 1.850.000</span>
+</div>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-900 rounded-3xl p-5 ios-shadow border border-slate-100 dark:border-slate-800 opacity-90">
+<div class="flex justify-between items-start mb-4">
+<div class="flex flex-col">
+<span class="text-sm font-bold text-slate-800 dark:text-slate-100">18 Okt 2023</span>
+<span class="text-xs font-medium text-slate-400 mt-0.5">08:00 - 16:00</span>
+</div>
+<span class="bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">Selisih</span>
+</div>
+<div class="flex items-center gap-3 mb-5 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-2xl">
+<div class="flex size-10 items-center justify-center rounded-full bg-primary/20 text-primary">
+<span class="material-symbols-outlined text-xl">person</span>
+</div>
+<div>
+<p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Kasir</p>
+<p class="text-sm font-bold text-slate-700 dark:text-slate-200">Budi</p>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div class="flex flex-col gap-1">
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Saldo Awal</span>
+<span class="text-sm font-bold">Rp 100.000</span>
+</div>
+<div class="flex flex-col gap-1">
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Saldo Akhir</span>
+<span class="text-sm font-bold text-primary">Rp 3.100.000</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+<nav class="fixed bottom-0 left-0 right-0 z-40 flex h-20 items-center border-t border-slate-200/50 dark:border-slate-800/50 bg-white/90 dark:bg-slate-900/95 backdrop-blur-xl px-2 pb-safe">
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="text-[10px] font-medium tracking-tight">Dashboard</span>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">point_of_sale</span>
+<span class="text-[10px] font-medium tracking-tight">Kasir</span>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1">history</span>
+<span class="text-[10px] font-bold tracking-tight">Riwayat</span>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">inventory_2</span>
+<span class="text-[10px] font-medium tracking-tight">Produk</span>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="text-[10px] font-medium tracking-tight">Setelan</span>
+</a>
+</nav>
+</div>
+
+</body></html>

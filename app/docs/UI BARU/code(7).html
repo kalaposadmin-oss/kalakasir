@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="id"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "primary": "#7BAE9E", // Muted Sage/Teal
+              "accent-blue": "#94B3C5", // Soft Blue
+              "background-light": "#F8FAF9",
+              "background-dark": "#121816",
+            },
+            fontFamily: {
+              "display": ["Inter", "sans-serif"]
+            },
+            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "2xl": "1rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style type="text/tailwindcss">
+        body {
+            min-height: 100dvh;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .ios-shadow {
+            box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.05);
+        }
+        .ios-input-shadow {
+            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02);
+        }
+        .ios-blur {
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-800 dark:text-slate-100 antialiased">
+<div class="relative flex min-h-screen w-full flex-col overflow-x-hidden">
+<header class="sticky top-0 z-30 flex items-center justify-between bg-white/80 dark:bg-background-dark/80 ios-blur px-4 py-4 border-b border-slate-200/50 dark:border-slate-800/50">
+<div class="flex items-center gap-1">
+<button class="flex h-10 w-10 items-center justify-center -ml-2 text-primary active:opacity-40 transition-opacity">
+<span class="material-symbols-outlined text-[28px]">chevron_left</span>
+</button>
+<h1 class="text-lg font-bold tracking-tight">Tambah Supplier</h1>
+</div>
+<div class="flex items-center gap-1">
+<span class="px-2 py-1 rounded-md bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-wider border border-primary/20">Plan Pro</span>
+</div>
+</header>
+<main class="flex-1 flex flex-col p-5 gap-6">
+<div class="bg-white dark:bg-slate-900 rounded-3xl p-6 ios-shadow border border-slate-100 dark:border-slate-800">
+<form class="flex flex-col gap-5">
+<div class="flex flex-col gap-2">
+<label class="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 ml-1" for="nama">Nama Supplier</label>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 text-xl">person</span>
+<input class="w-full pl-12 pr-4 py-4 rounded-2xl border-none bg-slate-50 dark:bg-slate-800/50 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:ring-2 focus:ring-primary/20 ios-input-shadow text-base" id="nama" placeholder="Contoh: PT. Sumber Makmur" type="text"/>
+</div>
+</div>
+<div class="flex flex-col gap-2">
+<label class="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 ml-1" for="phone">Nomor HP / WhatsApp</label>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 text-xl">call</span>
+<input class="w-full pl-12 pr-4 py-4 rounded-2xl border-none bg-slate-50 dark:bg-slate-800/50 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:ring-2 focus:ring-primary/20 ios-input-shadow text-base" id="phone" placeholder="0812xxxx" type="tel"/>
+</div>
+</div>
+<div class="flex flex-col gap-2">
+<label class="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 ml-1" for="alamat">Alamat Lengkap</label>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-4 top-4 text-slate-300 text-xl">location_on</span>
+<textarea class="w-full pl-12 pr-4 py-4 rounded-2xl border-none bg-slate-50 dark:bg-slate-800/50 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:ring-2 focus:ring-primary/20 ios-input-shadow text-base resize-none" id="alamat" placeholder="Jl. Sudirman No. 123..." rows="3"></textarea>
+</div>
+</div>
+<div class="flex flex-col gap-2">
+<label class="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 ml-1" for="catatan">Catatan (Opsional)</label>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-4 top-4 text-slate-300 text-xl">description</span>
+<textarea class="w-full pl-12 pr-4 py-4 rounded-2xl border-none bg-slate-50 dark:bg-slate-800/50 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:ring-2 focus:ring-primary/20 ios-input-shadow text-base resize-none" id="catatan" placeholder="Ketentuan retur, jadwal kirim, dll" rows="2"></textarea>
+</div>
+</div>
+</form>
+</div>
+<div class="flex gap-4 p-4 rounded-2xl bg-primary/5 border border-primary/10">
+<span class="material-symbols-outlined text-primary">info</span>
+<p class="text-xs text-slate-600 dark:text-slate-400 leading-relaxed font-medium">
+                    Supplier yang terdaftar dapat dihubungkan ke fitur <span class="text-primary font-bold">Riwayat Stok Masuk</span> untuk memantau pengeluaran inventaris.
+                </p>
+</div>
+</main>
+<div class="sticky bottom-0 left-0 right-0 p-5 bg-gradient-to-t from-background-light dark:from-background-dark via-background-light/95 dark:via-background-dark/95 to-transparent">
+<button class="w-full py-5 rounded-2xl bg-primary text-white font-bold text-lg ios-shadow active:scale-[0.98] active:opacity-90 transition-all flex items-center justify-center gap-3">
+<span class="material-symbols-outlined font-bold">save</span>
+                Simpan Supplier
+            </button>
+<div class="h-4"></div> 
+</div>
+</div>
+
+</body></html>

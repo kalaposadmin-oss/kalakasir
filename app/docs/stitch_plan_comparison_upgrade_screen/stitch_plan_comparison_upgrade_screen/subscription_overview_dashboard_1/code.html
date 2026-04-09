@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html class="light" lang="id"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Subscription Overview - POS SaaS</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#0D9488",
+                        "background-light": "#F9FAFB",
+                        "background-dark": "#111827",
+                    },
+                    fontFamily: {
+                        display: ["Inter", "sans-serif"],
+                    },
+                    borderRadius: {
+                        DEFAULT: "0.75rem",
+                    },
+                },
+            },
+        };
+    </script>
+<style type="text/tailwindcss">
+        body { font-family: 'Inter', sans-serif; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen flex overflow-hidden">
+<aside class="w-64 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col fixed h-full z-20">
+<div class="p-6 flex items-center gap-3">
+<div class="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white">
+<span class="material-icons-round">point_of_sale</span>
+</div>
+<span class="font-bold text-xl tracking-tight text-slate-900 dark:text-white">Warung Jaya</span>
+</div>
+<nav class="flex-1 px-4 py-4 space-y-1 overflow-y-auto scrollbar-hide">
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors" href="#">
+<span class="material-icons-round">dashboard</span>
+<span class="font-medium">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors" href="#">
+<span class="material-icons-round">receipt_long</span>
+<span class="font-medium">Transaksi</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors" href="#">
+<span class="material-icons-round">inventory_2</span>
+<span class="font-medium">Produk</span>
+</a>
+<div class="pt-6 pb-2 px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+            Pengaturan &amp; Billing
+        </div>
+<a class="flex items-center gap-3 px-3 py-2.5 bg-teal-50 dark:bg-teal-900/20 text-primary rounded-lg transition-colors" href="#">
+<span class="material-icons-round">subscriptions</span>
+<span class="font-medium">Langganan</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors" href="#">
+<span class="material-icons-round">extension</span>
+<span class="font-medium">Paket Fitur</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors" href="#">
+<span class="material-icons-round">history_edu</span>
+<span class="font-medium">Riwayat Faktur</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors" href="#">
+<span class="material-icons-round">business</span>
+<span class="font-medium">Profil Bisnis</span>
+</a>
+</nav>
+<div class="p-4 border-t border-slate-200 dark:border-slate-800">
+<button class="flex items-center w-full gap-3 px-3 py-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-lg transition-colors">
+<span class="material-icons-round">logout</span>
+<span class="font-medium">Keluar</span>
+</button>
+</div>
+</aside>
+<main class="flex-1 ml-64 min-h-screen">
+<header class="h-16 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 sticky top-0 z-10 px-8 flex items-center justify-between">
+<div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+<span>Pengaturan</span>
+<span class="material-icons-round text-sm">chevron_right</span>
+<span class="font-medium text-slate-900 dark:text-white">Langganan</span>
+</div>
+<div class="flex items-center gap-6">
+<button class="flex items-center gap-2 px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+<span class="text-xs font-semibold text-slate-500">Cabang:</span>
+<span class="text-sm font-medium">Sudirman Main</span>
+<span class="material-icons-round text-lg text-slate-400">unfold_more</span>
+</button>
+<div class="flex items-center gap-4">
+<button class="relative p-2 text-slate-400 hover:text-primary transition-colors">
+<span class="material-icons-round">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white dark:border-slate-900"></span>
+</button>
+<div class="flex items-center gap-3 pl-4 border-l border-slate-200 dark:border-slate-700">
+<div class="text-right">
+<p class="text-sm font-semibold leading-none mb-1">Riana Putri</p>
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-400 uppercase">Plan: Gold</span>
+</div>
+<img alt="Avatar" class="w-10 h-10 rounded-full border-2 border-white dark:border-slate-800 shadow-sm" src="https://lh3.googleusercontent.com/aida-public/AB6AXuADxwrovEagTzHnBVqHdNoTAYr_BB0FKNA2y0wW04B5H7GmnpuG44B85Dq2OuqX5GdxKvyl38cY8a69KFEqELXn-l5y9DU25oJahTmnlv2BIgdwfFOUlCSmqO1St0d4MQATf7MEmAr-53g1f-wd0xREd3haUrHDcPelMCVPsmrLxdfGnD3CPRcBoWhvu7JGbLQk5AmpbggsNZzyDOgLz6PCub3y0oouYDv0FRpHKw1o_fqtmnnf386LQVg47WEosQIvyZxi1z6e8G5D"/>
+</div>
+</div>
+</div>
+</header>
+<div class="p-8 max-w-7xl mx-auto space-y-6 blur-[2px] pointer-events-none">
+<div class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 p-4 rounded-xl flex items-start gap-4">
+<div class="p-2 bg-amber-100 dark:bg-amber-800/40 rounded-lg text-amber-600 dark:text-amber-400">
+<span class="material-icons-round">warning</span>
+</div>
+<div class="flex-1">
+<h4 class="font-semibold text-amber-800 dark:text-amber-300">Masa Trial Hampir Berakhir</h4>
+<p class="text-sm text-amber-700 dark:text-amber-400/80">Masa percobaan gratis Anda akan berakhir dalam 3 hari (14 Mar 2024). Segera pilih paket untuk terus menggunakan fitur premium.</p>
+</div>
+<button class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold rounded-lg transition-colors">
+                Pilih Paket
+            </button>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+<div class="bg-white dark:bg-slate-900 p-6 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm">
+<p class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Paket Saat Ini</p>
+<div class="flex items-end justify-between">
+<h3 class="text-2xl font-bold">Gold Edition</h3>
+<span class="material-icons-round text-primary bg-teal-50 dark:bg-teal-900/30 p-2 rounded-lg">workspace_premium</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+<div class="fixed inset-0 z-[60] flex items-center justify-center p-4">
+<div class="absolute inset-0 bg-slate-900/80 backdrop-blur-sm"></div>
+<div class="relative bg-white dark:bg-slate-900 w-full max-w-2xl rounded-[2rem] shadow-2xl border border-white/20 overflow-hidden flex flex-col">
+<div class="px-8 pt-8 pb-4">
+<div class="flex items-center justify-between">
+<div>
+<h2 class="text-2xl font-bold text-slate-900 dark:text-white">Pratinjau Perubahan Paket</h2>
+<p class="text-slate-500 dark:text-slate-400 text-sm">Tinjau dampak perubahan fitur dan biaya sebelum melanjutkan.</p>
+</div>
+<button class="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors text-slate-400">
+<span class="material-icons-round">close</span>
+</button>
+</div>
+</div>
+<div class="flex-1 overflow-y-auto px-8 pb-8 space-y-8">
+<div class="relative flex items-center justify-between p-6 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-700/50">
+<div class="text-center flex-1">
+<p class="text-[10px] uppercase tracking-wider font-bold text-slate-400 mb-1">Paket Saat Ini</p>
+<p class="text-lg font-bold text-slate-600 dark:text-slate-300">Gold</p>
+</div>
+<div class="flex flex-col items-center px-4">
+<div class="w-10 h-10 bg-primary text-white rounded-full flex items-center justify-center shadow-lg shadow-primary/30 z-10">
+<span class="material-icons-round">trending_up</span>
+</div>
+<div class="absolute h-[2px] w-24 bg-gradient-to-r from-transparent via-primary/30 to-transparent top-1/2 mt-3"></div>
+</div>
+<div class="text-center flex-1">
+<p class="text-[10px] uppercase tracking-wider font-bold text-primary mb-1">Paket Baru</p>
+<p class="text-xl font-black text-primary">Platinum</p>
+</div>
+</div>
+<div class="space-y-4">
+<h4 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">auto_awesome</span>
+                    Apa yang akan Anda dapatkan?
+                </h4>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<div class="flex items-start gap-3 p-4 bg-emerald-50/50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-900/30 rounded-xl">
+<span class="material-icons-round text-emerald-500">check_circle</span>
+<div>
+<p class="text-sm font-bold text-slate-900 dark:text-white">Multi-outlet Sync</p>
+<p class="text-xs text-slate-500 dark:text-slate-400">Sinkronisasi stok antar cabang</p>
+</div>
+</div>
+<div class="flex items-start gap-3 p-4 bg-emerald-50/50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-900/30 rounded-xl">
+<span class="material-icons-round text-emerald-500">check_circle</span>
+<div>
+<p class="text-sm font-bold text-slate-900 dark:text-white">Team Management</p>
+<p class="text-xs text-slate-500 dark:text-slate-400">Hak akses kustom tanpa batas</p>
+</div>
+</div>
+<div class="flex items-start gap-3 p-4 bg-emerald-50/50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-900/30 rounded-xl col-span-1 md:col-span-2">
+<span class="material-icons-round text-emerald-500">check_circle</span>
+<div>
+<p class="text-sm font-bold text-slate-900 dark:text-white">API Access</p>
+<p class="text-xs text-slate-500 dark:text-slate-400">Integrasi pihak ketiga (Xero, Jurnal, dll)</p>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-3 p-4 bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30 rounded-xl">
+<span class="material-icons-round text-blue-500">info</span>
+<p class="text-sm text-blue-700 dark:text-blue-400"><strong>3 menu baru</strong> akan ditambahkan ke sidebar Anda setelah konfirmasi.</p>
+</div>
+</div>
+<div class="bg-slate-900 dark:bg-slate-950 rounded-2xl p-6 text-white overflow-hidden relative">
+<div class="absolute -right-8 -top-8 w-32 h-32 bg-primary/20 rounded-full blur-3xl"></div>
+<h4 class="text-xs uppercase tracking-widest font-bold text-slate-400 mb-6">Ringkasan Penagihan</h4>
+<div class="space-y-4">
+<div class="flex justify-between items-center">
+<span class="text-slate-400 text-sm">Total Biaya Prorata</span>
+<span class="text-xl font-bold">Rp 150.000</span>
+</div>
+<div class="h-px bg-slate-800"></div>
+<div class="grid grid-cols-2 gap-4">
+<div>
+<p class="text-[10px] text-slate-500 uppercase font-bold mb-1">Metode Pembayaran</p>
+<div class="flex items-center gap-2">
+<span class="material-icons-round text-primary text-sm">account_balance</span>
+<span class="text-sm font-medium">Transfer Bank (Manual)</span>
+</div>
+</div>
+<div>
+<p class="text-[10px] text-slate-500 uppercase font-bold mb-1">Berlaku Mulai</p>
+<div class="flex items-center gap-2">
+<span class="material-icons-round text-primary text-sm">bolt</span>
+<span class="text-sm font-medium">Segera (Immediately)</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-center gap-2 text-slate-400">
+<span class="material-symbols-outlined text-sm">verified_user</span>
+<p class="text-[11px] font-medium italic">Transaksi ini dilindungi dengan Idempotency-Key untuk keamanan</p>
+</div>
+</div>
+<div class="p-8 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-100 dark:border-slate-800 flex gap-4">
+<button class="flex-1 px-6 py-4 bg-primary hover:bg-teal-700 text-white font-bold rounded-xl shadow-lg shadow-teal-500/25 transition-all flex items-center justify-center gap-2">
+<span>Konfirmasi &amp; Bayar</span>
+<span class="material-icons-round text-lg">arrow_forward</span>
+</button>
+<button class="px-8 py-4 bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 text-slate-600 dark:text-white font-bold rounded-xl border border-slate-200 dark:border-slate-600 transition-all">
+                Batalkan
+            </button>
+</div>
+</div>
+</div>
+<button class="fixed bottom-6 right-6 w-12 h-12 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full shadow-xl flex items-center justify-center text-slate-600 dark:text-slate-300 z-[70] transition-all hover:scale-110 active:scale-95" onclick="document.documentElement.classList.toggle('dark')">
+<span class="material-icons-round dark:hidden">dark_mode</span>
+<span class="material-icons-round hidden dark:block">light_mode</span>
+</button>
+
+</body></html>

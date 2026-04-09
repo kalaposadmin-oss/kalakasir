@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html class="light" lang="id"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Subscription Audit Log - POS SaaS</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#0D9488",
+                        "background-light": "#F9FAFB",
+                        "background-dark": "#111827",
+                    },
+                    fontFamily: {
+                        display: ["Inter", "sans-serif"],
+                    },
+                    borderRadius: {
+                        DEFAULT: "0.75rem",
+                    },
+                },
+            },
+        };
+    </script>
+<style type="text/tailwindcss">
+        body { font-family: 'Inter', sans-serif; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        .gated-blur { filter: blur(4px); }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen flex">
+<aside class="w-64 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col fixed h-full z-20">
+<div class="p-6 flex items-center gap-3">
+<div class="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white">
+<span class="material-symbols-outlined">inventory_2</span>
+</div>
+<span class="font-bold text-xl tracking-tight">Warung Jaya</span>
+</div>
+<nav class="flex-1 px-4 py-4 space-y-1 overflow-y-auto scrollbar-hide">
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-medium">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined">receipt_long</span>
+<span class="font-medium">Transaksi</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined">inventory</span>
+<span class="font-medium">Stok &amp; Inventori</span>
+</a>
+<div class="pt-6 pb-2 px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                Pengaturan &amp; Billing
+            </div>
+<a class="flex items-center gap-3 px-3 py-2.5 bg-teal-50 dark:bg-teal-900/20 text-primary rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined">history</span>
+<span class="font-medium">Audit Log Paket</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined">subscriptions</span>
+<span class="font-medium">Langganan</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined">business</span>
+<span class="font-medium">Profil Bisnis</span>
+</a>
+</nav>
+<div class="p-4 border-t border-slate-200 dark:border-slate-800">
+<button class="flex items-center w-full gap-3 px-3 py-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-lg transition-colors">
+<span class="material-symbols-outlined">logout</span>
+<span class="font-medium">Keluar</span>
+</button>
+</div>
+</aside>
+<main class="flex-1 ml-64 min-h-screen">
+<header class="h-16 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 sticky top-0 z-10 px-8 flex items-center justify-between">
+<div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+<span>Billing</span>
+<span class="material-symbols-outlined text-sm">chevron_right</span>
+<span class="font-medium text-slate-900 dark:text-white">Audit Log Paket</span>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-4">
+<button class="relative p-2 text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white dark:border-slate-900"></span>
+</button>
+<div class="flex items-center gap-3 pl-4 border-l border-slate-200 dark:border-slate-700">
+<div class="text-right">
+<p class="text-sm font-semibold leading-none mb-1">Riana Putri</p>
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-400 uppercase">Plan: Gold</span>
+</div>
+<img alt="Avatar" class="w-10 h-10 rounded-full border-2 border-white dark:border-slate-800 shadow-sm" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCmcLOPfLektXLl6_mbMQWblIvNI5NB7CWStfOzSUZUNaovdfq0wAbK6Fv7AfuC2llZmUyJSaJ_mfViLTvMdydqKkrIr0lazfsKmDRBBm3X9E6WSOvPshr0HE5xQrDPo8m8ZdXb4kW0rlzbxSjtWpwI4V6e8elYQlPVc0bbyQp2YdfT1w991w85aS9gdYV272cz3buoEQc6hEZXQFnURngMu0AojBpZwMl1USrWOmJkt_phaJ7bOXkuuEEkDocndAa-HM4cqTIGIKns"/>
+</div>
+</div>
+</div>
+</header>
+<div class="p-8 max-w-7xl mx-auto space-y-6">
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div>
+<h1 class="text-2xl font-bold text-slate-900 dark:text-white">Riwayat Perubahan Paket</h1>
+<p class="text-sm text-slate-500">Log aktivitas penagihan dan perubahan paket langganan Anda.</p>
+</div>
+<div class="flex items-center gap-3">
+<button class="relative group px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-500 font-semibold rounded-lg flex items-center gap-2 transition-all cursor-not-allowed overflow-hidden">
+<span class="material-symbols-outlined text-xl">download</span>
+                        Ekspor Audit (.csv)
+                        <div class="absolute inset-0 bg-slate-900/5 backdrop-blur-[1px] flex items-center justify-center">
+<span class="px-2 py-0.5 bg-teal-500 text-white text-[9px] font-bold rounded flex items-center gap-1">
+<span class="material-symbols-outlined text-[10px] fill-1">lock</span>
+                                PRO
+                            </span>
+</div>
+<div class="absolute bottom-full right-0 mb-2 hidden group-hover:block bg-slate-800 text-white text-[10px] py-1 px-2 rounded whitespace-nowrap z-30">
+                            Fitur ekspor tersedia di paket Platinum
+                        </div>
+</button>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
+<th class="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Tanggal &amp; Waktu</th>
+<th class="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Aktor</th>
+<th class="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Aksi</th>
+<th class="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Detail</th>
+<th class="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Status</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+<td class="px-6 py-4">
+<p class="text-sm font-medium">12 Okt 2023</p>
+<p class="text-xs text-slate-400">14:20:31</p>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-teal-100 dark:bg-teal-900/30 flex items-center justify-center text-teal-600 font-bold text-xs">RP</div>
+<div class="text-sm">
+<p class="font-medium">Riana Putri</p>
+<p class="text-[10px] text-slate-400">Owner</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 text-sm font-semibold text-teal-600 dark:text-teal-400">Upgrade</td>
+<td class="px-6 py-4 text-sm">
+<span class="text-slate-500">Silver</span>
+<span class="material-symbols-outlined text-xs mx-1 align-middle">arrow_forward</span>
+<span class="font-bold">Gold</span>
+</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                                        Berhasil
+                                    </span>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+<td class="px-6 py-4">
+<p class="text-sm font-medium">12 Sep 2023</p>
+<p class="text-xs text-slate-400">09:15:00</p>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 font-bold text-xs">SY</div>
+<div class="text-sm">
+<p class="font-medium">System</p>
+<p class="text-[10px] text-slate-400">Auto-renewal</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 text-sm font-semibold text-blue-600 dark:text-blue-400">Renewal</td>
+<td class="px-6 py-4 text-sm">Perpanjangan paket Silver (1 Bulan)</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                                        Berhasil
+                                    </span>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+<td class="px-6 py-4">
+<p class="text-sm font-medium">12 Agu 2023</p>
+<p class="text-xs text-slate-400">09:00:12</p>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-teal-100 dark:bg-teal-900/30 flex items-center justify-center text-teal-600 font-bold text-xs">RP</div>
+<div class="text-sm">
+<p class="font-medium">Riana Putri</p>
+<p class="text-[10px] text-slate-400">Owner</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 text-sm font-semibold text-orange-600 dark:text-orange-400">Downgrade</td>
+<td class="px-6 py-4 text-sm">
+<span class="text-slate-500">Gold</span>
+<span class="material-symbols-outlined text-xs mx-1 align-middle">arrow_forward</span>
+<span class="font-bold">Silver</span>
+</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                                        Berhasil
+                                    </span>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+<td class="px-6 py-4">
+<p class="text-sm font-medium">10 Jul 2023</p>
+<p class="text-xs text-slate-400">11:45:55</p>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-teal-100 dark:bg-teal-900/30 flex items-center justify-center text-teal-600 font-bold text-xs">RP</div>
+<div class="text-sm">
+<p class="font-medium">Riana Putri</p>
+<p class="text-[10px] text-slate-400">Owner</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 text-sm font-semibold text-teal-600 dark:text-teal-400">Upgrade</td>
+<td class="px-6 py-4 text-sm">
+<span class="text-slate-500">Bronze</span>
+<span class="material-symbols-outlined text-xs mx-1 align-middle">arrow_forward</span>
+<span class="font-bold">Gold</span>
+</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                                        Berhasil
+                                    </span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="px-6 py-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
+<div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+<div>
+<p class="text-sm text-slate-700 dark:text-slate-400">
+                                Menampilkan
+                                <span class="font-medium">1</span>
+                                sampai
+                                <span class="font-medium">10</span>
+                                dari
+                                <span class="font-medium">24</span>
+                                hasil
+                            </p>
+</div>
+<div>
+<nav aria-label="Pagination" class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
+<a class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-medium text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800" href="#">
+<span class="sr-only">Previous</span>
+<span class="material-symbols-outlined text-sm">chevron_left</span>
+</a>
+<a aria-current="page" class="z-10 bg-teal-50 dark:bg-teal-900/20 border-teal-500 text-teal-600 dark:text-teal-400 relative inline-flex items-center px-4 py-2 border text-sm font-medium" href="#">1</a>
+<a class="bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 relative inline-flex items-center px-4 py-2 border text-sm font-medium" href="#">2</a>
+<a class="bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 relative inline-flex items-center px-4 py-2 border text-sm font-medium" href="#">3</a>
+<a class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-medium text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800" href="#">
+<span class="sr-only">Next</span>
+<span class="material-symbols-outlined text-sm">chevron_right</span>
+</a>
+</nav>
+</div>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
+<div class="p-6 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-800 flex gap-4">
+<div class="w-12 h-12 bg-white dark:bg-slate-800 rounded-xl flex items-center justify-center text-teal-600 shadow-sm shrink-0">
+<span class="material-symbols-outlined">security</span>
+</div>
+<div>
+<h5 class="font-bold mb-1">Keamanan Penagihan</h5>
+<p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">Seluruh perubahan paket dicatat secara permanen untuk audit kepatuhan dan keamanan transaksi Anda.</p>
+</div>
+</div>
+<div class="p-6 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-800 flex gap-4">
+<div class="w-12 h-12 bg-white dark:bg-slate-800 rounded-xl flex items-center justify-center text-teal-600 shadow-sm shrink-0">
+<span class="material-symbols-outlined">help</span>
+</div>
+<div>
+<h5 class="font-bold mb-1">Butuh Bantuan?</h5>
+<p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">Jika terdapat ketidaksesuaian pada riwayat paket, silakan hubungi tim dukungan kami melalui menu pusat bantuan.</p>
+</div>
+</div>
+</div>
+</div>
+</main>
+<button class="fixed bottom-6 right-6 w-12 h-12 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full shadow-xl flex items-center justify-center text-slate-600 dark:text-slate-300 z-50 transition-all hover:scale-110 active:scale-95" onclick="document.documentElement.classList.toggle('dark')">
+<span class="material-symbols-outlined dark:hidden">dark_mode</span>
+<span class="material-symbols-outlined hidden dark:block">light_mode</span>
+</button>
+
+</body></html>

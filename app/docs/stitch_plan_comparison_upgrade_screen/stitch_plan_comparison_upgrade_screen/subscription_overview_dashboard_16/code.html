@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html class="light" lang="id"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Branch &amp; Staff Management - POS SaaS</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#0D9488",
+                        "background-light": "#F9FAFB",
+                        "background-dark": "#111827",
+                    },
+                    fontFamily: {
+                        display: ["Inter", "sans-serif"],
+                    },
+                    borderRadius: {
+                        DEFAULT: "0.75rem",
+                    },
+                },
+            },
+        };
+    </script>
+<style type="text/tailwindcss">
+        body { font-family: 'Inter', sans-serif; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        .tab-active { @apply border-primary text-primary; }
+        .tab-inactive { @apply border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300; }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen flex">
+<aside class="w-64 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col fixed h-full z-20">
+<div class="p-6 flex items-center gap-3">
+<div class="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white">
+<span class="material-symbols-outlined">storefront</span>
+</div>
+<span class="font-bold text-xl tracking-tight">Warung Jaya</span>
+</div>
+<nav class="flex-1 px-4 py-4 space-y-1 overflow-y-auto scrollbar-hide">
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-medium">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined">receipt_long</span>
+<span class="font-medium">Transaksi</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined">inventory</span>
+<span class="font-medium">Stok &amp; Inventori</span>
+</a>
+<div class="pt-6 pb-2 px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+            Pengaturan &amp; Billing
+        </div>
+<a class="flex items-center gap-3 px-3 py-2.5 bg-teal-50 dark:bg-teal-900/20 text-primary rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined">settings_account_box</span>
+<span class="font-medium">Cabang &amp; Staff</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined">subscriptions</span>
+<span class="font-medium">Langganan</span>
+</a>
+</nav>
+<div class="p-4 border-t border-slate-200 dark:border-slate-800">
+<button class="flex items-center w-full gap-3 px-3 py-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-lg transition-colors">
+<span class="material-symbols-outlined">logout</span>
+<span class="font-medium">Keluar</span>
+</button>
+</div>
+</aside>
+<main class="flex-1 ml-64 min-h-screen">
+<header class="h-16 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 sticky top-0 z-10 px-8 flex items-center justify-between">
+<div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+<span>Settings</span>
+<span class="material-symbols-outlined text-sm">chevron_right</span>
+<span class="font-medium text-slate-900 dark:text-white">Branch &amp; Staff Management</span>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-4">
+<button class="relative p-2 text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white dark:border-slate-900"></span>
+</button>
+<div class="flex items-center gap-3 pl-4 border-l border-slate-200 dark:border-slate-700">
+<div class="text-right">
+<p class="text-sm font-semibold leading-none mb-1 text-slate-900 dark:text-white">Riana Putri</p>
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-400 uppercase">Plan: Gold</span>
+</div>
+<img alt="Avatar" class="w-10 h-10 rounded-full border-2 border-white dark:border-slate-800 shadow-sm" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCmcLOPfLektXLl6_mbMQWblIvNI5NB7CWStfOzSUZUNaovdfq0wAbK6Fv7AfuC2llZmUyJSaJ_mfViLTvMdydqKkrIr0lazfsKmDRBBm3X9E6WSOvPshr0HE5xQrDPo8m8ZdXb4kW0rlzbxSjtWpwI4V6e8elYQlPVc0bbyQp2YdfT1w991w85aS9gdYV272cz3buoEQc6hEZXQFnURngMu0AojBpZwMl1USrWOmJkt_phaJ7bOXkuuEEkDocndAa-HM4cqTIGIKns"/>
+</div>
+</div>
+</div>
+</header>
+<div class="p-8 max-w-7xl mx-auto space-y-6">
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+<div>
+<h1 class="text-2xl font-bold text-slate-900 dark:text-white leading-tight">Branch &amp; Staff Management</h1>
+<p class="text-sm text-slate-500 mt-1">Konfigurasi outlet, lokasi, dan hak akses personel Anda.</p>
+</div>
+<div class="flex flex-col items-end gap-2">
+<button class="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-400 font-semibold rounded-lg shadow-sm flex items-center gap-2 cursor-not-allowed border border-slate-200 dark:border-slate-700" disabled="">
+<span class="material-symbols-outlined text-xl">person_add</span>
+                    Tambah Staff Baru
+                </button>
+<a class="text-xs font-medium text-primary hover:underline flex items-center gap-1" href="#">
+<span class="material-symbols-outlined text-[14px]">upgrade</span>
+                    Upgrade to Add More Staff (Limit 5/5 reached)
+                </a>
+</div>
+</div>
+<div class="border-b border-slate-200 dark:border-slate-800">
+<nav class="flex gap-8">
+<button class="pb-4 text-sm font-semibold border-b-2 tab-active transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-lg">location_on</span>
+                    Cabang &amp; Lokasi
+                </button>
+<button class="pb-4 text-sm font-semibold border-b-2 tab-inactive transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-lg">group</span>
+                    Staff &amp; Role
+                </button>
+</nav>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+<div class="lg:col-span-2 space-y-4">
+<div class="flex items-center justify-between">
+<h2 class="font-bold text-slate-900 dark:text-white">Daftar Cabang (3)</h2>
+<button class="text-sm text-primary font-medium hover:underline">+ Tambah Cabang</button>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border-2 border-primary shadow-sm relative overflow-hidden">
+<div class="absolute top-0 right-0">
+<span class="bg-primary text-white text-[10px] font-bold px-3 py-1 rounded-bl-lg">DEFAULT</span>
+</div>
+<div class="flex items-start gap-4">
+<div class="w-12 h-12 bg-teal-50 dark:bg-teal-900/20 rounded-xl flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">storefront</span>
+</div>
+<div class="flex-1">
+<h4 class="font-bold text-slate-900 dark:text-white">Sudirman Main</h4>
+<p class="text-xs text-slate-500 mt-1 flex items-center gap-1">
+<span class="material-symbols-outlined text-sm">location_on</span>
+                                    Jl. Jendral Sudirman No. 12, Jakarta
+                                </p>
+<p class="text-xs text-slate-500 mt-1 flex items-center gap-1">
+<span class="material-symbols-outlined text-sm">phone</span>
+                                    021-555-1234
+                                </p>
+</div>
+</div>
+<div class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2">
+<button class="p-1.5 text-slate-400 hover:text-slate-600 transition-colors">
+<span class="material-symbols-outlined text-xl">edit</span>
+</button>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+<div class="flex items-start gap-4">
+<div class="w-12 h-12 bg-slate-50 dark:bg-slate-800 rounded-xl flex items-center justify-center text-slate-400">
+<span class="material-symbols-outlined">storefront</span>
+</div>
+<div class="flex-1">
+<h4 class="font-bold text-slate-900 dark:text-white">Canggu Branch</h4>
+<p class="text-xs text-slate-500 mt-1 flex items-center gap-1">
+<span class="material-symbols-outlined text-sm">location_on</span>
+                                    Jl. Pantai Batu Bolong, Bali
+                                </p>
+<p class="text-xs text-slate-500 mt-1 flex items-center gap-1">
+<span class="material-symbols-outlined text-sm">phone</span>
+                                    0361-999-888
+                                </p>
+</div>
+</div>
+<div class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+<button class="text-xs font-semibold text-slate-500 border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">Set Default</button>
+<button class="p-1.5 text-slate-400 hover:text-slate-600 transition-colors">
+<span class="material-symbols-outlined text-xl">edit</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<div class="space-y-4">
+<h2 class="font-bold text-slate-900 dark:text-white">Ringkasan Personnel</h2>
+<div class="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+<div class="flex items-center justify-between">
+<span class="text-sm text-slate-500">Total Staff</span>
+<span class="font-bold">5 / 5 Personel</span>
+</div>
+<div class="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
+<div class="bg-primary h-full w-full"></div>
+</div>
+<div class="grid grid-cols-2 gap-4 pt-2">
+<div class="text-center p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+<p class="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Manager</p>
+<p class="text-xl font-bold text-primary">2</p>
+</div>
+<div class="text-center p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+<p class="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Cashier</p>
+<p class="text-xl font-bold text-primary">3</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="space-y-4">
+<div class="flex items-center justify-between">
+<h2 class="font-bold text-slate-900 dark:text-white">Daftar Staff &amp; Peran</h2>
+<div class="relative w-64">
+<span class="material-symbols-outlined absolute left-3 top-2 text-slate-400 text-lg">search</span>
+<input class="w-full pl-9 pr-4 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-sm focus:ring-2 focus:ring-primary/20" placeholder="Cari nama staff..." type="text"/>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
+<th class="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Nama &amp; Profil</th>
+<th class="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Role</th>
+<th class="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Penugasan Cabang</th>
+<th class="px-6 py-4 text-xs font-semibold text-slate-500 uppercase text-right">Aksi</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<img alt="Avatar" class="w-9 h-9 rounded-full bg-slate-200" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCpXIBHoC06tjFcMIDCxZk3iaXpf--UcZwOolORkfW45cKk0tm0aG7m9E8CvtJ4MOl9AZ02hYxioQzioeDmIR_iaqpjCX1iP7i67bww1i-o_EYzlvADEbErHqq9ubrrCwESV94tgHJoaqXDcxk6KMfF2hZNcJSfdrydSU2wlL9rvapdAiQEmVuEpWVprcCxGaNwmC2ej_7F22U3S1mqOG7HbEoJSSHQvXAhoa_v4icoica0HdugcJSqZrE0MWNeUAI2BtNcGXAylnt-"/>
+<div>
+<p class="font-medium text-slate-900 dark:text-white">Riana Putri</p>
+<p class="text-xs text-slate-500">riana.putri@warungjaya.com</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
+                                        Owner
+                                    </span>
+</td>
+<td class="px-6 py-4">
+<span class="text-sm font-medium">Semua Cabang</span>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<img alt="Avatar" class="w-9 h-9 rounded-full bg-slate-200" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBZhz1fBlhY7oCTLsa4tScUBcFSEjyJgQFIg1OTjFbVToDTY81pvaPBWMY5yLiYTOgh4q5Vfr8H5aNcMF0u086oDlouF0Uvcmdf1XipMEAZRhGUv8oi_Te0SgB63f7KGHd8Gs57HpyGuSEJbKm74wPS-jCVxc05URzPk0-V1z4nVoKimjRmsLHqcIncoa5FVxQQ-nFFa8HO05klpEKcR-DMwSA-GlSe1sOEwZeMcMe_ye0Pcf62P0WeBdKx6L1W4-djXY7Q7DLcBYDY"/>
+<div>
+<p class="font-medium text-slate-900 dark:text-white">Budi Santoso</p>
+<p class="text-xs text-slate-500">budi.s@warungjaya.com</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                                        Manager
+                                    </span>
+</td>
+<td class="px-6 py-4">
+<span class="text-sm">Sudirman Main</span>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<img alt="Avatar" class="w-9 h-9 rounded-full bg-slate-200" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA2Q0yxryQ1QY_xdHYSb8qVjooig6r21q1xshHVdVLSBA5Ien-RrqkHPNRtk9_1rAW7tj3DmfMeJ203XWsaud7S7WOGjyi_NuzSqUrBEPFnaVDR6ov-0f-56sOmo_9QXgqUHIqRTJhZXLmhWLQM4kZZMQZT_XtYKfG65Hd9Cc2OG05AoD1WZl-1gCGzkKBjRjwXevYzFodeW8z6FUG5GeriYfcnTaghTClA7foWzv-MUCP3Al1-JiB-G2X0ZHyX2IekVOZV4bMyBgyc"/>
+<div>
+<p class="font-medium text-slate-900 dark:text-white">Siska Amelia</p>
+<p class="text-xs text-slate-500">siska.a@warungjaya.com</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400">
+                                        Cashier
+                                    </span>
+</td>
+<td class="px-6 py-4">
+<span class="text-sm">Canggu Branch</span>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+</main>
+<button class="fixed bottom-6 right-6 w-12 h-12 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full shadow-xl flex items-center justify-center text-slate-600 dark:text-slate-300 z-50 transition-all hover:scale-110 active:scale-95" onclick="document.documentElement.classList.toggle('dark')">
+<span class="material-symbols-outlined dark:hidden">dark_mode</span>
+<span class="material-symbols-outlined hidden dark:block">light_mode</span>
+</button>
+
+</body></html>

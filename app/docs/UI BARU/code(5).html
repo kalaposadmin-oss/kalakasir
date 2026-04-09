@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="id"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<meta content="" name="csrf-token"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "primary": "#7BAE9E",
+              "accent-blue": "#94B3C5",
+              "background-light": "#F8FAF9",
+              "background-dark": "#121816",
+            },
+            fontFamily: {
+              "display": ["Inter", "sans-serif"]
+            },
+            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "2xl": "1rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style type="text/tailwindcss">
+        body {
+            min-height: max(800px, 100dvh);
+            -webkit-tap-highlight-color: transparent;
+        }
+        .ios-shadow {
+            box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.05);
+        }
+        .ios-shadow-sm {
+            box-shadow: 0 2px 8px -1px rgba(0, 0, 0, 0.04);
+        }
+        .ios-list-item:active {
+            background-color: rgba(0,0,0,0.05);
+        }
+        .pb-safe {
+          padding-bottom: env(safe-area-inset-bottom);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+    .modal-overlay {
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 150ms ease;
+    }
+    .modal-overlay.is-open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .modal-panel {
+      transform: translateY(16px);
+      opacity: 0;
+      transition: transform 150ms ease, opacity 150ms ease;
+    }
+    .modal-overlay.is-open .modal-panel {
+      transform: translateY(0);
+      opacity: 1;
+    }
+    .spinner {
+      width: 1rem;
+      height: 1rem;
+      border: 2px solid rgba(255, 255, 255, 0.35);
+      border-top-color: #ffffff;
+      border-radius: 9999px;
+      animation: spin 700ms linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-800 dark:text-slate-100 antialiased">
+<div class="relative flex min-h-screen w-full flex-col overflow-x-hidden pb-24">
+<header class="sticky top-0 z-30 flex items-center bg-white/70 dark:bg-background-dark/80 backdrop-blur-xl px-4 py-4 border-b border-slate-200/50 dark:border-slate-800/50">
+<button class="mr-3 text-primary">
+<span class="material-symbols-outlined">arrow_back_ios</span>
+</button>
+<div class="flex-1">
+<h1 class="text-lg font-bold leading-tight tracking-tight">Karyawan (M)</h1>
+<p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">PENGATURAN PENGGUNA</p>
+</div>
+<button class="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+<span class="material-symbols-outlined">help_outline</span>
+</button>
+</header>
+<main class="flex flex-col gap-6 p-4">
+<div class="rounded-2xl bg-primary/10 border border-primary/20 p-4">
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary mt-0.5">info</span>
+<div>
+<p class="text-xs font-bold text-primary mb-1 uppercase tracking-wider">Plan M Aktif</p>
+<p class="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">Anda dapat menambahkan hingga 5 karyawan. Gunakan PIN 4-digit untuk keamanan akses setiap peran.</p>
+</div>
+</div>
+</div>
+<section>
+<h2 class="mb-3 px-1 text-xs font-bold uppercase tracking-[0.15em] text-slate-400 dark:text-slate-500">DAFTAR KARYAWAN</h2>
+<div class="flex flex-col gap-3">
+<div class="ios-list-item flex items-center justify-between rounded-2xl bg-white dark:bg-slate-900 p-4 ios-shadow border border-slate-100 dark:border-slate-800">
+<div class="flex items-center gap-4">
+<div class="relative">
+<div class="size-12 overflow-hidden rounded-full border-2 border-white dark:border-slate-800 ios-shadow">
+<img alt="Andi" class="h-full w-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDoM9z5uK1SLgUCHNFsW_WjdxlUJ2ndWl3GLVnBK38In8D0s8klLa4vUHutA50_c0AuVITZixiNusDE7450_Jo_5ZBZUWttHcRPjOUaDkVyO1TTYm75JSjCJYdNgJnFKiyNmbTEr1flv4gZxhFt8-pJ8KKry4tZ9FVTohBybg0vhWXYdiUytpxKnUs9slao3z4Vh1WNM9orUPchgC9-NuFXMdNp5EZzmGRctPPvGOwR0o7gJXR6SwmJif9lXZO2h989UzgHjAJykyLC"/>
+</div>
+<div class="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-white text-[10px] border-2 border-white dark:border-slate-900">
+<span class="material-symbols-outlined text-[12px] font-bold">verified_user</span>
+</div>
+</div>
+<div>
+<h3 class="font-bold text-slate-800 dark:text-white">Andi</h3>
+<div class="flex items-center gap-1.5 mt-0.5">
+<span class="text-[11px] font-semibold text-primary">Admin</span>
+<span class="text-[10px] text-slate-300">•</span>
+<span class="text-[10px] font-medium text-slate-400">PIN: ****</span>
+</div>
+</div>
+</div>
+<button class="flex h-9 w-9 items-center justify-center rounded-full bg-slate-50 dark:bg-slate-800/50 text-slate-400 hover:text-primary">
+<span class="material-symbols-outlined text-sm">edit</span>
+</button>
+</div>
+<div class="ios-list-item flex items-center justify-between rounded-2xl bg-white dark:bg-slate-900 p-4 ios-shadow border border-slate-100 dark:border-slate-800">
+<div class="flex items-center gap-4">
+<div class="relative">
+<div class="size-12 overflow-hidden rounded-full border-2 border-white dark:border-slate-800 ios-shadow">
+<img alt="Siti" class="h-full w-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCKmd2MiwEEbxPf8ESyBupCBm41XAE9vtx6weeNJ2SBJkzwpfq2LD-faYOFsIhsR2hFMPilKewI9BbbQuqlSRM0mKnPHKlUeQnBQzGN7AuRisanuG2ZCgKj7H2ssw9Fiz1mA1lZpuJV8zapAfwpYSfw0nw7BhOapSFxx8cODk1CbwHil8CxQ6y49d8cf_dg1_GlcWHdlE89O7JWc3fJUjSCK5q6XyZdfISpXfdAHnOFpPOMp59heGrO4BzJCXf_uQwCrnvK8Azhxz0L"/>
+</div>
+<div class="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-accent-blue text-white text-[10px] border-2 border-white dark:border-slate-900">
+<span class="material-symbols-outlined text-[12px] font-bold">point_of_sale</span>
+</div>
+</div>
+<div>
+<h3 class="font-bold text-slate-800 dark:text-white">Siti</h3>
+<div class="flex items-center gap-1.5 mt-0.5">
+<span class="text-[11px] font-semibold text-accent-blue">Kasir</span>
+<span class="text-[10px] text-slate-300">•</span>
+<span class="text-[10px] font-medium text-slate-400">PIN: ****</span>
+</div>
+</div>
+</div>
+<button class="flex h-9 w-9 items-center justify-center rounded-full bg-slate-50 dark:bg-slate-800/50 text-slate-400 hover:text-primary">
+<span class="material-symbols-outlined text-sm">edit</span>
+</button>
+</div>
+<div class="ios-list-item flex items-center justify-between rounded-2xl bg-white dark:bg-slate-900 p-4 ios-shadow border border-slate-100 dark:border-slate-800">
+<div class="flex items-center gap-4">
+<div class="relative">
+<div class="size-12 overflow-hidden rounded-full border-2 border-white dark:border-slate-800 ios-shadow">
+<img alt="Budi" class="h-full w-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDNeVcJmTHaUMJ12-NmUNkBccgauJ9FgE8cWnFa3RqhzjWcG9TcmjSrB2cwwYO7T0GOtNOZq_gOe9zAhfr-zWpizmeLDr9t7lJJvuCzOXOEXf70_RYZ9JG-ktGW2IidOxs6NxTHsGgPuQ3JgXCQDgC9vCifcU0y_JwNqcFYUfV50S_0hOqYuDn94ceqYNWLHgz7esQsSMn65rWO9FSF2aDfPJ7xMqXUPkkwDUG5ms0W8UN9HzY_Va--BZ9D7kJQIoX5RXmQ9dCN86R-"/>
+</div>
+<div class="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-indigo-400 text-white text-[10px] border-2 border-white dark:border-slate-900">
+<span class="material-symbols-outlined text-[12px] font-bold">leaderboard</span>
+</div>
+</div>
+<div>
+<h3 class="font-bold text-slate-800 dark:text-white">Budi</h3>
+<div class="flex items-center gap-1.5 mt-0.5">
+<span class="text-[11px] font-semibold text-indigo-400">Manager</span>
+<span class="text-[10px] text-slate-300">•</span>
+<span class="text-[10px] font-medium text-slate-400">PIN: ****</span>
+</div>
+</div>
+</div>
+<button class="flex h-9 w-9 items-center justify-center rounded-full bg-slate-50 dark:bg-slate-800/50 text-slate-400 hover:text-primary">
+<span class="material-symbols-outlined text-sm">edit</span>
+</button>
+</div>
+</div>
+</section>
+<section class="mt-2">
+<div class="rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 p-5 flex flex-col items-center text-center">
+<div class="size-12 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-300 mb-3">
+<span class="material-symbols-outlined text-3xl">person_add</span>
+</div>
+<p class="text-sm font-bold text-slate-500 dark:text-slate-400">Tambah Anggota Tim</p>
+<p class="text-[11px] text-slate-400 mt-1 max-w-[200px]">Siapkan Nama Lengkap, PIN 4 Digit, dan tentukan Role akses mereka.</p>
+</div>
+</section>
+<section class="mt-2">
+<button class="w-full rounded-2xl border border-rose-200 bg-rose-50 py-4 text-sm font-bold text-rose-600 ios-shadow-sm active:scale-[0.98] transition-transform dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-300" id="logoutButton" type="button">
+<span class="material-symbols-outlined text-sm align-[-2px] mr-2">logout</span>
+Logout
+</button>
+</section>
+</main>
+<div class="modal-overlay fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4" id="logoutModal">
+<div class="modal-panel w-full max-w-sm rounded-2xl bg-white p-5 ios-shadow-lg dark:bg-slate-900">
+<div class="flex items-center gap-3">
+<div class="flex h-10 w-10 items-center justify-center rounded-full bg-rose-50 text-rose-500 dark:bg-rose-950/40 dark:text-rose-300">
+<span class="material-symbols-outlined">logout</span>
+</div>
+<div>
+<p class="text-sm font-bold text-slate-800 dark:text-slate-100">Keluar dari akun?</p>
+<p class="text-xs text-slate-500 dark:text-slate-400">Anda akan perlu login ulang untuk akses kembali.</p>
+</div>
+</div>
+<div class="mt-5 flex gap-3">
+<button class="flex-1 rounded-xl border border-slate-200 py-3 text-sm font-bold text-slate-600 dark:border-slate-800 dark:text-slate-300" id="logoutCancel" type="button">Batal</button>
+<button class="flex-1 rounded-xl bg-rose-500 py-3 text-sm font-bold text-white" id="logoutConfirm" type="button">Logout</button>
+</div>
+</div>
+</div>
+<form action="/logout" class="hidden" id="logoutForm" method="post">
+<input name="_token" type="hidden" value=""/>
+</form>
+<div class="fixed bottom-24 right-6 z-50">
+<button class="flex h-14 w-14 items-center justify-center rounded-full bg-primary text-white shadow-xl shadow-primary/30 active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-3xl font-bold">add</span>
+</button>
+</div>
+<nav class="fixed bottom-0 left-0 right-0 z-40 flex h-20 items-center border-t border-slate-200/50 dark:border-slate-800/50 bg-white/90 dark:bg-slate-900/95 backdrop-blur-xl px-2 pb-safe">
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="text-[10px] font-medium tracking-tight">Dashboard</span>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">point_of_sale</span>
+<span class="text-[10px] font-medium tracking-tight">Kasir</span>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">history</span>
+<span class="text-[10px] font-medium tracking-tight">Riwayat</span>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">inventory_2</span>
+<span class="text-[10px] font-medium tracking-tight">Produk</span>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1">settings</span>
+<span class="text-[10px] font-bold tracking-tight">Setelan</span>
+</a>
+</nav>
+</div>
+
+<script>
+  const logoutButton = document.getElementById("logoutButton");
+  const logoutModal = document.getElementById("logoutModal");
+  const logoutCancel = document.getElementById("logoutCancel");
+  const logoutConfirm = document.getElementById("logoutConfirm");
+  const logoutForm = document.getElementById("logoutForm");
+  const logoutConfirmLabel = logoutConfirm.textContent;
+  const logoutCancelLabel = logoutCancel.textContent;
+  const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+  const csrfInput = logoutForm.querySelector('input[name="_token"]');
+
+  if (csrfInput) {
+    const csrfToken = (csrfMeta && csrfMeta.getAttribute("content")) || window.csrfToken || "";
+    if (csrfToken) {
+      csrfInput.value = csrfToken;
+    } else {
+      csrfInput.remove();
+    }
+  }
+
+  function closeLogoutModal() {
+    logoutModal.classList.remove("is-open");
+  }
+
+  function openLogoutModal() {
+    logoutModal.classList.add("is-open");
+    logoutConfirm.disabled = false;
+    logoutConfirm.classList.remove("opacity-70", "cursor-not-allowed");
+    logoutConfirm.textContent = logoutConfirmLabel;
+    logoutCancel.disabled = false;
+    logoutCancel.classList.remove("opacity-70", "cursor-not-allowed");
+    logoutCancel.textContent = logoutCancelLabel;
+  }
+
+  logoutButton.addEventListener("click", openLogoutModal);
+  logoutCancel.addEventListener("click", closeLogoutModal);
+  logoutModal.addEventListener("click", (event) => {
+    if (event.target === logoutModal) {
+      closeLogoutModal();
+    }
+  });
+  logoutConfirm.addEventListener("click", () => {
+    logoutConfirm.disabled = true;
+    logoutConfirm.classList.add("opacity-70", "cursor-not-allowed");
+    logoutConfirm.innerHTML = '<span class="spinner" aria-hidden="true"></span><span>Memproses...</span>';
+    logoutCancel.disabled = true;
+    logoutCancel.classList.add("opacity-70", "cursor-not-allowed");
+    logoutForm.submit();
+  });
+</script>
+
+</body></html>

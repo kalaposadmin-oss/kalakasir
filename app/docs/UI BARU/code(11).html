@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="id"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#7BAE9E", // Muted Sage/Teal
+                        "accent-blue": "#94B3C5",
+                        "background-light": "#F8FAF9",
+                        "background-dark": "#121816",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "2xl": "1rem", "full": "9999px" },
+                },
+            },
+        }
+    </script>
+<style type="text/tailwindcss">
+        body {
+            min-height: 800px;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .ios-shadow {
+            box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.05);
+        }
+        .bottom-sheet-shadow {
+            box-shadow: 0 -8px 24px -4px rgba(0, 0, 0, 0.12);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-800 dark:text-slate-100 antialiased overflow-hidden">
+<div class="relative flex h-screen w-full flex-col">
+<header class="sticky top-0 z-10 flex items-center justify-between bg-white/70 dark:bg-background-dark/80 backdrop-blur-xl px-4 py-4 border-b border-slate-200/50 dark:border-slate-800/50">
+<div class="flex items-center gap-3">
+<button class="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+<span class="material-symbols-outlined">arrow_back</span>
+</button>
+<h1 class="text-lg font-bold leading-tight tracking-tight">Riwayat Transaksi</h1>
+</div>
+<button class="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+<span class="material-symbols-outlined">filter_list</span>
+</button>
+</header>
+<main class="flex-1 overflow-y-auto p-4 opacity-40">
+<div class="space-y-4">
+<div class="flex items-center justify-between p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800">
+<div class="flex items-center gap-3">
+<div class="size-10 bg-primary/10 rounded-full flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">receipt</span>
+</div>
+<div>
+<p class="font-bold text-sm">#TRX-99201</p>
+<p class="text-[10px] text-slate-400">14:20 • Tunai</p>
+</div>
+</div>
+<p class="font-bold">Rp 45.000</p>
+</div>
+<div class="flex items-center justify-between p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800">
+<div class="flex items-center gap-3">
+<div class="size-10 bg-primary/10 rounded-full flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">receipt</span>
+</div>
+<div>
+<p class="font-bold text-sm">#TRX-99200</p>
+<p class="text-[10px] text-slate-400">13:45 • QRIS</p>
+</div>
+</div>
+<p class="font-bold">Rp 128.500</p>
+</div>
+</div>
+</main>
+<div class="absolute inset-0 z-40 bg-black/40 backdrop-blur-[2px]"></div>
+<div class="absolute bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-[2.5rem] bg-white dark:bg-slate-900 bottom-sheet-shadow max-h-[90%]">
+<div class="flex w-full justify-center py-3">
+<div class="h-1.5 w-12 rounded-full bg-slate-200 dark:bg-slate-700"></div>
+</div>
+<div class="px-6 pb-4">
+<div class="flex items-center justify-between mb-6">
+<h2 class="text-xl font-bold">Filter Transaksi</h2>
+<button class="text-sm font-bold text-primary">Atur Ulang</button>
+</div>
+<div class="space-y-8 overflow-y-auto">
+<section>
+<h3 class="mb-3 text-[11px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">Periode</h3>
+<div class="grid grid-cols-3 gap-2">
+<button class="rounded-xl border-2 border-primary bg-primary/5 px-2 py-3 text-center text-[13px] font-bold text-primary">Hari Ini</button>
+<button class="rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent px-2 py-3 text-center text-[13px] font-semibold text-slate-600 dark:text-slate-300">7 Hari</button>
+<button class="rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent px-2 py-3 text-center text-[13px] font-semibold text-slate-600 dark:text-slate-300">Bulan Ini</button>
+</div>
+</section>
+<section>
+<h3 class="mb-3 text-[11px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">Status Transaksi</h3>
+<div class="flex flex-wrap gap-2">
+<button class="rounded-full border border-slate-200 dark:border-slate-800 bg-transparent px-5 py-2 text-[13px] font-semibold text-slate-600 dark:text-slate-300">Semua</button>
+<button class="rounded-full border-2 border-primary bg-primary/5 px-5 py-2 text-[13px] font-bold text-primary">Sukses</button>
+<button class="rounded-full border border-slate-200 dark:border-slate-800 bg-transparent px-5 py-2 text-[13px] font-semibold text-slate-600 dark:text-slate-300">Void</button>
+<button class="rounded-full border border-slate-200 dark:border-slate-800 bg-transparent px-5 py-2 text-[13px] font-semibold text-slate-600 dark:text-slate-300">Refund</button>
+</div>
+</section>
+<section>
+<h3 class="mb-3 text-[11px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">Pilih Kasir</h3>
+<div class="relative">
+<div class="flex items-center justify-between rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 p-4 active:bg-slate-100">
+<div class="flex items-center gap-3">
+<div class="size-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center">
+<span class="material-symbols-outlined text-sm">person</span>
+</div>
+<span class="text-sm font-semibold">Semua Kasir</span>
+</div>
+<span class="material-symbols-outlined text-slate-400">expand_more</span>
+</div>
+</div>
+</section>
+</div>
+</div>
+<div class="p-6 border-t border-slate-100 dark:border-slate-800 mt-4">
+<button class="w-full rounded-2xl bg-primary py-4 text-center text-base font-bold text-white ios-shadow active:scale-[0.98] transition-transform">
+                    Terapkan Filter
+                </button>
+</div>
+<div class="h-6"></div>
+</div>
+</div>
+
+</body></html>

@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html class="light" lang="id"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Staff &amp; Role Management - POS SaaS</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#0D9488",
+                        "background-light": "#F9FAFB",
+                        "background-dark": "#111827",
+                    },
+                    fontFamily: {
+                        display: ["Inter", "sans-serif"],
+                    },
+                    borderRadius: {
+                        DEFAULT: "0.75rem",
+                    },
+                },
+            },
+        };
+    </script>
+<style type="text/tailwindcss">
+        body { font-family: 'Inter', sans-serif; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen flex">
+<aside class="w-64 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col fixed h-full z-20">
+<div class="p-6 flex items-center gap-3">
+<div class="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white">
+<span class="material-symbols-outlined">storefront</span>
+</div>
+<span class="font-bold text-xl tracking-tight">Warung Jaya</span>
+</div>
+<nav class="flex-1 px-4 py-4 space-y-1 overflow-y-auto scrollbar-hide">
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-medium">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined">receipt_long</span>
+<span class="font-medium">Transaksi</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined">inventory</span>
+<span class="font-medium">Stok &amp; Inventori</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 bg-teal-50 dark:bg-teal-900/20 text-primary rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined">badge</span>
+<span class="font-medium">Staff &amp; Izin Akses</span>
+</a>
+<div class="pt-6 pb-2 px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+            Pengaturan &amp; Billing
+        </div>
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined">subscriptions</span>
+<span class="font-medium">Langganan</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined">business</span>
+<span class="font-medium">Profil Bisnis</span>
+</a>
+</nav>
+<div class="p-4 border-t border-slate-200 dark:border-slate-800">
+<button class="flex items-center w-full gap-3 px-3 py-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-lg transition-colors">
+<span class="material-symbols-outlined">logout</span>
+<span class="font-medium">Keluar</span>
+</button>
+</div>
+</aside>
+<main class="flex-1 ml-64 min-h-screen pb-24">
+<header class="h-16 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 sticky top-0 z-10 px-8 flex items-center justify-between">
+<div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+<span>Manajemen</span>
+<span class="material-symbols-outlined text-sm">chevron_right</span>
+<span class="font-medium text-slate-900 dark:text-white">Staff &amp; Izin Akses</span>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-4">
+<button class="relative p-2 text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white dark:border-slate-900"></span>
+</button>
+<div class="flex items-center gap-3 pl-4 border-l border-slate-200 dark:border-slate-700">
+<div class="text-right">
+<p class="text-sm font-semibold leading-none mb-1">Riana Putri</p>
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 uppercase">Plan: Starter</span>
+</div>
+<img alt="Avatar" class="w-10 h-10 rounded-full border-2 border-white dark:border-slate-800 shadow-sm" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCmcLOPfLektXLl6_mbMQWblIvNI5NB7CWStfOzSUZUNaovdfq0wAbK6Fv7AfuC2llZmUyJSaJ_mfViLTvMdydqKkrIr0lazfsKmDRBBm3X9E6WSOvPshr0HE5xQrDPo8m8ZdXb4kW0rlzbxSjtWpwI4V6e8elYQlPVc0bbyQp2YdfT1w991w85aS9gdYV272cz3buoEQc6hEZXQFnURngMu0AojBpZwMl1USrWOmJkt_phaJ7bOXkuuEEkDocndAa-HM4cqTIGIKns"/>
+</div>
+</div>
+</div>
+</header>
+<div class="p-8 max-w-7xl mx-auto space-y-6">
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div>
+<h1 class="text-2xl font-bold text-slate-900 dark:text-white">Staff &amp; Izin Akses</h1>
+<p class="text-sm text-slate-500">Kelola anggota tim dan atur hak akses mereka sesuai peran masing-masing.</p>
+</div>
+<div class="flex items-center gap-3">
+<button class="px-4 py-2 bg-primary hover:bg-teal-700 text-white font-semibold rounded-lg shadow-sm transition-colors flex items-center gap-2 opacity-50 cursor-not-allowed group relative">
+<span class="material-symbols-outlined text-xl">person_add</span>
+                    Tambah Staff
+                    <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-slate-800 text-white text-[10px] py-1 px-2 rounded whitespace-nowrap z-30">
+                        Limit staff tercapai
+                    </div>
+</button>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-900 p-4 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm">
+<div class="flex flex-wrap items-center gap-4">
+<div class="flex-1 min-w-[240px] relative">
+<span class="material-symbols-outlined absolute left-3 top-2.5 text-slate-400">search</span>
+<input class="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-800 border-none rounded-lg text-sm focus:ring-2 focus:ring-primary/20" placeholder="Cari nama atau email staff..." type="text"/>
+</div>
+<select class="bg-slate-50 dark:bg-slate-800 border-none rounded-lg text-sm py-2 px-4 focus:ring-2 focus:ring-primary/20">
+<option>Semua Peran</option>
+<option>Admin</option>
+<option>Manager</option>
+<option>Kasir</option>
+</select>
+<select class="bg-slate-50 dark:bg-slate-800 border-none rounded-lg text-sm py-2 px-4 focus:ring-2 focus:ring-primary/20">
+<option>Semua Cabang</option>
+<option>Sudirman Main</option>
+<option>Canggu Branch</option>
+</select>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
+<th class="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Nama Staff</th>
+<th class="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Email</th>
+<th class="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Peran</th>
+<th class="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Cabang Ditugaskan</th>
+<th class="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Status</th>
+<th class="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Aksi</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-500">RP</div>
+<span class="font-medium">Riana Putri</span>
+</div>
+</td>
+<td class="px-6 py-4 text-sm text-slate-500">riana.putri@warungjaya.com</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
+                                    Admin
+                                </span>
+</td>
+<td class="px-6 py-4 text-sm">Semua Cabang</td>
+<td class="px-6 py-4">
+<span class="w-2 h-2 rounded-full bg-emerald-500 inline-block mr-2"></span>
+<span class="text-sm">Aktif</span>
+</td>
+<td class="px-6 py-4">
+<button class="text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">edit</span>
+</button>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-500">BS</div>
+<span class="font-medium">Budi Santoso</span>
+</div>
+</td>
+<td class="px-6 py-4 text-sm text-slate-500">budi.s@warungjaya.com</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                                    Manager
+                                </span>
+</td>
+<td class="px-6 py-4 text-sm">Sudirman Main</td>
+<td class="px-6 py-4">
+<span class="w-2 h-2 rounded-full bg-emerald-500 inline-block mr-2"></span>
+<span class="text-sm">Aktif</span>
+</td>
+<td class="px-6 py-4">
+<button class="text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">edit</span>
+</button>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-500">AL</div>
+<span class="font-medium">Andi Laksmana</span>
+</div>
+</td>
+<td class="px-6 py-4 text-sm text-slate-500">andi.l@warungjaya.com</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400">
+                                    Kasir
+                                </span>
+</td>
+<td class="px-6 py-4 text-sm">Sudirman Main</td>
+<td class="px-6 py-4">
+<span class="w-2 h-2 rounded-full bg-emerald-500 inline-block mr-2"></span>
+<span class="text-sm">Aktif</span>
+</td>
+<td class="px-6 py-4">
+<button class="text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">edit</span>
+</button>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-500">MD</div>
+<span class="font-medium">Maya Dwi</span>
+</div>
+</td>
+<td class="px-6 py-4 text-sm text-slate-500">maya.d@warungjaya.com</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400">
+                                    Kasir
+                                </span>
+</td>
+<td class="px-6 py-4 text-sm">Canggu Branch</td>
+<td class="px-6 py-4">
+<span class="w-2 h-2 rounded-full bg-slate-300 inline-block mr-2"></span>
+<span class="text-sm">Nonaktif</span>
+</td>
+<td class="px-6 py-4">
+<button class="text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">edit</span>
+</button>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-500">SR</div>
+<span class="font-medium">Siti Rahayu</span>
+</div>
+</td>
+<td class="px-6 py-4 text-sm text-slate-500">siti.r@warungjaya.com</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400">
+                                    Kasir
+                                </span>
+</td>
+<td class="px-6 py-4 text-sm">Canggu Branch</td>
+<td class="px-6 py-4">
+<span class="w-2 h-2 rounded-full bg-emerald-500 inline-block mr-2"></span>
+<span class="text-sm">Aktif</span>
+</td>
+<td class="px-6 py-4">
+<button class="text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">edit</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="px-6 py-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
+<span class="text-sm text-slate-500">Menampilkan 5 dari 5 staff (Limit paket Starter: 5)</span>
+<div class="flex gap-2">
+<button class="px-3 py-1 border border-slate-200 dark:border-slate-700 rounded text-sm hover:bg-slate-50 disabled:opacity-50" disabled="">Sebelumnya</button>
+<button class="px-3 py-1 border border-slate-200 dark:border-slate-700 rounded text-sm hover:bg-slate-50 disabled:opacity-50" disabled="">Selanjutnya</button>
+</div>
+</div>
+</div>
+</div>
+<div class="fixed bottom-0 left-64 right-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 p-4 z-40 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]">
+<div class="max-w-7xl mx-auto flex items-center justify-between px-8">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 bg-amber-100 dark:bg-amber-900/30 text-amber-600 rounded-full flex items-center justify-center">
+<span class="material-symbols-outlined">workspace_premium</span>
+</div>
+<div>
+<h4 class="font-bold text-slate-900 dark:text-white">Butuh lebih banyak staff?</h4>
+<p class="text-sm text-slate-500">Anda butuh paket Business untuk menambah lebih dari 5 staff.</p>
+</div>
+</div>
+<a class="px-6 py-2.5 bg-primary hover:bg-teal-700 text-white font-bold rounded-lg transition-all shadow-md hover:shadow-lg flex items-center gap-2" href="#">
+                Upgrade Now
+                <span class="material-symbols-outlined text-sm">arrow_forward</span>
+</a>
+</div>
+</div>
+</main>
+<button class="fixed bottom-24 right-6 w-12 h-12 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full shadow-xl flex items-center justify-center text-slate-600 dark:text-slate-300 z-50 transition-all hover:scale-110 active:scale-95" onclick="document.documentElement.classList.toggle('dark')">
+<span class="material-symbols-outlined dark:hidden">dark_mode</span>
+<span class="material-symbols-outlined hidden dark:block">light_mode</span>
+</button>
+
+</body></html>

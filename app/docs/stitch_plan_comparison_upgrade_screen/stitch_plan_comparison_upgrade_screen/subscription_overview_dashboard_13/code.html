@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html class="light" lang="id"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Product Catalog Management - POS SaaS</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#0D9488",
+                        "background-light": "#F9FAFB",
+                        "background-dark": "#111827",
+                    },
+                    fontFamily: {
+                        display: ["Inter", "sans-serif"],
+                    },
+                    borderRadius: {
+                        DEFAULT: "0.75rem",
+                    },
+                },
+            },
+        };
+    </script>
+<style type="text/tailwindcss">
+        body { font-family: 'Inter', sans-serif; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        .drawer-shadow { box-shadow: -10px 0 30px rgba(0,0,0,0.05); }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen flex overflow-x-hidden">
+<aside class="w-64 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col fixed h-full z-20">
+<div class="p-6 flex items-center gap-3">
+<div class="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white">
+<span class="material-symbols-outlined">storefront</span>
+</div>
+<span class="font-bold text-xl tracking-tight">Warung Jaya</span>
+</div>
+<nav class="flex-1 px-4 py-4 space-y-1 overflow-y-auto scrollbar-hide">
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined text-lg">dashboard</span>
+<span class="font-medium">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 bg-teal-50 dark:bg-teal-900/20 text-primary rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined text-lg">inventory_2</span>
+<span class="font-medium">Katalog Produk</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined text-lg">receipt_long</span>
+<span class="font-medium">Transaksi</span>
+</a>
+<div class="pt-6 pb-2 px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+            Manajemen
+        </div>
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined text-lg">category</span>
+<span class="font-medium">Kategori Produk</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined text-lg">groups</span>
+<span class="font-medium">Pelanggan</span>
+</a>
+</nav>
+<div class="p-4 border-t border-slate-200 dark:border-slate-800">
+<button class="flex items-center w-full gap-3 px-3 py-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-lg transition-colors">
+<span class="material-symbols-outlined text-lg">logout</span>
+<span class="font-medium">Keluar</span>
+</button>
+</div>
+</aside>
+<main class="flex-1 ml-64 min-h-screen pr-[400px]">
+<header class="h-16 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 sticky top-0 z-10 px-8 flex items-center justify-between">
+<div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+<span>Produk</span>
+<span class="material-symbols-outlined text-sm">chevron_right</span>
+<span class="font-medium text-slate-900 dark:text-white">Katalog Produk</span>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-4">
+<button class="relative p-2 text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white dark:border-slate-900"></span>
+</button>
+<div class="flex items-center gap-3 pl-4 border-l border-slate-200 dark:border-slate-700">
+<div class="text-right">
+<p class="text-sm font-semibold leading-none mb-1">Riana Putri</p>
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-400 uppercase">Owner</span>
+</div>
+<img alt="Avatar" class="w-10 h-10 rounded-full border-2 border-white dark:border-slate-800 shadow-sm" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCRpri5h4sAMy9rr_O8QrMqh-Gng4T-1V8Qlzlg1UWkvc-aNxm8mtpFNZlpsecBzwHEo2cc5n8nGDViJ1pE3a4OvkBt17qkT01aLEILeCVehhUhH3DwAr6ZCMj9UQBr-JaivRKg6rJSbI4brrH2h9Vqn9i4R7lx6wKNSvN8_gDgUqioBA5Ygi3rCTDTiVGec9Ox_AVbqBDI6Rv7eE-xO6N9pbbHZGSXDyTfCfUVXvhDQqyu_1wl4m75kHBdhti8M7B45vGvEI0WCRwx"/>
+</div>
+</div>
+</div>
+</header>
+<div class="p-8 max-w-7xl mx-auto space-y-6">
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div>
+<h1 class="text-2xl font-bold text-slate-900 dark:text-white">Katalog Produk</h1>
+<p class="text-sm text-slate-500">Kelola informasi produk, harga, dan ketersediaan stok.</p>
+</div>
+<div class="flex items-center gap-3">
+<button class="px-4 py-2 bg-primary hover:bg-teal-700 text-white font-semibold rounded-lg shadow-sm transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-xl">add</span>
+                    Tambah Produk
+                </button>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-900 p-4 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm space-y-4">
+<div class="flex flex-wrap items-center gap-4">
+<div class="flex-1 min-w-[300px] relative">
+<span class="material-symbols-outlined absolute left-3 top-2.5 text-slate-400">search</span>
+<input class="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-800 border-none rounded-lg text-sm focus:ring-2 focus:ring-primary/20" placeholder="Cari Nama Produk atau SKU..." type="text"/>
+</div>
+<select class="bg-slate-50 dark:bg-slate-800 border-none rounded-lg text-sm py-2 px-4 focus:ring-2 focus:ring-primary/20 min-w-[160px]">
+<option>Semua Kategori</option>
+<option>Makanan</option>
+<option>Minuman</option>
+<option>Elektronik</option>
+</select>
+<select class="bg-slate-50 dark:bg-slate-800 border-none rounded-lg text-sm py-2 px-4 focus:ring-2 focus:ring-primary/20 min-w-[160px]">
+<option>Status Stok</option>
+<option>Tersedia</option>
+<option>Stok Menipis</option>
+<option>Habis</option>
+</select>
+<button class="p-2 text-slate-500 hover:bg-slate-100 rounded-lg">
+<span class="material-symbols-outlined">filter_list</span>
+</button>
+</div>
+<div class="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+<div class="flex items-center gap-2">
+<span class="text-xs font-medium text-slate-500">Aksi Massal:</span>
+<button class="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-md hover:bg-slate-50 flex items-center gap-1.5">
+<span class="material-symbols-outlined text-sm">delete</span> Hapus
+                    </button>
+<button class="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-md hover:bg-slate-50 flex items-center gap-1.5">
+<span class="material-symbols-outlined text-sm">drive_file_rename_outline</span> Ubah Kategori
+                    </button>
+</div>
+<div class="text-xs text-slate-400 italic">2 item dipilih</div>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
+<th class="px-6 py-4 w-10">
+<input class="rounded text-primary focus:ring-primary/20 border-slate-300" type="checkbox"/>
+</th>
+<th class="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Info Produk</th>
+<th class="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Kategori</th>
+<th class="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Harga Jual</th>
+<th class="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Stok</th>
+<th class="px-6 py-4 text-xs font-semibold text-slate-500 uppercase text-center">Status</th>
+<th class="px-6 py-4"></th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors group">
+<td class="px-6 py-4">
+<input checked="" class="rounded text-primary focus:ring-primary/20 border-slate-300" type="checkbox"/>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-4">
+<img alt="Product" class="w-12 h-12 rounded-lg object-cover bg-slate-100" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCnQp8ZjgxdJhmy0j0UkH-siBI0rE5a-A4qdkqiqJ1aPuMN1K_V-eIk9KFDdDUKrj1UOR49YpDj_nTh4IQKaqrNYjAFZzFnzhnh6JiJWYXaS4-0Cy8iJ07DhANNouBD6wqduD0EYwOF2Notwq8UksYb9Mug3XIGl2iiuKzf71Td6JOJWxyA9lF9zFRsGPieTt3t_d5jONaUSSBTSsDILcGQc9VP5wsKPPpQ2l7zghEnri8ru4skjafIC2_z7_-_rowXaXzLT76YUVXv"/>
+<div>
+<p class="font-semibold text-slate-900 dark:text-white">Kopi Arabika Gayo 250g</p>
+<p class="text-xs font-mono text-slate-500 uppercase tracking-tighter">PRD-GAYO-001</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="px-2 py-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-md text-xs font-medium">Minuman</span>
+</td>
+<td class="px-6 py-4">
+<p class="font-semibold">Rp 85.000</p>
+</td>
+<td class="px-6 py-4">
+<div class="relative group/popover">
+<button class="flex items-center gap-1.5 font-bold hover:text-primary transition-colors">
+                                        45 <span class="material-symbols-outlined text-sm">info</span>
+</button>
+<div class="absolute bottom-full left-0 mb-2 w-48 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl p-3 z-30 hidden group-hover/popover:block">
+<p class="text-[10px] font-bold text-slate-400 uppercase mb-2">Stok per Cabang</p>
+<div class="space-y-1.5 text-xs">
+<div class="flex justify-between"><span>Sudirman Main</span><span class="font-bold text-primary">25</span></div>
+<div class="flex justify-between"><span>Canggu Branch</span><span class="font-bold">20</span></div>
+</div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 text-center">
+<label class="inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary relative"></div>
+</label>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="p-2 text-slate-400 hover:text-primary">
+<span class="material-symbols-outlined">edit</span>
+</button>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors group">
+<td class="px-6 py-4">
+<input checked="" class="rounded text-primary focus:ring-primary/20 border-slate-300" type="checkbox"/>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-4">
+<img alt="Product" class="w-12 h-12 rounded-lg object-cover bg-slate-100" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBmySwFgesXwyDp4-6UR-s3Gst-RVGRMQOmHqcWLuQyFoNcCNtyZl9ZSS7AuJ5chXAHugwV7I9qvUkx5iYQ0ueQ08K2fxL83pVXg0IiBGCusu8gcQLxqC97gXGy_-GdClQQNNFFNgOTbU-xI0OVfBnskuChCwi9Jpx1IMkv3xVSyX3iJ63Cl0-FwNwsVhoXKzcWgRFfC1bjjZDZoLiDP4OtqY0cXgoKkltwShcmqgLVSLwrMt1nzn9eNTE_4-siS0WB62uVbt8p2UvK"/>
+<div>
+<p class="font-semibold text-slate-900 dark:text-white">Gula Pasir Kristal 1kg</p>
+<p class="text-xs font-mono text-slate-500 uppercase tracking-tighter">PRD-GULA-002</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="px-2 py-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-md text-xs font-medium">Bahan Pokok</span>
+</td>
+<td class="px-6 py-4">
+<p class="font-semibold">Rp 16.500</p>
+</td>
+<td class="px-6 py-4">
+<div class="relative group/popover">
+<button class="flex items-center gap-1.5 font-bold text-red-500 hover:text-red-600 transition-colors">
+                                        8 <span class="material-symbols-outlined text-sm">warning</span>
+</button>
+</div>
+</td>
+<td class="px-6 py-4 text-center">
+<label class="inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary relative"></div>
+</label>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="p-2 text-slate-400 hover:text-primary">
+<span class="material-symbols-outlined">edit</span>
+</button>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors group">
+<td class="px-6 py-4">
+<input class="rounded text-primary focus:ring-primary/20 border-slate-300" type="checkbox"/>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-4">
+<img alt="Product" class="w-12 h-12 rounded-lg object-cover bg-slate-100" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAGsIAAiGRAEtls6aZocDSoctnG1X1RU6cEaC0o-eVik9_eGSUCw0MGeaPYe1s1Y1-b5p3Y2wLM1Ncswk2eRCgrvhaJO3hPCbLq-aUg_yjpVAUqR7DIcCxekd5DMfVSZMkpLaqnc3F8wrHb0GSlR6XfQeS-7X9itddpyczu2jra0Iyi91UpC2dUVIbS-lQaCID98Y5EN1GaRgzEDXT9K8W6rc1j3QymmnBMBuL_ym1FURgbz2hSACRWLJWkHmoRQPAw6fxZcckZRXKS"/>
+<div>
+<p class="font-semibold text-slate-900 dark:text-white">Susu UHT Full Cream 1L</p>
+<p class="text-xs font-mono text-slate-500 uppercase tracking-tighter">PRD-MILK-003</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="px-2 py-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-md text-xs font-medium">Minuman</span>
+</td>
+<td class="px-6 py-4">
+<p class="font-semibold">Rp 18.200</p>
+</td>
+<td class="px-6 py-4 text-slate-600 dark:text-slate-400">
+                                120
+                            </td>
+<td class="px-6 py-4 text-center">
+<label class="inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary relative"></div>
+</label>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="p-2 text-slate-400 hover:text-primary">
+<span class="material-symbols-outlined">edit</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="px-6 py-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-900">
+<span class="text-sm text-slate-500">Menampilkan 1 - 3 dari 1,284 produk</span>
+<div class="flex gap-2">
+<button class="px-3 py-1 border border-slate-200 dark:border-slate-700 rounded text-sm hover:bg-slate-50 disabled:opacity-50" disabled="">Sebelumnya</button>
+<button class="px-3 py-1 border border-slate-200 dark:border-slate-700 rounded text-sm hover:bg-slate-50">Selanjutnya</button>
+</div>
+</div>
+</div>
+</div>
+</main>
+<aside class="fixed top-0 right-0 w-[400px] h-full bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 z-30 drawer-shadow overflow-y-auto">
+<div class="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between sticky top-0 bg-white dark:bg-slate-900 z-10">
+<div>
+<h2 class="text-lg font-bold">Detail Produk</h2>
+<p class="text-xs text-slate-500">Edit informasi katalog produk Anda</p>
+</div>
+<button class="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full">
+<span class="material-symbols-outlined">close</span>
+</button>
+</div>
+<div class="p-6 space-y-6">
+<div class="flex justify-center">
+<div class="relative group">
+<img alt="Product Large" class="w-32 h-32 rounded-2xl object-cover border-4 border-slate-50 dark:border-slate-800 shadow-sm" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDbPikufOpiInKbv_VeqzR0X-Uv1OGklMRDkjSADoPcJ2AFm35VnP2PcS0IKlkRkOy2c9ha7N-ac7pGtTCPq8df8cVFQmosHEZDEFd1SrPnlnY0BtZ_YvVbPHOdFXkryLlr4F7Htg1oYEyQK7pEI2S57Osp-e2DHU6uj-f4CSH3quuiIDygyvHZbFu4ZU0J5OfcHx_gucZj6o03ws65QB349L9xH1iJW6PNPYN44qNrC2t0GwW8D9WwS_hSI8HzOcBQWhkgz8oS8ahK"/>
+<button class="absolute bottom-1 right-1 bg-white dark:bg-slate-700 p-1.5 rounded-full shadow-md border border-slate-200 dark:border-slate-600 text-primary">
+<span class="material-symbols-outlined text-sm">photo_camera</span>
+</button>
+</div>
+</div>
+<form class="space-y-4">
+<div>
+<label class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">SKU Produk</label>
+<input class="w-full bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-primary focus:border-primary" type="text" value="PRD-GAYO-001"/>
+</div>
+<div>
+<label class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Nama Produk</label>
+<input class="w-full bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-primary focus:border-primary" type="text" value="Kopi Arabika Gayo 250g"/>
+</div>
+<div>
+<label class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Kategori</label>
+<select class="w-full bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-primary focus:border-primary">
+<option selected="">Minuman</option>
+<option>Makanan</option>
+<option>Bahan Pokok</option>
+</select>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div>
+<label class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Harga Beli (Base)</label>
+<div class="relative">
+<span class="absolute left-3 top-2.5 text-xs font-medium text-slate-400">Rp</span>
+<input class="w-full pl-9 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-primary focus:border-primary" type="text" value="65.000"/>
+</div>
+</div>
+<div>
+<label class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Harga Jual</label>
+<div class="relative">
+<span class="absolute left-3 top-2.5 text-xs font-medium text-slate-400">Rp</span>
+<input class="w-full pl-9 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-primary focus:border-primary" type="text" value="85.000"/>
+</div>
+</div>
+</div>
+<div class="pt-4 space-y-3">
+<button class="w-full py-2.5 bg-primary hover:bg-teal-700 text-white font-bold rounded-lg transition-colors" type="button">
+                    Simpan Perubahan
+                </button>
+<button class="w-full py-2.5 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-bold rounded-lg hover:bg-slate-50 transition-colors" type="button">
+                    Daftar Mutasi Stok
+                </button>
+</div>
+</form>
+</div>
+</aside>
+<button class="fixed bottom-6 right-6 w-12 h-12 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full shadow-xl flex items-center justify-center text-slate-600 dark:text-slate-300 z-50 transition-all hover:scale-110 active:scale-95" onclick="document.documentElement.classList.toggle('dark')">
+<span class="material-symbols-outlined dark:hidden">dark_mode</span>
+<span class="material-symbols-outlined hidden dark:block">light_mode</span>
+</button>
+
+</body></html>

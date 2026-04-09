@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+
+<html class="light" lang="id"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Plan Comparison &amp; Features - POS SaaS Admin</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#13ecc8",
+                        "background-light": "#f6f8f8",
+                        "background-dark": "#10221f",
+                    },
+                    fontFamily: {
+                        "display": ["Manrope"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        .pro-gradient {
+            background: linear-gradient(135deg, #ffffff 0%, #e8fefb 100%);
+        }
+        .dark .pro-gradient {
+            background: linear-gradient(135deg, #10221f 0%, #1a3a35 100%);
+        }
+        .tooltip-trigger:hover .tooltip {
+            opacity: 1;
+            visibility: visible;
+        }
+    </style>
+</head>
+<body class="font-display bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 transition-colors duration-200">
+<div class="relative flex h-auto min-h-screen w-full flex-col overflow-x-hidden">
+<div class="layout-container flex h-full grow flex-col">
+<!-- Navigation Bar -->
+<header class="flex items-center justify-between whitespace-nowrap border-b border-solid border-slate-200 dark:border-slate-800 px-6 lg:px-40 py-3 bg-white dark:bg-background-dark/50 backdrop-blur-md sticky top-0 z-50">
+<div class="flex items-center gap-4 text-slate-900 dark:text-slate-100">
+<div class="size-8 flex items-center justify-center rounded-lg bg-primary/20 text-primary">
+<span class="material-symbols-outlined">point_of_sale</span>
+</div>
+<h2 class="text-lg font-bold leading-tight tracking-[-0.015em]">POS SaaS Admin</h2>
+</div>
+<div class="flex flex-1 justify-end gap-8">
+<nav class="hidden md:flex items-center gap-9">
+<a class="text-sm font-medium leading-normal hover:text-primary transition-colors" href="#">Dashboard</a>
+<a class="text-sm font-medium leading-normal hover:text-primary transition-colors" href="#">Inventory</a>
+<a class="text-sm font-medium leading-normal hover:text-primary transition-colors" href="#">Sales</a>
+<a class="text-sm font-medium leading-normal hover:text-primary transition-colors" href="#">Billing</a>
+</nav>
+<div class="flex items-center gap-4">
+<button class="flex min-w-[84px] cursor-pointer items-center justify-center rounded-lg h-10 px-4 bg-primary text-slate-900 text-sm font-bold leading-normal transition-transform active:scale-95">
+<span class="truncate">Upgrade Plan</span>
+</button>
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 border-2 border-primary/30" data-alt="User profile avatar" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBDC71NMauqTAnmgN06d5XfFTtFrp13yhREbQ5TaIKs7hjWA10rncrreYYkPxFG5f1zl4fl5LNvsJF8YRfnFV7MHBFp04Zt71Sd1vB-EbVPABfAMq0suWngVH9BvVeK-7nMiop0anYCHNyRKItCwpKCiwAtNCscCJILu7_VAiNdjNsa3OTf0gIuqu0tQjOevwnPjo9X4uh_0X6ZFNWLzvmYhqUsDBCb9QKxfk2SC-imJmTN4Sgc9h00ySInLR6GCGnFLybW0imtjeZu");'>
+</div>
+</div>
+</div>
+</header>
+<main class="px-6 lg:px-40 flex flex-1 justify-center py-10">
+<div class="layout-content-container flex flex-col max-w-[1200px] flex-1">
+<!-- Page Header -->
+<div class="flex flex-wrap justify-between items-end gap-3 mb-10">
+<div class="flex flex-col gap-3">
+<h1 class="text-slate-900 dark:text-slate-100 text-4xl font-black leading-tight tracking-[-0.033em]">Pilih Paket &amp; Fitur</h1>
+<p class="text-slate-500 dark:text-slate-400 text-lg font-normal leading-normal">Bandingkan fitur terbaik untuk pertumbuhan skala bisnis Anda.</p>
+</div>
+<button class="flex min-w-[120px] cursor-pointer items-center justify-center rounded-lg h-10 px-4 bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm font-bold leading-normal">
+<span class="material-symbols-outlined mr-2 text-sm">help</span>
+<span class="truncate">Bantuan &amp; FAQ</span>
+</button>
+</div>
+<!-- Pricing Grid -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16">
+<!-- Starter Plan -->
+<div class="relative flex flex-col gap-6 rounded-xl border border-solid border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-8 hover:shadow-xl transition-shadow">
+<div class="absolute -top-3 left-1/2 -translate-x-1/2 bg-slate-100 dark:bg-slate-800 text-slate-500 text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full border border-slate-200 dark:border-slate-700">
+                            Paket Anda Saat Ini
+                        </div>
+<div class="flex flex-col gap-1 mt-2">
+<h3 class="text-slate-500 dark:text-slate-400 text-sm font-bold uppercase tracking-wider">Starter</h3>
+<div class="flex items-baseline gap-1">
+<span class="text-slate-900 dark:text-slate-100 text-4xl font-black leading-tight tracking-tight">Rp 0</span>
+<span class="text-slate-500 text-base font-medium">/bulan</span>
+</div>
+</div>
+<button class="flex w-full items-center justify-center rounded-lg h-12 px-4 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 text-sm font-bold cursor-not-allowed border border-slate-200 dark:border-slate-700" disabled="">
+                            Terpasang
+                        </button>
+<ul class="flex flex-col gap-3">
+<li class="text-sm font-medium flex gap-3 items-center text-slate-700 dark:text-slate-300">
+<span class="material-symbols-outlined text-primary text-lg">check_circle</span> 1 Outlet &amp; Kasir Dasar
+                            </li>
+<li class="text-sm font-medium flex gap-3 items-center text-slate-700 dark:text-slate-300">
+<span class="material-symbols-outlined text-primary text-lg">check_circle</span> Laporan Penjualan Harian
+                            </li>
+<li class="text-sm font-medium flex gap-3 items-center text-slate-400 dark:text-slate-600">
+<span class="material-symbols-outlined text-lg">block</span> Tanpa Manajemen Stok
+                            </li>
+</ul>
+</div>
+<!-- Medium Plan -->
+<div class="group flex flex-col gap-6 rounded-xl border border-solid border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-8 hover:border-primary/50 hover:shadow-xl transition-all">
+<div class="flex flex-col gap-1">
+<h3 class="text-slate-500 dark:text-slate-400 text-sm font-bold uppercase tracking-wider">Medium</h3>
+<div class="flex items-baseline gap-1">
+<span class="text-slate-900 dark:text-slate-100 text-4xl font-black leading-tight tracking-tight">Rp 250k</span>
+<span class="text-slate-500 text-base font-medium">/bulan</span>
+</div>
+</div>
+<button class="flex w-full items-center justify-center rounded-lg h-12 px-4 bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-sm font-bold hover:bg-primary hover:text-slate-900 transition-colors">
+                            Pilih Paket
+                        </button>
+<ul class="flex flex-col gap-3">
+<li class="text-sm font-medium flex gap-3 items-center text-slate-700 dark:text-slate-300">
+<span class="material-symbols-outlined text-primary text-lg">check_circle</span> Hingga 3 Outlet
+                            </li>
+<li class="text-sm font-medium flex gap-3 items-center text-slate-700 dark:text-slate-300">
+<span class="material-symbols-outlined text-primary text-lg">check_circle</span> Inventaris Dasar
+                            </li>
+<li class="text-sm font-medium flex gap-3 items-center text-slate-700 dark:text-slate-300">
+<span class="material-symbols-outlined text-primary text-lg">check_circle</span> Support Email 24/7
+                            </li>
+</ul>
+</div>
+<!-- Pro Plan (Standout) -->
+<div class="relative group flex flex-col gap-6 rounded-xl border-2 border-solid border-primary pro-gradient p-8 shadow-2xl scale-105 z-10">
+<div class="absolute -top-4 left-1/2 -translate-x-1/2 bg-primary text-slate-900 text-[11px] font-black uppercase tracking-widest px-4 py-1.5 rounded-full shadow-lg">
+                            Paling Populer
+                        </div>
+<div class="flex flex-col gap-1">
+<h3 class="text-slate-600 dark:text-primary text-sm font-bold uppercase tracking-wider">Professional</h3>
+<div class="flex items-baseline gap-1">
+<span class="text-slate-900 dark:text-white text-4xl font-black leading-tight tracking-tight">Rp 750k</span>
+<span class="text-slate-600 dark:text-slate-400 text-base font-medium">/bulan</span>
+</div>
+</div>
+<button class="flex w-full items-center justify-center rounded-lg h-12 px-4 bg-primary text-slate-900 text-sm font-black shadow-lg shadow-primary/20 hover:brightness-105 transition-all active:scale-95">
+                            Mulai Sekarang
+                        </button>
+<ul class="flex flex-col gap-3">
+<li class="text-sm font-bold flex gap-3 items-center text-slate-900 dark:text-white">
+<span class="material-symbols-outlined text-slate-900 dark:text-primary text-lg">verified</span> Outlet Tanpa Batas
+                            </li>
+<li class="text-sm font-bold flex gap-3 items-center text-slate-900 dark:text-white">
+<span class="material-symbols-outlined text-slate-900 dark:text-primary text-lg">verified</span> Laporan AI &amp; Prediksi
+                            </li>
+<li class="text-sm font-bold flex gap-3 items-center text-slate-900 dark:text-white">
+<span class="material-symbols-outlined text-slate-900 dark:text-primary text-lg">verified</span> API Integrasi Penuh
+                            </li>
+</ul>
+</div>
+</div>
+<!-- Feature Matrix -->
+<div class="mb-10">
+<h2 class="text-slate-900 dark:text-slate-100 text-2xl font-bold leading-tight tracking-tight mb-6">Detail Perbandingan Fitur</h2>
+<div class="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-slate-50 dark:bg-slate-800/50">
+<th class="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200 dark:border-slate-800 w-1/4">Fitur Utama</th>
+<th class="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200 dark:border-slate-800">Starter</th>
+<th class="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200 dark:border-slate-800">Medium</th>
+<th class="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200 dark:border-slate-800">Professional</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+<!-- Row 1 -->
+<tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+<td class="px-6 py-5 font-medium text-slate-900 dark:text-slate-200">Jumlah Outlet</td>
+<td class="px-6 py-5 text-slate-600 dark:text-slate-400">1 Outlet</td>
+<td class="px-6 py-5 text-slate-600 dark:text-slate-400">3 Outlet</td>
+<td class="px-6 py-5 font-bold text-primary">Tanpa Batas</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+<td class="px-6 py-5 font-medium text-slate-900 dark:text-slate-200">Manajemen Stok</td>
+<td class="px-6 py-5 text-slate-400">
+<span class="material-symbols-outlined text-lg">remove</span>
+</td>
+<td class="px-6 py-5 text-slate-600 dark:text-slate-400">Dasar</td>
+<td class="px-6 py-5 font-bold text-slate-900 dark:text-slate-100">Lanjutan (Multi-warehouse)</td>
+</tr>
+<!-- Row 3 (Gated Feature) -->
+<tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+<td class="px-6 py-5 font-medium text-slate-900 dark:text-slate-200 flex items-center gap-2">
+                                        Laporan AI &amp; Prediksi
+                                        <div class="relative tooltip-trigger group">
+<span class="material-symbols-outlined text-slate-400 text-sm cursor-help">info</span>
+<div class="tooltip invisible opacity-0 absolute bottom-full left-0 mb-2 w-48 p-2 bg-slate-900 text-white text-[10px] rounded shadow-lg transition-all z-20">
+                                                Analisis data penjualan otomatis menggunakan engine ML terbaru.
+                                            </div>
+</div>
+</td>
+<td class="px-6 py-5">
+<span class="material-symbols-outlined text-slate-300 dark:text-slate-700">lock</span>
+</td>
+<td class="px-6 py-5">
+<div class="relative tooltip-trigger flex items-center gap-1 text-slate-400 cursor-not-allowed">
+<span class="material-symbols-outlined text-lg">lock</span>
+<div class="tooltip invisible opacity-0 absolute bottom-full left-0 mb-2 w-48 p-2 bg-slate-900 text-white text-[10px] rounded shadow-lg transition-all z-20">
+                                                Hanya tersedia di Paket Pro
+                                            </div>
+</div>
+</td>
+<td class="px-6 py-5">
+<span class="material-symbols-outlined text-primary font-bold">check_circle</span>
+</td>
+</tr>
+<!-- Row 4 -->
+<tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+<td class="px-6 py-5 font-medium text-slate-900 dark:text-slate-200">API Access &amp; Webhooks</td>
+<td class="px-6 py-5 text-slate-400">
+<span class="material-symbols-outlined text-lg">remove</span>
+</td>
+<td class="px-6 py-5">
+<div class="relative tooltip-trigger flex items-center gap-1 text-slate-400 cursor-not-allowed">
+<span class="material-symbols-outlined text-lg">lock</span>
+<div class="tooltip invisible opacity-0 absolute bottom-full left-0 mb-2 w-48 p-2 bg-slate-900 text-white text-[10px] rounded shadow-lg transition-all z-20">
+                                                Hanya tersedia di Paket Pro
+                                            </div>
+</div>
+</td>
+<td class="px-6 py-5">
+<span class="material-symbols-outlined text-primary font-bold">check_circle</span>
+</td>
+</tr>
+<!-- Row 5 -->
+<tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+<td class="px-6 py-5 font-medium text-slate-900 dark:text-slate-200">Dukungan Pelanggan</td>
+<td class="px-6 py-5 text-slate-600 dark:text-slate-400">Forum &amp; Email</td>
+<td class="px-6 py-5 text-slate-600 dark:text-slate-400">Prioritas Email (24h)</td>
+<td class="px-6 py-5 font-bold text-slate-900 dark:text-slate-100">Manager Akun &amp; WhatsApp</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Footer Summary -->
+<div class="rounded-xl bg-slate-100 dark:bg-slate-800/40 p-8 border border-slate-200 dark:border-slate-800 flex flex-col md:flex-row items-center justify-between gap-6">
+<div class="flex flex-col gap-1 text-center md:text-left">
+<h4 class="text-slate-900 dark:text-slate-100 font-bold text-lg">Butuh penawaran khusus untuk Enterprise?</h4>
+<p class="text-slate-500 dark:text-slate-400 text-sm">Jika bisnis Anda memiliki lebih dari 50 outlet, hubungi tim sales kami untuk harga spesial.</p>
+</div>
+<button class="flex min-w-[160px] cursor-pointer items-center justify-center rounded-lg h-12 px-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-sm font-bold shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                        Hubungi Sales
+                    </button>
+</div>
+</div>
+</main>
+<!-- Footer -->
+<footer class="px-6 lg:px-40 py-8 border-t border-slate-200 dark:border-slate-800 text-slate-500 text-xs text-center">
+            © 2024 POS SaaS Admin Pro. All rights reserved. <a class="underline hover:text-primary transition-colors" href="#">Syarat &amp; Ketentuan Layanan</a>
+</footer>
+</div>
+</div>
+</body></html>

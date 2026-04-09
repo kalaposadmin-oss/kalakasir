@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="id"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "primary": "#7BAE9E", // Muted Sage/Teal
+              "accent-blue": "#94B3C5", // Soft Blue
+              "background-light": "#F8FAF9",
+              "background-dark": "#121816",
+            },
+            fontFamily: {
+              "display": ["Inter", "sans-serif"]
+            },
+            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "2xl": "1rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style type="text/tailwindcss">
+        body {
+            min-height: max(884px, 100dvh);
+            -webkit-tap-highlight-color: transparent;
+        }
+        .ios-shadow {
+            box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.05);
+        }
+        .ios-shadow-sm {
+            box-shadow: 0 2px 8px -1px rgba(0, 0, 0, 0.04);
+        }
+        .pb-safe {
+          padding-bottom: env(safe-area-inset-bottom);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-800 dark:text-slate-100 antialiased">
+<div class="relative flex min-h-screen w-full flex-col overflow-x-hidden pb-24">
+<header class="sticky top-0 z-30 flex items-center justify-between bg-white/70 dark:bg-background-dark/80 backdrop-blur-xl px-4 py-4 border-b border-slate-200/50 dark:border-slate-800/50">
+<div class="flex items-center gap-3">
+<div class="flex size-10 items-center justify-center rounded-xl bg-primary/20 text-primary">
+<span class="material-symbols-outlined font-bold">storefront</span>
+</div>
+<div>
+<h1 class="text-lg font-bold leading-tight tracking-tight">Warung Jaya</h1>
+<div class="flex items-center gap-1.5 mt-0.5">
+<span class="flex h-2 w-2 rounded-full bg-primary"></span>
+<span class="text-[10px] font-bold uppercase tracking-widest text-primary/80">SHIFT DIBUKA</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<button class="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<div class="h-10 w-10 overflow-hidden rounded-full border-2 border-white dark:border-slate-800 ios-shadow">
+<img alt="Profil manajer toko" class="h-full w-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuADvqMEZ_zlGw7Wg5hhsEAFTVDS1Ba-PXimlG3jGChkv3KarQoe4CePQVEItjTlL37B1S5S9XCg8Egrfs6w33osB-XUUqqtOuCEPWzqDbAXYIF4xrFB5w7r2NVgqgQ495gfTsZPw9dN0MxG12WitB7mGiAEx0lYiOoile70uj4niE1jMVZuR95XmhHG-Xx5najKuJxO5fWyqgN1nL2mqrAFGdolRWQ_ymQ3YoKPNyXd5fmWYVh6kx_iYWl99JkywmwqcxddyuwkhxHU"/>
+</div>
+</div>
+</header>
+<main class="flex flex-col gap-6 p-4">
+<section>
+<h2 class="mb-3 px-1 text-xs font-bold uppercase tracking-[0.15em] text-slate-400 dark:text-slate-500">AKSI CEPAT</h2>
+<div class="grid grid-cols-2 gap-3">
+<button class="flex flex-col items-center justify-center gap-3 rounded-2xl bg-primary p-6 text-white ios-shadow active:opacity-90">
+<span class="material-symbols-outlined scale-125 font-bold">add_shopping_cart</span>
+<span class="text-sm font-bold">Mulai Transaksi</span>
+</button>
+<button class="flex flex-col items-center justify-center gap-3 rounded-2xl bg-white dark:bg-slate-900 p-6 ios-shadow border border-slate-100 dark:border-slate-800 active:bg-slate-50">
+<span class="material-symbols-outlined text-rose-400 scale-125">history_toggle_off</span>
+<span class="text-sm font-bold">Tutup Shift</span>
+</button>
+<button class="flex flex-col items-center justify-center gap-3 rounded-2xl bg-white dark:bg-slate-900 p-6 ios-shadow border border-slate-100 dark:border-slate-800 active:bg-slate-50">
+<span class="material-symbols-outlined text-primary scale-125">inventory_2</span>
+<span class="text-sm font-bold">Tambah Produk</span>
+</button>
+<button class="flex flex-col items-center justify-center gap-3 rounded-2xl bg-white dark:bg-slate-900 p-6 ios-shadow border border-slate-100 dark:border-slate-800 active:bg-slate-50">
+<span class="material-symbols-outlined text-primary scale-125">analytics</span>
+<span class="text-sm font-bold">Laporan</span>
+</button>
+</div>
+</section>
+<section>
+<div class="grid grid-cols-2 gap-3">
+<div class="flex flex-col gap-1 rounded-2xl bg-white dark:bg-slate-900 p-4 ios-shadow border border-slate-100 dark:border-slate-800">
+<div class="flex items-center gap-2 text-slate-400">
+<span class="material-symbols-outlined text-[18px]">payments</span>
+<p class="text-[11px] font-semibold uppercase tracking-wider">Penjualan Hari Ini</p>
+</div>
+<p class="text-xl font-bold tracking-tight mt-1">Rp 2.5jt</p>
+<span class="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full w-fit">+12% vs kemarin</span>
+</div>
+<div class="flex flex-col gap-1 rounded-2xl bg-white dark:bg-slate-900 p-4 ios-shadow border border-slate-100 dark:border-slate-800">
+<div class="flex items-center gap-2 text-slate-400">
+<span class="material-symbols-outlined text-[18px]">receipt_long</span>
+<p class="text-[11px] font-semibold uppercase tracking-wider">Transaksi</p>
+</div>
+<p class="text-xl font-bold tracking-tight mt-1">45</p>
+<span class="text-[10px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full w-fit">Target: 60</span>
+</div>
+<div class="flex flex-col gap-1 rounded-2xl bg-white dark:bg-slate-900 p-4 ios-shadow border border-slate-100 dark:border-slate-800">
+<div class="flex items-center gap-2 text-slate-400">
+<span class="material-symbols-outlined text-[18px]">trending_up</span>
+<p class="text-[11px] font-semibold uppercase tracking-wider">Laba</p>
+</div>
+<p class="text-xl font-bold tracking-tight mt-1 text-primary">Rp 800rb</p>
+<span class="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full w-fit">Margin Tinggi</span>
+</div>
+<div class="flex flex-col gap-1 rounded-2xl bg-white dark:bg-slate-900 p-4 ios-shadow border border-slate-100 dark:border-slate-800">
+<div class="flex items-center gap-2 text-slate-400">
+<span class="material-symbols-outlined text-[18px]">shopping_bag</span>
+<p class="text-[11px] font-semibold uppercase tracking-wider">Rata-rata Transaksi</p>
+</div>
+<p class="text-xl font-bold tracking-tight mt-1">Rp 55rb</p>
+<span class="text-[10px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full w-fit">Stabil</span>
+</div>
+</div>
+</section>
+<section class="rounded-2xl bg-white dark:bg-slate-900 p-5 ios-shadow border border-slate-100 dark:border-slate-800">
+<div class="flex items-center justify-between mb-4">
+<h2 class="text-sm font-bold text-slate-700 dark:text-slate-200">Penjualan Minggu Ini</h2>
+<a class="text-[11px] font-bold text-primary active:opacity-60" href="#">Lihat Detail</a>
+</div>
+<div class="relative h-32 w-full mt-4 flex items-end justify-between gap-2 px-1">
+<div class="w-full bg-primary/10 rounded-t-lg h-1/2 relative">
+<div class="absolute inset-x-0 bottom-0 bg-primary/30 rounded-t-lg h-3/4"></div>
+</div>
+<div class="w-full bg-primary/10 rounded-t-lg h-3/4 relative">
+<div class="absolute inset-x-0 bottom-0 bg-primary/30 rounded-t-lg h-1/2"></div>
+</div>
+<div class="w-full bg-primary/10 rounded-t-lg h-2/3 relative">
+<div class="absolute inset-x-0 bottom-0 bg-primary/30 rounded-t-lg h-4/5"></div>
+</div>
+<div class="w-full bg-primary/10 rounded-t-lg h-full relative">
+<div class="absolute inset-x-0 bottom-0 bg-primary rounded-t-lg h-3/5"></div>
+</div>
+<div class="w-full bg-primary/10 rounded-t-lg h-4/5 relative">
+<div class="absolute inset-x-0 bottom-0 bg-primary/30 rounded-t-lg h-2/3"></div>
+</div>
+<div class="w-full bg-primary/10 rounded-t-lg h-3/5 relative">
+<div class="absolute inset-x-0 bottom-0 bg-primary/30 rounded-t-lg h-3/4"></div>
+</div>
+<div class="w-full bg-primary/10 rounded-t-lg h-5/6 relative">
+<div class="absolute inset-x-0 bottom-0 bg-primary/30 rounded-t-lg h-1/2"></div>
+</div>
+</div>
+<div class="flex justify-between mt-3 text-[10px] font-bold text-slate-400">
+<span>Sen</span><span>Sel</span><span>Rab</span><span class="text-primary">Kam</span><span>Jum</span><span>Sab</span><span>Min</span>
+</div>
+</section>
+<section>
+<div class="flex items-center justify-between mb-3 px-1">
+<h2 class="text-xs font-bold uppercase tracking-[0.15em] text-slate-400 dark:text-slate-500">PERINGATAN STOK</h2>
+<button class="text-[11px] font-bold text-primary">Atur</button>
+</div>
+<div class="rounded-2xl bg-[#FFF9F2] dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900/30 p-4 flex items-center justify-between ios-shadow-sm">
+<div class="flex items-center gap-3">
+<div class="flex size-10 items-center justify-center rounded-xl bg-orange-100 dark:bg-orange-900/40 text-orange-400">
+<span class="material-symbols-outlined">warning</span>
+</div>
+<div>
+<p class="text-sm font-bold text-slate-700 dark:text-slate-200">Kopi Susu Gula Aren</p>
+<p class="text-xs text-orange-400 font-semibold">Stok Tipis: Sisa 2</p>
+</div>
+</div>
+<button class="rounded-xl bg-white dark:bg-slate-800 px-4 py-2 text-[11px] font-bold shadow-sm border border-slate-100 dark:border-slate-700 text-slate-700 dark:text-slate-200 active:bg-slate-50">Tambah Stok</button>
+</div>
+</section>
+</main>
+<nav class="fixed bottom-0 left-0 right-0 z-40 flex h-20 items-center border-t border-slate-200/50 dark:border-slate-800/50 bg-white/90 dark:bg-slate-900/95 backdrop-blur-xl px-2 pb-safe">
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1">dashboard</span>
+<span class="text-[10px] font-bold tracking-tight">Dashboard</span>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">point_of_sale</span>
+<span class="text-[10px] font-medium tracking-tight">Kasir</span>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">history</span>
+<span class="text-[10px] font-medium tracking-tight">Riwayat</span>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">inventory_2</span>
+<span class="text-[10px] font-medium tracking-tight">Produk</span>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="text-[10px] font-medium tracking-tight">Setelan</span>
+</a>
+</nav>
+</div>
+
+</body></html>

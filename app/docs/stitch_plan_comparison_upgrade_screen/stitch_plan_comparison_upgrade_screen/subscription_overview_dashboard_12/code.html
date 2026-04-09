@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html class="light" lang="id"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Riwayat Transaksi - POS SaaS</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#0D9488",
+                        "background-light": "#F9FAFB",
+                        "background-dark": "#111827",
+                    },
+                    fontFamily: {
+                        display: ["Inter", "sans-serif"],
+                    },
+                    borderRadius: {
+                        DEFAULT: "0.75rem",
+                    },
+                },
+            },
+        };
+    </script>
+<style type="text/tailwindcss">
+        body { font-family: 'Inter', sans-serif; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        .gated-blur { filter: blur(4px); }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen flex text-[14px]">
+<aside class="w-64 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col fixed h-full z-20">
+<div class="p-6 flex items-center gap-3">
+<div class="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white">
+<span class="material-symbols-outlined">point_of_sale</span>
+</div>
+<span class="font-bold text-xl tracking-tight">Warung Jaya</span>
+</div>
+<nav class="flex-1 px-4 py-4 space-y-1 overflow-y-auto scrollbar-hide">
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-medium">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 bg-teal-50 dark:bg-teal-900/20 text-primary rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined">receipt_long</span>
+<span class="font-medium">Riwayat Transaksi</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined">inventory</span>
+<span class="font-medium">Stok &amp; Inventori</span>
+</a>
+<div class="pt-6 pb-2 px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+            Pengaturan &amp; Billing
+        </div>
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined">subscriptions</span>
+<span class="font-medium">Langganan</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined">business</span>
+<span class="font-medium">Profil Bisnis</span>
+</a>
+</nav>
+<div class="p-4 border-t border-slate-200 dark:border-slate-800">
+<button class="flex items-center w-full gap-3 px-3 py-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-lg transition-colors">
+<span class="material-symbols-outlined">logout</span>
+<span class="font-medium">Keluar</span>
+</button>
+</div>
+</aside>
+<main class="flex-1 ml-64 min-h-screen">
+<header class="h-16 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 sticky top-0 z-10 px-8 flex items-center justify-between">
+<div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+<span>Transaksi</span>
+<span class="material-symbols-outlined text-sm">chevron_right</span>
+<span class="font-medium text-slate-900 dark:text-white">Riwayat Transaksi</span>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-4">
+<button class="relative p-2 text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white dark:border-slate-900"></span>
+</button>
+<div class="flex items-center gap-3 pl-4 border-l border-slate-200 dark:border-slate-700">
+<div class="text-right">
+<p class="text-sm font-semibold leading-none mb-1">Riana Putri</p>
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-400 uppercase">Plan: Basic</span>
+</div>
+<img alt="Avatar" class="w-10 h-10 rounded-full border-2 border-white dark:border-slate-800 shadow-sm" src="https://lh3.googleusercontent.com/aida-public/AB6AXuARDNZnm2UiZiysJEny9gVgcaplGT7ix3kjil7nGyragC6JeiUZt6KduYdAbMyL5q_RdvyUsUkQeHOGh0Fs9ewj16KeYnPyTHwNRifinTo8sjPSWjkqIIT2gqR66lIggphxr5f80wjheMwiGYBPw5irWfsnwn3FEGgkQWjrYVmw6w-YMOSFM6pHsddedI6A_ZqTE3227r-1qVSHZc8DQ9vGqWi3wayeEHLHixuZBg3d2cFQoZnI-j1xhcD4lDT0GbxdG2Unr9QJNxVF"/>
+</div>
+</div>
+</div>
+</header>
+<div class="p-8 max-w-7xl mx-auto space-y-6">
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div>
+<h1 class="text-2xl font-bold text-slate-900 dark:text-white">Riwayat Transaksi</h1>
+<p class="text-sm text-slate-500">Kelola dan tinjau semua aktivitas penjualan kasir.</p>
+</div>
+<div class="flex items-center gap-3">
+<button class="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-400 font-semibold rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center gap-2 cursor-not-allowed group relative">
+<span class="material-symbols-outlined text-xl">file_download</span>
+                    Ekspor ke Excel
+                    <span class="material-symbols-outlined text-sm">lock</span>
+<div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-slate-800 text-white text-[10px] py-1 px-2 rounded whitespace-nowrap z-30">
+                        Hanya tersedia di paket Pro
+                    </div>
+</button>
+<button class="px-4 py-2 bg-primary hover:bg-teal-700 text-white font-semibold rounded-lg shadow-sm transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-xl">add</span>
+                    Transaksi Baru
+                </button>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-900 p-4 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm">
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+<div class="relative">
+<label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Rentang Tanggal</label>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-lg">calendar_today</span>
+<input class="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-800 border-none rounded-lg text-sm focus:ring-2 focus:ring-primary/20" type="text" value="01 Jan 2024 - 31 Jan 2024"/>
+</div>
+</div>
+<div>
+<label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Cabang</label>
+<select class="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-lg text-sm py-2 px-4 focus:ring-2 focus:ring-primary/20">
+<option>Semua Cabang</option>
+<option>Sudirman Main</option>
+<option>Canggu Branch</option>
+</select>
+</div>
+<div>
+<label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Kasir</label>
+<select class="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-lg text-sm py-2 px-4 focus:ring-2 focus:ring-primary/20">
+<option>Semua Kasir</option>
+<option>Riana Putri</option>
+<option>Budi Santoso</option>
+<option>Siti Aminah</option>
+</select>
+</div>
+<div>
+<label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Status</label>
+<select class="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-lg text-sm py-2 px-4 focus:ring-2 focus:ring-primary/20">
+<option>Semua Status</option>
+<option>Paid</option>
+<option>Refunded</option>
+<option>Pending</option>
+</select>
+</div>
+<div class="flex items-end">
+<button class="w-full h-[38px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold rounded-lg hover:bg-slate-200 transition-colors flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-lg">filter_alt</span>
+                        Terapkan
+                    </button>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<div class="bg-white dark:bg-slate-900 p-5 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm">
+<div class="flex items-center justify-between mb-3">
+<p class="text-xs font-medium text-slate-500 uppercase tracking-wider">Total Revenue</p>
+<div class="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center">
+<span class="material-symbols-outlined text-emerald-600 text-lg">payments</span>
+</div>
+</div>
+<h3 class="text-2xl font-bold">Rp 42.850.000</h3>
+<p class="text-xs text-emerald-500 mt-2 flex items-center gap-1">
+<span class="material-symbols-outlined text-xs">trending_up</span>
+                    +12.5% dari bulan lalu
+                </p>
+</div>
+<div class="bg-white dark:bg-slate-900 p-5 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm">
+<div class="flex items-center justify-between mb-3">
+<p class="text-xs font-medium text-slate-500 uppercase tracking-wider">Total Tax (11%)</p>
+<div class="w-8 h-8 rounded-lg bg-slate-50 dark:bg-slate-800 flex items-center justify-center">
+<span class="material-symbols-outlined text-slate-400 text-lg">receipt</span>
+</div>
+</div>
+<h3 class="text-2xl font-bold">Rp 4.713.500</h3>
+<p class="text-xs text-slate-400 mt-2">Dihitung otomatis per transaksi</p>
+</div>
+<div class="bg-white dark:bg-slate-900 p-5 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm">
+<div class="flex items-center justify-between mb-3">
+<p class="text-xs font-medium text-slate-500 uppercase tracking-wider">Total Discount</p>
+<div class="w-8 h-8 rounded-lg bg-red-50 dark:bg-red-900/20 flex items-center justify-center">
+<span class="material-symbols-outlined text-red-600 text-lg">sell</span>
+</div>
+</div>
+<h3 class="text-2xl font-bold">Rp 1.240.000</h3>
+<p class="text-xs text-slate-400 mt-2">Dari 45 kupon promo digunakan</p>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
+<th class="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">No. Transaksi</th>
+<th class="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Tanggal</th>
+<th class="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Cabang</th>
+<th class="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Kasir</th>
+<th class="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Item</th>
+<th class="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Total</th>
+<th class="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Metode Bayar</th>
+<th class="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Status</th>
+<th class="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Aksi</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+<td class="px-6 py-4 font-mono text-xs font-bold text-primary">#TRX-98241</td>
+<td class="px-6 py-4 text-sm">
+<p class="font-medium">24 Jan 2024</p>
+<p class="text-[11px] text-slate-400">14:22 WIB</p>
+</td>
+<td class="px-6 py-4 text-sm text-slate-500">Sudirman Main</td>
+<td class="px-6 py-4 text-sm">Riana Putri</td>
+<td class="px-6 py-4 text-sm text-slate-500">3 Items</td>
+<td class="px-6 py-4 font-bold">Rp 145.000</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600">
+<span class="material-symbols-outlined text-lg">credit_card</span>
+                                    QRIS
+                                </span>
+</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 uppercase">
+                                    Paid
+                                </span>
+</td>
+<td class="px-6 py-4 text-right">
+<div class="flex items-center justify-end gap-2">
+<button class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-400 hover:text-primary title='Lihat Detail'">
+<span class="material-symbols-outlined text-xl">visibility</span>
+</button>
+<button class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-400 hover:text-primary title='Cetak Ulang'">
+<span class="material-symbols-outlined text-xl">print</span>
+</button>
+<button class="p-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg text-slate-400 hover:text-red-500 title='Refund'">
+<span class="material-symbols-outlined text-xl">assignment_return</span>
+</button>
+</div>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors bg-red-50/30 dark:bg-red-900/5">
+<td class="px-6 py-4 font-mono text-xs font-bold text-primary">#TRX-98240</td>
+<td class="px-6 py-4 text-sm">
+<p class="font-medium">24 Jan 2024</p>
+<p class="text-[11px] text-slate-400">12:05 WIB</p>
+</td>
+<td class="px-6 py-4 text-sm text-slate-500">Sudirman Main</td>
+<td class="px-6 py-4 text-sm">Riana Putri</td>
+<td class="px-6 py-4 text-sm text-slate-500">1 Item</td>
+<td class="px-6 py-4 font-bold text-red-500">Rp 45.000</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600">
+<span class="material-symbols-outlined text-lg">payments</span>
+                                    Cash
+                                </span>
+</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 uppercase">
+                                    Refunded
+                                </span>
+</td>
+<td class="px-6 py-4 text-right">
+<div class="flex items-center justify-end gap-2">
+<button class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-400 hover:text-primary">
+<span class="material-symbols-outlined text-xl">visibility</span>
+</button>
+<button class="p-1.5 opacity-30 cursor-not-allowed">
+<span class="material-symbols-outlined text-xl">print</span>
+</button>
+<button class="p-1.5 opacity-30 cursor-not-allowed">
+<span class="material-symbols-outlined text-xl">assignment_return</span>
+</button>
+</div>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+<td class="px-6 py-4 font-mono text-xs font-bold text-primary">#TRX-98239</td>
+<td class="px-6 py-4 text-sm">
+<p class="font-medium">23 Jan 2024</p>
+<p class="text-[11px] text-slate-400">18:45 WIB</p>
+</td>
+<td class="px-6 py-4 text-sm text-slate-500">Canggu Branch</td>
+<td class="px-6 py-4 text-sm">Budi Santoso</td>
+<td class="px-6 py-4 text-sm text-slate-500">12 Items</td>
+<td class="px-6 py-4 font-bold">Rp 1.250.000</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600">
+<span class="material-symbols-outlined text-lg">account_balance_wallet</span>
+                                    Bank Transfer
+                                </span>
+</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 uppercase">
+                                    Paid
+                                </span>
+</td>
+<td class="px-6 py-4 text-right">
+<div class="flex items-center justify-end gap-2">
+<button class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-400 hover:text-primary">
+<span class="material-symbols-outlined text-xl">visibility</span>
+</button>
+<button class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-400 hover:text-primary">
+<span class="material-symbols-outlined text-xl">print</span>
+</button>
+<button class="p-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg text-slate-400 hover:text-red-500">
+<span class="material-symbols-outlined text-xl">assignment_return</span>
+</button>
+</div>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+<td class="px-6 py-4 font-mono text-xs font-bold text-primary">#TRX-98238</td>
+<td class="px-6 py-4 text-sm">
+<p class="font-medium">23 Jan 2024</p>
+<p class="text-[11px] text-slate-400">16:10 WIB</p>
+</td>
+<td class="px-6 py-4 text-sm text-slate-500">Sudirman Main</td>
+<td class="px-6 py-4 text-sm">Siti Aminah</td>
+<td class="px-6 py-4 text-sm text-slate-500">5 Items</td>
+<td class="px-6 py-4 font-bold">Rp 320.000</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600">
+<span class="material-symbols-outlined text-lg">payments</span>
+                                    Cash
+                                </span>
+</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 uppercase">
+                                    Paid
+                                </span>
+</td>
+<td class="px-6 py-4 text-right">
+<div class="flex items-center justify-end gap-2">
+<button class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-400 hover:text-primary">
+<span class="material-symbols-outlined text-xl">visibility</span>
+</button>
+<button class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-400 hover:text-primary">
+<span class="material-symbols-outlined text-xl">print</span>
+</button>
+<button class="p-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg text-slate-400 hover:text-red-500">
+<span class="material-symbols-outlined text-xl">assignment_return</span>
+</button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="px-6 py-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/50">
+<span class="text-xs text-slate-500">Menampilkan 1 - 4 dari 1,284 transaksi</span>
+<div class="flex gap-2">
+<button class="px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold hover:bg-slate-50 disabled:opacity-50" disabled="">Sebelumnya</button>
+<button class="px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold hover:bg-slate-50">Selanjutnya</button>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4">
+<div class="p-6 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-800">
+<span class="material-symbols-outlined text-primary mb-3">auto_graph</span>
+<h5 class="font-bold mb-1">Analitik Penjualan</h5>
+<p class="text-xs text-slate-500 dark:text-slate-400">Tinjau produk terlaris dan jam sibuk untuk optimasi jadwal kasir Anda.</p>
+</div>
+<div class="p-6 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-800">
+<span class="material-symbols-outlined text-primary mb-3">account_balance</span>
+<h5 class="font-bold mb-1">Rekonsiliasi Bank</h5>
+<p class="text-xs text-slate-500 dark:text-slate-400">Cocokkan data transaksi POS dengan mutasi rekening bank secara otomatis.</p>
+</div>
+<div class="p-6 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-800">
+<span class="material-symbols-outlined text-primary mb-3">shield_person</span>
+<h5 class="font-bold mb-1">Log Keamanan</h5>
+<p class="text-xs text-slate-500 dark:text-slate-400">Pantau setiap pembatalan atau refund yang dilakukan oleh staf kasir.</p>
+</div>
+</div>
+</div>
+</main>
+<button class="fixed bottom-6 right-6 w-12 h-12 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full shadow-xl flex items-center justify-center text-slate-600 dark:text-slate-300 z-50 transition-all hover:scale-110 active:scale-95" onclick="document.documentElement.classList.toggle('dark')">
+<span class="material-symbols-outlined dark:hidden">dark_mode</span>
+<span class="material-symbols-outlined hidden dark:block">light_mode</span>
+</button>
+
+</body></html>
