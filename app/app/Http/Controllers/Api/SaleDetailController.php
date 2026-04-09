@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Discount;
 use App\Models\Payment;
 use App\Models\Sale;
 use App\Models\SaleItem;
@@ -39,6 +40,8 @@ class SaleDetailController extends Controller
             ->select([
                 'sales.id',
                 'sales.branch_id',
+                'sales.shift_id',
+                'sales.register_id',
                 'sales.customer_id',
                 'sales.subtotal',
                 'sales.discount',
@@ -62,7 +65,10 @@ class SaleDetailController extends Controller
             ->firstOrFail();
 
         $items = SaleItem::query()
-            ->join('products', 'products.id', '=', 'sale_items.product_id')
+            ->leftJoin('products', function ($join) {
+                $join->on('products.id', '=', 'sale_items.product_id')
+                    ->on('products.tenant_id', '=', 'sale_items.tenant_id');
+            })
             ->select([
                 'sale_items.id',
                 'sale_items.qty',
@@ -72,7 +78,8 @@ class SaleDetailController extends Controller
                 'products.sku as product_sku',
                 'products.image_url as product_image',
             ])
-            ->where('sale_items.sale_id', $sale)
+            ->when($tenantId, fn ($query) => $query->where('sale_items.tenant_id', $tenantId))
+            ->where('sale_items.sale_id', $saleRow->id)
             ->get()
             ->map(function ($item) {
                 $lineTotal = ((float) $item->price * (float) $item->qty) - (float) $item->discount;
@@ -90,19 +97,41 @@ class SaleDetailController extends Controller
             });
 
         $payments = Payment::query()
-            ->where('sale_id', $sale)
-            ->get(['method', 'amount'])
+            ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
+            ->where('sale_id', $saleRow->id)
+            ->get(['id', 'account_id', 'payment_method_id', 'method', 'amount'])
             ->map(function ($payment) {
                 return [
+                    'id' => $payment->id,
+                    'account_id' => $payment->account_id,
+                    'payment_method_id' => $payment->payment_method_id,
                     'method' => $payment->method,
                     'amount' => (float) $payment->amount,
                 ];
             });
 
+        $discounts = Discount::query()
+            ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
+            ->where('sale_id', $saleRow->id)
+            ->orderBy('created_at')
+            ->get(['type', 'value', 'notes'])
+            ->map(function ($discount) {
+                $notes = json_decode((string) $discount->notes, true);
+
+                return [
+                    'type' => $discount->type,
+                    'value' => (float) $discount->value,
+                    'notes' => is_array($notes) ? $notes : [],
+                ];
+            })
+            ->values();
+
         return response()->json([
             'sale' => [
                 'id' => $saleRow->id,
                 'branch_id' => $saleRow->branch_id,
+                'shift_id' => $saleRow->shift_id,
+                'register_id' => $saleRow->register_id,
                 'branch_name' => $saleRow->branch_name,
                 'customer_id' => $saleRow->customer_id,
                 'customer_name' => $saleRow->customer_name,
@@ -123,6 +152,7 @@ class SaleDetailController extends Controller
             ],
             'items' => $items,
             'payments' => $payments,
+            'discounts' => $discounts,
         ]);
     }
 }

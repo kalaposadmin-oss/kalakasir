@@ -3,6 +3,7 @@
 namespace Tests\Concerns;
 
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 trait BuildsCheckoutRequestFixture
@@ -39,6 +40,22 @@ trait BuildsCheckoutRequestFixture
             'name' => 'Main Warehouse',
             'is_default' => true,
         ]);
+
+        $registerId = (string) Str::uuid();
+
+        if (Schema::hasTable('registers')) {
+            \DB::table('registers')->insert([
+                'id' => $registerId,
+                'tenant_id' => $tenantId,
+                'branch_id' => $branchId,
+                'location_id' => $locationId,
+                'name' => 'Register A',
+                'device_uid' => 'fixture-'.substr(str_replace('-', '', $registerId), 0, 12),
+                'status' => 'active',
+                'created_at' => CarbonImmutable::now('UTC'),
+                'updated_at' => CarbonImmutable::now('UTC'),
+            ]);
+        }
 
         $productId = (string) Str::uuid();
         \DB::table('products')->insert([
@@ -105,11 +122,27 @@ trait BuildsCheckoutRequestFixture
             'updated_by' => $userId,
         ]);
 
+        $paymentMethodId = (string) Str::uuid();
+        if (Schema::hasTable('payment_methods')) {
+            \DB::table('payment_methods')->insert([
+                'id' => $paymentMethodId,
+                'tenant_id' => $tenantId,
+                'name' => 'Cash Fixture',
+                'method_type' => 'cash',
+                'is_active' => true,
+                'created_at' => CarbonImmutable::now('UTC'),
+                'updated_at' => CarbonImmutable::now('UTC'),
+            ]);
+        }
+
         return [
             'branch_id' => $branchId,
             'shift_id' => $shiftId,
+            'register_id' => $registerId,
             'location_id' => $locationId,
             'product_id' => $productId,
+            'cash_account_id' => $accountIds['cash_account_id'],
+            'payment_method_id' => $paymentMethodId,
         ];
     }
 
@@ -119,6 +152,7 @@ trait BuildsCheckoutRequestFixture
             'idempotency_key' => (string) Str::uuid(),
             'branch_id' => $fixture['branch_id'],
             'shift_id' => $fixture['shift_id'],
+            'register_id' => $fixture['register_id'],
             'transaction_date' => $transactionDate,
             'subtotal' => 10000,
             'discount' => 0,
@@ -135,9 +169,10 @@ trait BuildsCheckoutRequestFixture
             ],
             'payments' => [
                 [
-                    'account_id' => (string) Str::uuid(),
+                    'account_id' => $fixture['cash_account_id'],
                     'method' => 'cash',
                     'amount' => 10000,
+                    'payment_method_id' => $fixture['payment_method_id'] ?? null,
                 ],
             ],
         ];

@@ -8,6 +8,7 @@ use App\Exceptions\ShiftValidationException;
 use App\Models\InventoryBalance;
 use App\Models\JournalEntry;
 use App\Models\JournalItem;
+use App\Models\Discount;
 use App\Models\Payment;
 use App\Models\Product;
 use App\Models\Sale;
@@ -17,6 +18,7 @@ use App\Models\StockLedger;
 use App\Services\LockPeriodService;
 use App\Services\InventoryValuationService;
 use App\Services\AutoConsumeOnSellService;
+use App\Support\Decimal;
 use App\Support\TenantContext;
 use App\Events\SaleCompleted;
 use App\Services\AnomalyService;
@@ -38,7 +40,8 @@ class CheckoutService
             throw new InvalidArgumentException('Tenant tidak ditemukan.');
         }
 
-        $this->assertTotals($payload);
+        $discountCalculation = app(DiscountCalculationService::class)->calculate($payload);
+        $this->assertTotals($payload, $discountCalculation);
         $this->assertShift($payload, $tenantId, $userId);
 
         $existing = Sale::query()
@@ -59,21 +62,23 @@ class CheckoutService
         (new LockPeriodService())->ensureNotLocked($transactionDate, $tenantId);
 
         try {
-            return app(DatabaseTransactionService::class)->run(function () use ($payload, $tenantId, $userId, $now, $transactionDate): array {
+            return app(DatabaseTransactionService::class)->run(function () use ($payload, $tenantId, $userId, $now, $transactionDate, $discountCalculation): array {
                 $saleId = (string) Str::uuid();
                 $items = [];
                 $ledgerRows = [];
-                $cogsTotal = 0.0;
+                $discountRows = [];
+                $cogsTotal = Decimal::money(0);
                 $valuationService = app(InventoryValuationService::class);
                 $autoConsumeService = app(AutoConsumeOnSellService::class);
 
-                foreach ($payload['items'] as $item) {
+                foreach ($payload['items'] as $index => $item) {
                     $productId = $item['product_id'];
                     $locationId = $item['location_id'];
                     $productVariantId = $this->resolveVariantId($tenantId, $productId, Arr::get($item, 'product_variant_id'));
-                    $qty = (float) $item['qty'];
-                    $price = (float) $item['price'];
-                    $discount = (float) Arr::get($item, 'discount', 0);
+                    $qty = Decimal::qty($item['qty']);
+                    $price = Decimal::money($item['price']);
+                    $calculatedItem = $discountCalculation['items'][$index] ?? null;
+                    $discount = Decimal::money(Arr::get($calculatedItem, 'applied_discount_total', Arr::get($item, 'discount', 0)));
 
                     $product = Product::query()
                         ->where('tenant_id', $tenantId)
@@ -82,7 +87,7 @@ class CheckoutService
 
                     $saleItemId = (string) Str::uuid();
 
-                    $hppSnapshot = (float) $product->hpp_average;
+                    $hppSnapshot = Decimal::cost($product->hpp_average);
 
                     if ($product->track_stock) {
                         $affected = $this->decrementInventory(
@@ -102,13 +107,13 @@ class CheckoutService
                                     'source' => 'checkout',
                                     'product_id' => $productId,
                                     'location_id' => $locationId,
-                                    'requested_qty' => $qty,
+                                    'requested_qty' => Decimal::float($qty, Decimal::QTY_SCALE),
                                 ]
                             );
                             throw new InsufficientStockException($productId, $locationId);
                         }
 
-                        $balanceAfter = (float) InventoryBalance::query()
+                        $balanceAfter = Decimal::qty(InventoryBalance::query()
                             ->where('tenant_id', $tenantId)
                             ->where('product_id', $productId)
                             ->where('location_id', $locationId)
@@ -117,11 +122,12 @@ class CheckoutService
                             }, function ($query) {
                                 $query->whereNull('product_variant_id');
                             })
-                            ->value('qty_on_hand');
+                            ->value('qty_on_hand'));
 
                         $valuationResult = $valuationService->issue(
                             tenantId: $tenantId,
                             productId: $productId,
+                            productVariantId: $productVariantId,
                             locationId: $locationId,
                             qty: $qty,
                             referenceType: 'sale',
@@ -130,7 +136,7 @@ class CheckoutService
                             at: $now
                         );
 
-                        $hppSnapshot = (float) $valuationResult['unit_cost'];
+                        $hppSnapshot = Decimal::cost($valuationResult['unit_cost']);
 
                         $ledgerRows[] = [
                             'id' => (string) Str::uuid(),
@@ -154,7 +160,7 @@ class CheckoutService
                         saleId: $saleId,
                         saleItemId: $saleItemId,
                         soldProduct: $product,
-                        soldQty: $qty,
+                        soldQty: Decimal::float($qty, Decimal::QTY_SCALE),
                         locationId: $locationId,
                         userId: $userId,
                         at: $now
@@ -172,7 +178,32 @@ class CheckoutService
                         'hpp_snapshot' => $hppSnapshot,
                     ];
 
-                    $cogsTotal += $hppSnapshot * $qty;
+                    foreach ((array) Arr::get($calculatedItem, 'discount_breakdown', []) as $discountLine) {
+                        $discountRows[] = $this->makeDiscountRow(
+                            tenantId: $tenantId,
+                            saleId: $saleId,
+                            now: $now,
+                            type: sprintf('item_%s', $discountLine['type']),
+                            value: Decimal::float($discountLine['applied_value'], Decimal::MONEY_SCALE),
+                            notes: [
+                                'scope' => 'item',
+                                'sale_item_id' => $saleItemId,
+                                'product_id' => $productId,
+                                'label' => $discountLine['label'],
+                                'source' => $discountLine['source'],
+                                'reference_id' => $discountLine['reference_id'],
+                                'input_value' => $discountLine['value'],
+                                'basis_amount' => $discountLine['basis_amount'],
+                                'sequence' => $discountLine['sequence'],
+                            ],
+                        );
+                    }
+
+                    $cogsTotal = Decimal::add(
+                        $cogsTotal,
+                        Decimal::multiply($hppSnapshot, $qty, Decimal::MONEY_SCALE),
+                        Decimal::MONEY_SCALE
+                    );
                 }
 
                 Sale::query()->create([
@@ -182,10 +213,10 @@ class CheckoutService
                     'shift_id' => $payload['shift_id'],
                     'register_id' => $payload['register_id'],
                     'customer_id' => Arr::get($payload, 'customer_id'),
-                    'subtotal' => (float) $payload['subtotal'],
-                    'discount' => (float) $payload['discount'],
-                    'tax' => (float) $payload['tax'],
-                    'total' => (float) $payload['total'],
+                    'subtotal' => Decimal::float($discountCalculation['subtotal'], Decimal::MONEY_SCALE),
+                    'discount' => Decimal::float($discountCalculation['transaction_discount_total'], Decimal::MONEY_SCALE),
+                    'tax' => Decimal::float($payload['tax'], Decimal::MONEY_SCALE),
+                    'total' => Decimal::float($payload['total'], Decimal::MONEY_SCALE),
                     'status' => Sale::STATUS_COMPLETED,
                     'idempotency_key' => $payload['idempotency_key'],
                     'created_by' => $userId,
@@ -197,19 +228,42 @@ class CheckoutService
                 SaleItem::query()->insert($items);
                 StockLedger::query()->insert($ledgerRows);
 
+                foreach ((array) $discountCalculation['transaction_discounts'] as $discountLine) {
+                    $discountRows[] = $this->makeDiscountRow(
+                        tenantId: $tenantId,
+                        saleId: $saleId,
+                        now: $now,
+                        type: sprintf('transaction_%s', $discountLine['type']),
+                        value: Decimal::float($discountLine['applied_value'], Decimal::MONEY_SCALE),
+                        notes: [
+                            'scope' => 'transaction',
+                            'label' => $discountLine['label'],
+                            'source' => $discountLine['source'],
+                            'reference_id' => $discountLine['reference_id'],
+                            'input_value' => $discountLine['value'],
+                            'basis_amount' => $discountLine['basis_amount'],
+                            'sequence' => $discountLine['sequence'],
+                        ],
+                    );
+                }
+
+                if ($discountRows !== []) {
+                    Discount::query()->insert($discountRows);
+                }
+
                 $paymentRows = [];
-                $cashTotal = 0.0;
-                $bankTotal = 0.0;
+                $cashTotal = Decimal::money(0);
+                $bankTotal = Decimal::money(0);
 
                 foreach ($payload['payments'] as $payment) {
-                    $amount = (float) $payment['amount'];
+                    $amount = Decimal::money($payment['amount']);
                     $method = $payment['method'];
                     $paymentMethodId = $this->resolvePaymentMethodId($tenantId, Arr::get($payment, 'payment_method_id'), $method);
 
                     if ($method === 'cash') {
-                        $cashTotal += $amount;
+                        $cashTotal = Decimal::add($cashTotal, $amount, Decimal::MONEY_SCALE);
                     } else {
-                        $bankTotal += $amount;
+                        $bankTotal = Decimal::add($bankTotal, $amount, Decimal::MONEY_SCALE);
                     }
 
                     $paymentRows[] = [
@@ -228,10 +282,10 @@ class CheckoutService
                 $this->createJournalEntries(
                     tenantId: $tenantId,
                     saleId: $saleId,
-                    total: (float) $payload['total'],
-                    cashTotal: $cashTotal,
-                    bankTotal: $bankTotal,
-                    cogsTotal: $cogsTotal,
+                    total: Decimal::float($payload['total'], Decimal::MONEY_SCALE),
+                    cashTotal: Decimal::float($cashTotal, Decimal::MONEY_SCALE),
+                    bankTotal: Decimal::float($bankTotal, Decimal::MONEY_SCALE),
+                    cogsTotal: Decimal::float($cogsTotal, Decimal::MONEY_SCALE),
                     userId: $userId,
                     now: $now,
                     transactionDate: $transactionDate
@@ -243,7 +297,7 @@ class CheckoutService
                 event(new SaleCompleted(
                     saleId: $saleId,
                     tenantId: $tenantId,
-                    total: (float) $payload['total'],
+                    total: Decimal::float($payload['total'], Decimal::MONEY_SCALE),
                     actorId: $userId,
                     occurredAt: $now->toIso8601String(),
                     requestId: $requestId
@@ -312,39 +366,40 @@ class CheckoutService
         return false;
     }
 
-    private function assertTotals(array $payload): void
+    private function assertTotals(array $payload, array $discountCalculation): void
     {
-        $computedSubtotal = 0.0;
+        $computedSubtotal = Decimal::money($discountCalculation['subtotal'] ?? 0);
+        $payloadSubtotal = Decimal::money($payload['subtotal']);
 
-        foreach ($payload['items'] as $item) {
-            $qty = (float) $item['qty'];
-            $price = (float) $item['price'];
-            $discount = (float) Arr::get($item, 'discount', 0);
-            $computedSubtotal += ($qty * $price) - $discount;
-        }
-
-        $computedSubtotal = round($computedSubtotal, 2);
-        $payloadSubtotal = round((float) $payload['subtotal'], 2);
-
-        if ($computedSubtotal !== $payloadSubtotal) {
+        if (Decimal::compare($computedSubtotal, $payloadSubtotal) !== 0) {
             throw new InvalidArgumentException('Subtotal tidak valid.');
         }
 
-        $computedTotal = $computedSubtotal - (float) $payload['discount'] + (float) $payload['tax'];
-        $computedTotal = round($computedTotal, 2);
-        $payloadTotal = round((float) $payload['total'], 2);
+        $computedDiscount = Decimal::money($discountCalculation['transaction_discount_total'] ?? 0);
+        $payloadDiscount = Decimal::money($payload['discount']);
 
-        if ($computedTotal !== $payloadTotal) {
+        if (Decimal::compare($computedDiscount, $payloadDiscount) !== 0) {
+            throw new InvalidArgumentException('Diskon transaksi tidak valid.');
+        }
+
+        $computedTotal = Decimal::add(
+            Decimal::subtract($computedSubtotal, $computedDiscount, Decimal::MONEY_SCALE),
+            Decimal::money($payload['tax']),
+            Decimal::MONEY_SCALE
+        );
+        $payloadTotal = Decimal::money($payload['total']);
+
+        if (Decimal::compare($computedTotal, $payloadTotal) !== 0) {
             throw new InvalidArgumentException('Total tidak valid.');
         }
 
-        $paymentTotal = 0.0;
+        $paymentTotal = Decimal::money(0);
 
         foreach ($payload['payments'] as $payment) {
-            $paymentTotal += (float) $payment['amount'];
+            $paymentTotal = Decimal::add($paymentTotal, Decimal::money($payment['amount']), Decimal::MONEY_SCALE);
         }
 
-        if (round($paymentTotal, 2) !== $payloadTotal) {
+        if (Decimal::compare($paymentTotal, $payloadTotal) !== 0) {
             throw new InvalidArgumentException('Total pembayaran tidak sama dengan total transaksi.');
         }
     }
@@ -456,11 +511,17 @@ class CheckoutService
             return $variantId;
         }
 
-        return DB::table('product_variants')
+        $resolved = DB::table('product_variants')
             ->where('tenant_id', $tenantId)
             ->where('product_id', $productId)
             ->orderBy('created_at')
             ->value('id');
+
+        if ($resolved) {
+            throw new InvalidArgumentException('Produk varian memerlukan product_variant_id.');
+        }
+
+        return null;
     }
 
     private function decrementInventory(
@@ -503,5 +564,24 @@ class CheckoutService
             ->where('method_type', $method)
             ->orderBy('created_at')
             ->value('id');
+    }
+
+    private function makeDiscountRow(
+        string $tenantId,
+        string $saleId,
+        CarbonImmutable $now,
+        string $type,
+        float $value,
+        array $notes
+    ): array {
+        return [
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $tenantId,
+            'sale_id' => $saleId,
+            'type' => $type,
+            'value' => Decimal::float($value, Decimal::MONEY_SCALE),
+            'notes' => json_encode($notes, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'created_at' => $now,
+        ];
     }
 }
