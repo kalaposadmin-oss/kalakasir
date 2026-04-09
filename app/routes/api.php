@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\FeeProductController;
 use App\Http\Controllers\Api\FinanceReportController;
 use App\Http\Controllers\Api\FinanceControlDashboardController;
 use App\Http\Controllers\Api\InventoryAlertController;
+use App\Http\Controllers\Api\InventoryReportController;
 use App\Http\Controllers\Api\LockPeriodController;
 use App\Http\Controllers\Api\LoyaltyController;
 use App\Http\Controllers\Api\ObservabilityController;
@@ -62,6 +63,11 @@ Route::prefix('v1')
         Route::post('finance-control-daily/snapshot', [FinanceControlDashboardController::class, 'snapshot'])->middleware('role:admin,owner');
         Route::get('finance-control-daily/export', [FinanceControlDashboardController::class, 'export']);
         Route::get('inventory-alerts', [InventoryAlertController::class, 'index']);
+        Route::get('reports/inventory/summary', [InventoryReportController::class, 'summary'])->middleware('role:warehouse,supervisor,admin,owner');
+        Route::get('reports/inventory/low-stock', [InventoryReportController::class, 'lowStock'])->middleware('role:warehouse,supervisor,admin,owner');
+        Route::get('reports/inventory/export/csv', [InventoryReportController::class, 'exportCsv'])->middleware('role:warehouse,supervisor,admin,owner');
+        Route::get('reports/inventory/export/pdf', [InventoryReportController::class, 'exportPdf'])->middleware('role:warehouse,supervisor,admin,owner');
+        Route::get('reports/inventory/stock-card/{product}/export/csv', [InventoryReportController::class, 'exportStockCardCsv'])->middleware('role:warehouse,supervisor,admin,owner');
         Route::get('lock-periods', [LockPeriodController::class, 'index']);
         Route::get('loyalty', [LoyaltyController::class, 'index']);
         Route::get('observability/health', ObservabilityController::class)->middleware('role:admin');
@@ -155,6 +161,7 @@ Route::prefix('v1')
         Route::post('sales/{sale}/void', VoidSaleController::class)->middleware('role:cashier,supervisor,admin,owner');
         Route::put('branches/{branch}', [BranchController::class, 'update'])->middleware('role:admin');
     });
+
 
 
 

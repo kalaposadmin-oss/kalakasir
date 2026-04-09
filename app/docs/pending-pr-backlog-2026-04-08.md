@@ -142,6 +142,9 @@ Dokumen referensi:
 - `docs/pr-summary-refund-legacy-audit-2026-04-09.md`
 - `docs/pr-ready-refund-legacy-audit-2026-04-09.md`
 - `docs/commit-message-refund-legacy-audit-2026-04-09.md`
+- `docs/pr-summary-inventory-reporting-2026-04-09.md`
+- `docs/pr-ready-inventory-reporting-2026-04-09.md`
+- `docs/commit-message-inventory-reporting-2026-04-09.md`
 
 Prioritas risiko:
 
