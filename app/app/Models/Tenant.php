@@ -17,6 +17,7 @@ class Tenant extends Model
         'name',
         'timezone',
         'inventory_valuation_method',
+        'business_category',
         'domain',
         'subdomain',
         'logo_url',

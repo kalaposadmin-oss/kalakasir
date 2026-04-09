@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Branch;
 use App\Models\Shift;
 use App\Models\User;
+use App\Services\TenantDefaultRoleSetupService;
 use App\Support\TenantContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -24,6 +25,7 @@ class UserManagementController extends Controller
         $roles = DB::table('roles')
             ->where('tenant_id', $tenantId)
             ->select(['id', 'name'])
+            ->orderByRaw("case lower(name) when 'owner' then 1 when 'admin' then 2 when 'manager' then 3 when 'kasir' then 4 when 'staf gudang' then 5 else 99 end")
             ->orderBy('name')
             ->get();
 
@@ -43,8 +45,13 @@ class UserManagementController extends Controller
             }
         }
 
-        $branchMap = Branch::query()->get(['id', 'name'])->keyBy('id');
+        $branchMap = Branch::query()
+            ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
+            ->get(['id', 'name'])
+            ->keyBy('id');
+
         $shiftRows = Shift::query()
+            ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
             ->orderByDesc('opened_at')
             ->get(['user_id', 'branch_id', 'opened_at']);
 
@@ -55,7 +62,10 @@ class UserManagementController extends Controller
             }
         }
 
-        $users = User::query()->orderBy('name')->get(['id', 'name', 'email', 'deleted_at']);
+        $users = User::query()
+            ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
+            ->orderBy('name')
+            ->get(['id', 'name', 'email', 'deleted_at']);
         $rows = $users->map(function ($user) use ($roleMap, $branchMap, $shiftMap) {
             $branchName = null;
             if (isset($shiftMap[$user->id])) {
@@ -72,7 +82,10 @@ class UserManagementController extends Controller
             ];
         });
 
-        $activeSessions = Shift::query()->where('status', 'open')->count();
+        $activeSessions = Shift::query()
+            ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
+            ->where('status', 'open')
+            ->count();
 
         return response()->json([
             'total_staff' => $rows->count(),
@@ -156,7 +169,10 @@ class UserManagementController extends Controller
             'status' => ['nullable', Rule::in(['active', 'inactive'])],
         ]);
 
-        $userRow = User::withTrashed()->where('id', $user)->firstOrFail();
+        $userRow = User::withTrashed()
+            ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
+            ->where('id', $user)
+            ->firstOrFail();
 
         if (($payload['status'] ?? 'active') === 'inactive') {
             if (! $userRow->trashed()) {
@@ -208,27 +224,7 @@ class UserManagementController extends Controller
             return;
         }
 
-        $exists = DB::table('roles')
-            ->where('tenant_id', $tenantId)
-            ->exists();
-
-        if ($exists) {
-            return;
-        }
-
-        $now = now();
-        $roles = ['Admin', 'Manager', 'Kasir', 'Staf Gudang'];
-        $rows = [];
-
-        foreach ($roles as $role) {
-            $rows[] = [
-                'id' => (string) Str::uuid(),
-                'tenant_id' => $tenantId,
-                'name' => $role,
-            ];
-        }
-
-        DB::table('roles')->insert($rows);
+        app(TenantDefaultRoleSetupService::class)->ensure($tenantId);
     }
 
     private function assignRole(string $tenantId, string $userId, string $roleId): void

@@ -24,6 +24,10 @@ Hotfix ini hanya memperbaiki parse error PHP pada `app/Services/TenantDefaultRol
 
 `fix(app): remove stray characters from tenant default role setup service`
 
+## Actual Commit
+
+- `3fe4b86` `fix(app): remove stray characters from tenant default role setup service`
+
 ## Exact Stage List
 
 Jika hotfix ini dipisah dari PR web-route, stage hanya file berikut:
