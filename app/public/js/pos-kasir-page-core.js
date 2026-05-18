@@ -38,6 +38,10 @@ if (!window.__posKasirPageInitialized) {
             savedOrderSheetClose: document.getElementById('saved-order-sheet-close'),
             savedOrderSheetOverlay: document.getElementById('saved-order-sheet-overlay'),
             savedOrderSheetCount: document.getElementById('saved-order-sheet-count'),
+            receivableQuickTrigger: document.getElementById('receivable-quick-trigger'),
+            receivableSheet: document.getElementById('receivable-sheet'),
+            receivableSheetClose: document.getElementById('receivable-sheet-close'),
+            receivableSheetOverlay: document.getElementById('receivable-sheet-overlay'),
             categoryFilters: document.getElementById('category-filters'),
             productGrid: document.getElementById('product-grid'),
             productViewList: document.getElementById('product-view-list'),
@@ -2128,6 +2132,17 @@ if (!window.__posKasirPageInitialized) {
         el.savedOrderQuickTrigger?.addEventListener('click', openSavedOrderSheet);
         el.savedOrderSheetClose?.addEventListener('click', closeSavedOrderSheet);
         el.savedOrderSheetOverlay?.addEventListener('click', closeSavedOrderSheet);
+        el.receivableQuickTrigger?.addEventListener('click', () => {
+            if (el.receivableSheet) {
+                el.receivableSheet.classList.remove('hidden');
+            }
+        });
+        el.receivableSheetClose?.addEventListener('click', () => {
+            el.receivableSheet?.classList.add('hidden');
+        });
+        el.receivableSheetOverlay?.addEventListener('click', () => {
+            el.receivableSheet?.classList.add('hidden');
+        });
         el.customer?.addEventListener('change', () => {
             saveCartDraft();
             renderCustomers();

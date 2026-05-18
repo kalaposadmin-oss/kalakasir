@@ -72,7 +72,7 @@
                 </div>
 
                 <div class="flex items-center gap-2">
-                    <button id="customer-quick-trigger" class="inline-flex flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-left shadow-sm" type="button">
+                    <button id="customer-quick-trigger" title="Pilih pelanggan" class="cursor-pointer inline-flex flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-left shadow-sm" type="button">
                         <span class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
                             <span class="material-symbols-outlined text-[18px]">person</span>
                         </span>
@@ -84,13 +84,13 @@
                         <p class="text-[10px] font-bold uppercase tracking-[0.22em] text-primary">Edit Transaksi</p>
                         <p id="editing-sale-badge-text" class="truncate text-[11px] font-semibold text-slate-700">Data awal dimuat</p>
                     </div>
-                    <button id="saved-order-quick-trigger" class="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-2 shadow-sm" type="button">
+                    <button id="saved-order-quick-trigger" title="Pesanan tersimpan" class="cursor-pointer inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-2 shadow-sm" type="button">
                         <span class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
                             <span class="material-symbols-outlined text-[18px]">ink_pen</span>
                         </span>
                         <span id="saved-order-count-label" class="text-[11px] font-bold text-slate-800">0</span>
                     </button>
-                    <button id="receivable-quick-trigger" class="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-2 shadow-sm" type="button">
+                    <button id="receivable-quick-trigger" title="Piutang" class="cursor-pointer inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-2 shadow-sm" type="button">
                         <span class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-rose-100 text-rose-600">
                             <span class="material-symbols-outlined text-[18px]">request_quote</span>
                         </span>
@@ -107,7 +107,7 @@
                             <span class="h-2 w-2 shrink-0 rounded-full bg-emerald-500" id="shift-indicator"></span>
                             <p class="text-[10px] font-bold text-emerald-700" id="cashier-name">Kasir</p>
                             <span class="text-[10px] text-emerald-300">|</span>
-                            <p class="text-[10px] text-emerald-600" id="shift-opened-time">12:00</p>
+                            <p class="text-[10px] text-emerald-600" id="shift-opened-time">-</p>
                         </div>
                         <div class="inline-flex shrink-0 rounded-2xl bg-slate-100 p-0.5 shadow-inner">
                             <button id="product-view-list" class="inline-flex items-center gap-1 rounded-xl px-2.5 py-1.5 text-[11px] font-bold text-slate-700" type="button">
