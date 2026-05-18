@@ -2,7 +2,7 @@
 <html class="light" lang="id">
     <head>
         <meta charset="utf-8" />
-        <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+        <meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport" />
         <meta name="csrf-token" content="{{ csrf_token() }}" />
         <meta name="tenant-id" content="{{ $tenantId ?? '' }}" />
         <title>@yield('page_title', 'POS SaaS')</title>
@@ -12,27 +12,47 @@
             body {
                 font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
                 letter-spacing: 0;
+                min-height: 100vh;
+                min-height: 100svh;
                 height: 100dvh;
                 overflow: hidden;
                 background: #f8fafc;
             }
             :root {
-                --app-bottom-safe-space: calc(7rem + env(safe-area-inset-bottom));
+                --app-device-bottom-inset: env(safe-area-inset-bottom, 0px);
+                --app-bottom-safe-space: calc(8rem + var(--app-device-bottom-inset));
+                --app-footer-safe-space: max(1.5rem, calc(1rem + var(--app-device-bottom-inset)));
                 --app-page-bg: #f8fafc;
                 --app-panel-bg: #ffffff;
                 --app-border: #e2e8f0;
                 --app-muted: #64748b;
                 --app-soft-shadow: 0 1px 2px rgb(15 23 42 / 0.06), 0 1px 6px rgb(15 23 42 / 0.04);
             }
+            .app-shell-page {
+                height: 100vh;
+                height: 100svh;
+                height: 100dvh;
+                max-height: 100dvh;
+            }
+            .app-mobile-drawer {
+                min-height: 0;
+                max-height: 100dvh;
+                overflow: hidden;
+            }
+            .app-menu-scroll {
+                min-height: 0;
+                overscroll-behavior: contain;
+                -webkit-overflow-scrolling: touch;
+            }
             .app-bottom-safe-space {
                 padding-bottom: var(--app-bottom-safe-space);
                 scroll-padding-bottom: var(--app-bottom-safe-space);
             }
             .app-bottom-safe-footer {
-                padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+                padding-bottom: var(--app-footer-safe-space);
             }
             .app-bottom-floating {
-                bottom: calc(1rem + env(safe-area-inset-bottom));
+                bottom: calc(1rem + var(--app-device-bottom-inset));
             }
             .material-symbols-outlined {
                 width: 1em;

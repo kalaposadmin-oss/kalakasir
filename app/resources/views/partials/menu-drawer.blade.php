@@ -267,7 +267,7 @@
             </div>
         </header>
 
-        <nav class="flex-1 overflow-y-auto px-3 py-4">
+        <nav class="app-menu-scroll min-h-0 flex-1 overflow-y-auto px-3 py-4">
             @include('partials.menu-items', ['menuRenderVariant' => 'desktop'])
         </nav>
 
@@ -287,8 +287,8 @@
 
 <div id="menu-overlay" class="{{ $activePortal === 'backoffice' ? 'fixed lg:hidden' : 'absolute' }} inset-0 z-50 hidden overflow-hidden">
     <div class="absolute inset-0 bg-slate-950/50 backdrop-blur-sm" data-menu-close></div>
-    <aside id="menu-drawer" class="absolute left-0 top-0 flex h-full w-[21rem] max-w-[88vw] -translate-x-full flex-col bg-white shadow-2xl transition-transform duration-300 dark:bg-slate-950">
-        <header class="border-b border-slate-200 px-4 pb-4 pt-5 dark:border-slate-800">
+    <aside id="menu-drawer" class="app-mobile-drawer absolute left-0 top-0 flex h-full min-h-0 w-[21rem] max-w-[88vw] -translate-x-full flex-col overflow-hidden bg-white shadow-2xl transition-transform duration-300 dark:bg-slate-950">
+        <header class="shrink-0 border-b border-slate-200 px-4 pb-4 pt-5 dark:border-slate-800">
             <div class="mb-4 flex items-center justify-between">
                 <p class="text-xs font-bold uppercase tracking-[0.24em] text-slate-400">Menu</p>
                 <button class="flex size-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-slate-100" data-menu-close type="button" aria-label="Tutup menu">
@@ -316,7 +316,7 @@
             </div>
         </header>
 
-        <nav class="flex-1 overflow-y-auto px-4 py-5">
+        <nav class="app-menu-scroll min-h-0 flex-1 overflow-y-auto px-4 pt-5 app-bottom-safe-space">
             @include('partials.menu-items', ['menuRenderVariant' => 'mobile'])
         </nav>
     </aside>
