@@ -13,6 +13,27 @@ class DailySalesSummaryService
 {
     public function applySale(string $tenantId, string $saleId, int $multiplier = 1): void
     {
+        try {
+            app(SalesCostReadinessService::class)->assertSaleHasAggregate($tenantId, $saleId, 'daily-sales-summary');
+        } catch (\Throwable $exception) {
+            app(SystemHealthEventService::class)->recordOrBump('daily_summary_refresh_failed', [
+                'tenant_id' => $tenantId,
+                'entity_type' => 'sale',
+                'entity_id' => $saleId,
+                'summary' => 'Daily sales summary refresh blocked because sale aggregate COGS is invalid.',
+                'payload' => [
+                    'sale_id' => $saleId,
+                    'multiplier' => $multiplier,
+                    'message' => $exception->getMessage(),
+                    'context' => 'daily-sales-summary',
+                ],
+                'source' => 'daily-sales-summary',
+                'dedupe_key' => 'daily_summary_refresh_failed:'.$tenantId.':'.$saleId,
+            ]);
+
+            throw $exception;
+        }
+
         $sale = Sale::query()
             ->where('tenant_id', $tenantId)
             ->where('id', $saleId)
@@ -27,11 +48,7 @@ class DailySalesSummaryService
         $date = $sale->transaction_date
             ?: CarbonImmutable::parse($sale->created_at)->toDateString();
 
-        $cost = Decimal::money(DB::table('sale_items')
-            ->where('tenant_id', $tenantId)
-            ->where('sale_id', $saleId)
-            ->selectRaw('sum(qty * hpp_snapshot) as total')
-            ->value('total'));
+        $cost = app(SalesCostReadinessService::class)->aggregatedTotalForSale($tenantId, $saleId);
 
         $sales = Decimal::multiply(Decimal::money($sale->total), (string) $multiplier, Decimal::MONEY_SCALE);
         $tax = Decimal::multiply(Decimal::money($sale->tax), (string) $multiplier, Decimal::MONEY_SCALE);

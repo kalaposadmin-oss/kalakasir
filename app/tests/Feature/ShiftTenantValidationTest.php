@@ -6,6 +6,7 @@ use App\Models\Branch;
 use App\Models\Shift;
 use App\Models\Tenant;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Tests\Concerns\BootsApiTenantUser;
@@ -69,6 +70,71 @@ class ShiftTenantValidationTest extends TestCase
             ]);
 
         $this->assertValidationErrorKey($response, 'shift_id');
+    }
+
+    public function test_shift_open_requires_reconciliation_for_expired_shift_before_new_open(): void
+    {
+        [$tenant, $user] = $this->bootApiActor('cashier', 'cashier+shift-reconcile-required@example.test');
+        $tenant->update(['timezone' => 'Asia/Jakarta']);
+
+        $branch = Branch::query()->create([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $tenant->id,
+            'name' => 'Main Branch',
+        ]);
+
+        $expiredShift = Shift::query()->create([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $tenant->id,
+            'branch_id' => $branch->id,
+            'user_id' => $user->id,
+            'opened_at' => CarbonImmutable::parse('2026-02-26 10:00:00', 'UTC'),
+            'closed_at' => null,
+            'opening_cash' => 50000,
+            'closing_cash' => 0,
+            'system_cash_total' => 0,
+            'difference' => 0,
+            'status' => 'open',
+        ]);
+
+        $openResponse = $this->withHeaders($this->tenantHeaders($tenant->id))
+            ->postJson('/api/v1/shifts/open', [
+                'branch_id' => $branch->id,
+                'opening_cash' => 25000,
+            ]);
+
+        $openResponse->assertStatus(422)
+            ->assertJsonPath('code', 'SHIFT_RECONCILIATION_REQUIRED')
+            ->assertJsonPath('pending_shift_id', $expiredShift->id);
+
+        $expiredShift->refresh();
+        $this->assertSame('closed', $expiredShift->status);
+        $this->assertTrue((bool) $expiredShift->requires_reconciliation);
+
+        $reconcileResponse = $this->withHeaders($this->tenantHeaders($tenant->id))
+            ->postJson('/api/v1/shifts/reconcile-overnight', [
+                'shift_id' => $expiredShift->id,
+                'closing_cash' => 52000,
+                'close_note' => 'Kas sudah dihitung ulang pagi ini.',
+            ]);
+
+        $reconcileResponse->assertOk()
+            ->assertJsonPath('status', 'reconciled')
+            ->assertJsonPath('shift.requires_reconciliation', false)
+            ->assertJsonPath('shift.closing_cash', 52000);
+
+        $expiredShift->refresh();
+        $this->assertFalse((bool) $expiredShift->requires_reconciliation);
+        $this->assertSame(52000.0, (float) $expiredShift->closing_cash);
+
+        $secondOpenResponse = $this->withHeaders($this->tenantHeaders($tenant->id))
+            ->postJson('/api/v1/shifts/open', [
+                'branch_id' => $branch->id,
+                'opening_cash' => 25000,
+            ]);
+
+        $secondOpenResponse->assertCreated()
+            ->assertJsonPath('shift.status', 'open');
     }
 
     private function createOtherTenantActor(string $tenantName): array

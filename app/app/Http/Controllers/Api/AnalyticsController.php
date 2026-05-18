@@ -2,39 +2,64 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Exceptions\MissingSalesCostAggregateException;
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
 use App\Models\Location;
 use App\Models\Payment;
 use App\Models\Sale;
 use App\Services\AnalyticsMetricsService;
+use App\Services\SalesCostReadinessService;
+use App\Services\SystemHealthEventService;
 use App\Support\Decimal;
 use App\Support\TenantContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 class AnalyticsController extends Controller
 {
     public function __invoke(Request $request)
     {
-        $tenantId = TenantContext::id();
-        $preset = $request->query('preset', $request->query('range', 'thisMonth'));
-        $from = $request->query('start_date', $request->query('from'));
-        $to = $request->query('end_date', $request->query('to'));
+        $startedAt = microtime(true);
+        $tenantId = null;
 
-        [$startUtc, $endExclusiveUtc, $rangeMeta, $startLocal, $endLocal] = $this->resolveRange($preset, $from, $to);
+        try {
+            $tenantId = TenantContext::id();
+            $preset = $request->query('preset', $request->query('range', 'thisMonth'));
+            $from = $request->query('start_date', $request->query('from'));
+            $to = $request->query('end_date', $request->query('to'));
 
-        $todayLocal = CarbonImmutable::now('Asia/Jakarta')->startOfDay();
-        $todayStart = $todayLocal->setTimezone('UTC');
-        $todayEnd = $todayLocal->endOfDay()->setTimezone('UTC');
-        $yesterdayLocal = $todayLocal->subDay();
-        $yesterdayStart = $yesterdayLocal->setTimezone('UTC');
-        $yesterdayEnd = $yesterdayLocal->endOfDay()->setTimezone('UTC');
+            [$startUtc, $endExclusiveUtc, $rangeMeta, $startLocal, $endLocal] = $this->resolveRange($preset, $from, $to);
+            $cacheKey = sprintf(
+                'analytics:%s:%s:%s:%s',
+                $tenantId ?: 'no-tenant',
+                $rangeMeta['preset'] ?? $preset,
+                $rangeMeta['start_date'] ?? 'na',
+                $rangeMeta['end_date'] ?? 'na'
+            );
+            if ($tenantId && ! $request->boolean('fresh') && is_array($cached = Cache::get($cacheKey))) {
+                return response()->json($cached);
+            }
 
-        $metricsService = app(AnalyticsMetricsService::class);
-        $todaySummary = $metricsService->summaryForBusinessDate($tenantId, $todayLocal->toDateString());
-        $yesterdaySummary = $metricsService->summaryForBusinessDate($tenantId, $yesterdayLocal->toDateString());
+            $todayLocal = CarbonImmutable::now('Asia/Jakarta')->startOfDay();
+            $todayStart = $todayLocal->setTimezone('UTC');
+            $todayEnd = $todayLocal->endOfDay()->setTimezone('UTC');
+            $yesterdayLocal = $todayLocal->subDay();
+            $yesterdayStart = $yesterdayLocal->setTimezone('UTC');
+            $yesterdayEnd = $yesterdayLocal->endOfDay()->setTimezone('UTC');
+
+            app(SalesCostReadinessService::class)->assertNoMissingCompletedSalesForBusinessDateRange(
+                $tenantId,
+                $rangeMeta['start_date'],
+                $rangeMeta['end_date'],
+                'analytics'
+            );
+
+            $metricsService = app(AnalyticsMetricsService::class);
+            $todaySummary = $metricsService->summaryForBusinessDate($tenantId, $todayLocal->toDateString());
+            $yesterdaySummary = $metricsService->summaryForBusinessDate($tenantId, $yesterdayLocal->toDateString());
 
         $todayRevenue = Decimal::float($todaySummary['revenue'] ?? 0, Decimal::MONEY_SCALE);
         $yesterdayRevenue = Decimal::float($yesterdaySummary['revenue'] ?? 0, Decimal::MONEY_SCALE);
@@ -233,29 +258,60 @@ class AnalyticsController extends Controller
                 ->first()
             : null;
 
-        return response()->json([
-            'date' => $todayLocal->toDateString(),
-            'location_label' => $location ? $location->name : 'Lokasi',
-            'branch_label' => $branch ? $branch->name : 'Branch',
-            'revenue' => [
-                'today' => $todayRevenue,
-                'yesterday' => $yesterdayRevenue,
-            ],
-            'orders' => [
-                'today' => $todayOrders,
-                'yesterday' => $yesterdayOrders,
-            ],
-            'profit' => [
-                'today' => $todayProfit,
-                'yesterday' => $yesterdayProfit,
-            ],
-            'range' => $rangeMeta,
-            'summary' => $rangeTotals,
-            'daily' => $daily,
-            'trend' => $trend,
-            'top_products' => $topProducts,
-            'payments' => $payments,
+            $payload = [
+                'date' => $todayLocal->toDateString(),
+                'location_label' => $location ? $location->name : 'Lokasi',
+                'branch_label' => $branch ? $branch->name : 'Branch',
+                'revenue' => [
+                    'today' => $todayRevenue,
+                    'yesterday' => $yesterdayRevenue,
+                ],
+                'orders' => [
+                    'today' => $todayOrders,
+                    'yesterday' => $yesterdayOrders,
+                ],
+                'profit' => [
+                    'today' => $todayProfit,
+                    'yesterday' => $yesterdayProfit,
+                ],
+                'range' => $rangeMeta,
+                'summary' => $rangeTotals,
+                'daily' => $daily,
+                'trend' => $trend,
+                'top_products' => $topProducts,
+                'payments' => $payments,
+            ];
+
+            Cache::put($cacheKey, $payload, now('UTC')->addSeconds(45));
+
+            $response = response()->json($payload);
+        } catch (MissingSalesCostAggregateException $exception) {
+            app(SystemHealthEventService::class)->recordOrBump('strict_reader_blocked', [
+                'tenant_id' => $tenantId,
+                'entity_type' => 'report_endpoint',
+                'entity_id' => 'analytics',
+                'summary' => 'Strict reader blocked analytics because aggregate COGS is invalid.',
+                'payload' => [
+                    'endpoint' => 'analytics',
+                    'query' => $request->query(),
+                    'details' => $exception->details(),
+                ],
+                'source' => 'analytics-controller',
+                'dedupe_key' => 'strict_reader_blocked:'.($tenantId ?? 'unknown').':analytics:'.sha1(json_encode($request->query(), JSON_UNESCAPED_SLASHES)),
+            ]);
+
+            $response = response()->json([
+                'code' => 'SALES_COST_AGGREGATE_REQUIRED',
+                'message' => $exception->getMessage(),
+                'details' => $exception->details(),
+            ], 409);
+        }
+
+        $this->recordSlowQueryIfNeeded($tenantId, 'analytics', $startedAt, [
+            'query' => $request->query(),
         ]);
+
+        return $response;
     }
 
     private function resolveRange(string $preset, ?string $from, ?string $to): array
@@ -313,6 +369,30 @@ class AnalyticsController extends Controller
         }
 
         return [$fromLocal, $toLocal, 'Periode Kustom'];
+    }
+
+    private function recordSlowQueryIfNeeded(?string $tenantId, string $endpoint, float $startedAt, array $payload = []): void
+    {
+        $durationMs = (microtime(true) - $startedAt) * 1000;
+        $thresholdMs = max(1, (int) config('system_health.report_slow_ms', 1500));
+
+        if ($tenantId === null || $durationMs < $thresholdMs) {
+            return;
+        }
+
+        app(SystemHealthEventService::class)->recordOrBump('report_query_slow', [
+            'tenant_id' => $tenantId,
+            'entity_type' => 'report_endpoint',
+            'entity_id' => $endpoint,
+            'summary' => 'Report query exceeded slow threshold.',
+            'payload' => array_merge($payload, [
+                'endpoint' => $endpoint,
+                'duration_ms' => round($durationMs, 2),
+                'threshold_ms' => $thresholdMs,
+            ]),
+            'source' => 'report-query',
+            'dedupe_key' => 'report_query_slow:'.$tenantId.':'.$endpoint,
+        ]);
     }
 
     private function buildDailySummary(string $tenantId, CarbonImmutable $startUtc, CarbonImmutable $endExclusiveUtc, CarbonImmutable $startLocal, CarbonImmutable $endLocal): array
@@ -382,10 +462,16 @@ class AnalyticsController extends Controller
             ->orderBy('date')
             ->get();
 
+        $saleItemAggregateCogs = app(SalesCostReadinessService::class)->saleItemAggregateTotalsSubquery($tenantId);
+
         $profitRows = DB::table('sale_items')
             ->join('sales', function ($join) {
                 $join->on('sales.id', '=', 'sale_items.sale_id')
                     ->on('sales.tenant_id', '=', 'sale_items.tenant_id');
+            })
+            ->joinSub($saleItemAggregateCogs, 'item_cost_totals', function ($join) {
+                $join->on('item_cost_totals.sale_item_id', '=', 'sale_items.id')
+                    ->on('item_cost_totals.tenant_id', '=', 'sale_items.tenant_id');
             })
             ->where('sales.tenant_id', $tenantId)
             ->where('sale_items.tenant_id', $tenantId)
@@ -393,7 +479,7 @@ class AnalyticsController extends Controller
             ->where('sales.created_at', '>=', $startUtc)
             ->where('sales.created_at', '<', $endExclusiveUtc)
             ->selectRaw('DATE(sales.created_at) as date')
-            ->selectRaw('sum((sale_items.qty * sale_items.price) - sale_items.discount - (sale_items.qty * sale_items.hpp_snapshot)) as profit')
+            ->selectRaw('sum((sale_items.qty * sale_items.price) - sale_items.discount - item_cost_totals.aggregated_cost) as profit')
             ->groupBy('date')
             ->orderBy('date')
             ->get();

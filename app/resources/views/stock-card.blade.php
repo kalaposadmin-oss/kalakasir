@@ -9,9 +9,24 @@
 @endpush
 
 @php
-    $stockCardCurrentPath = $currentPath ?? '/backoffice/inventory/products/'.((string) ($productId ?? request()->query('product_id', ''))).'/stock-card';
-    $stockCardBackUrl = $backUrl ?? '/backoffice/reports/inventory';
+    $stockCardPortalPrefix = request()->is('pos/*') ? '/pos' : '/backoffice';
     $resolvedProductId = (string) ($productId ?? request()->query('product_id', ''));
+    $stockCardFrom = trim((string) request()->query('from', ''));
+    $stockCardCurrentPath = $currentPath ?? ($resolvedProductId !== ''
+        ? $stockCardPortalPrefix.'/inventory/products/'.$resolvedProductId.'/stock-card'
+        : $stockCardPortalPrefix.'/inventory/stock-card');
+    $stockCardBackUrl = $backUrl ?? ($stockCardPortalPrefix === '/pos' ? '/pos/inventory' : '/backoffice/reports/inventory');
+    if ($stockCardFrom !== '' && ! isset($backUrl)) {
+        if (str_starts_with($stockCardFrom, $stockCardPortalPrefix.'/')) {
+            $stockCardBackUrl = $stockCardFrom;
+        } elseif ($stockCardPortalPrefix === '/backoffice' && str_starts_with($stockCardFrom, '/pos/')) {
+            $stockCardBackUrl = '/portal/switch/pos?next='.rawurlencode($stockCardFrom);
+        } elseif ($stockCardPortalPrefix === '/pos' && str_starts_with($stockCardFrom, '/backoffice/')) {
+            $stockCardBackUrl = '/portal/switch/backoffice?next='.rawurlencode($stockCardFrom);
+        }
+    }
+    $stockCardBackUrl = normalize_pos_home_url($stockCardBackUrl);
+    $resolvedProductVariantId = (string) request()->query('product_variant_id', '');
 @endphp
 
 @section('header')
@@ -71,10 +86,48 @@
             <div class="bg-primary rounded-xl p-4 flex justify-between items-center shadow-lg shadow-primary/20">
                 <div>
                     <p class="text-white/80 text-xs font-medium">Stok Saat Ini</p>
-                    <p class="text-white text-2xl font-bold"><span id="current-stock">0</span> <span class="text-sm font-normal">Unit</span></p>
+                    <p class="text-white text-2xl font-bold"><span id="current-stock">0</span> <span id="current-stock-unit" class="text-sm font-normal">unit</span></p>
                 </div>
                 <div class="bg-white/20 p-2 rounded-lg">
                     <span class="material-symbols-outlined text-white">inventory_2</span>
+                </div>
+            </div>
+        </div>
+        <div class="px-4 pb-2">
+            <div class="grid gap-3">
+                <div class="rounded-xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
+                    <div class="flex items-center justify-between gap-3">
+                        <p class="text-slate-900 dark:text-white text-sm font-semibold">Stok per Lokasi</p>
+                        <span id="location-bucket-count" class="text-[11px] text-slate-400 uppercase tracking-widest">0 lokasi</span>
+                    </div>
+                    <div id="location-bucket-list" class="mt-3 flex flex-col gap-2"></div>
+                </div>
+                <div class="rounded-xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
+                    <div class="flex items-center justify-between gap-3">
+                        <p class="text-slate-900 dark:text-white text-sm font-semibold">Stok per Varian</p>
+                        <span id="variant-bucket-count" class="text-[11px] text-slate-400 uppercase tracking-widest">0 varian</span>
+                    </div>
+                    <div id="variant-bucket-list" class="mt-3 flex flex-col gap-2"></div>
+                </div>
+                <div class="rounded-xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
+                    <div class="flex items-center justify-between gap-3">
+                        <p class="text-slate-900 dark:text-white text-sm font-semibold">Detail Costing</p>
+                        <span id="cost-method" class="text-[11px] text-slate-400 uppercase tracking-widest">-</span>
+                    </div>
+                    <div class="mt-3 grid grid-cols-2 gap-3">
+                        <div class="rounded-lg bg-slate-50 dark:bg-slate-800/60 p-3">
+                            <p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Average Cost</p>
+                            <p id="average-cost-value" class="mt-1 text-sm font-bold text-slate-900 dark:text-white">-</p>
+                        </div>
+                        <div class="rounded-lg bg-slate-50 dark:bg-slate-800/60 p-3">
+                            <p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Nilai Stok</p>
+                            <p id="stock-value-value" class="mt-1 text-sm font-bold text-slate-900 dark:text-white">-</p>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Sumber cost terakhir</p>
+                        <p id="last-cost-source" class="mt-1 text-sm font-semibold text-primary">-</p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -87,6 +140,12 @@
                     <span class="material-symbols-outlined text-sm">expand_more</span>
                     <select id="stock-card-location-filter" class="absolute inset-0 cursor-pointer opacity-0"></select>
                 </button>
+                <button id="stock-card-variant-control" class="relative hidden shrink-0 items-center gap-2 rounded-full bg-slate-100 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-700" type="button">
+                    <span class="material-symbols-outlined text-sm">tune</span>
+                    <span id="stock-card-variant-label">Semua Varian</span>
+                    <span class="material-symbols-outlined text-sm">expand_more</span>
+                    <select id="stock-card-variant-filter" class="absolute inset-0 cursor-pointer opacity-0"></select>
+                </button>
             </div>
             <div class="mt-3 flex items-center gap-2">
                 <label class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Tipe Movement</label>
@@ -95,6 +154,7 @@
                     <option value="purchase_receive">Pembelian</option>
                     <option value="sale">Penjualan</option>
                     <option value="stock_adjustment">Penyesuaian</option>
+                    <option value="stock_opname">Stock Opname</option>
                     <option value="stock_transfer_in">Mutasi Masuk</option>
                     <option value="stock_transfer_out">Mutasi Keluar</option>
                 </select>
@@ -119,6 +179,7 @@
                         <option value="sale">Penjualan</option>
                         <option value="stock_transfer_out">Mutasi Keluar</option>
                         <option value="stock_adjustment">Penyesuaian</option>
+                        <option value="stock_opname">Stock Opname</option>
                         <option value="purchase_return">Retur Pembelian</option>
                     </select>
                 </label>
@@ -156,9 +217,11 @@
             (() => {
                 const tenantId = document.querySelector('meta[name="tenant-id"]')?.content;
                 const headers = tenantId ? { 'X-Tenant-Id': tenantId } : {};
+                const stockCardPortalPrefix = @json($stockCardPortalPrefix);
                 const params = new URLSearchParams(window.location.search);
                 const productId = @json($resolvedProductId) || params.get('product_id');
                 const initialLocationId = params.get('location_id') || '';
+                const initialVariantId = @json($resolvedProductVariantId) || params.get('product_variant_id') || '';
 
                 const el = {
                     image: document.getElementById('product-image'),
@@ -168,15 +231,27 @@
                     totalIn: document.getElementById('total-in'),
                     totalOut: document.getElementById('total-out'),
                     currentStock: document.getElementById('current-stock'),
+                    currentStockUnit: document.getElementById('current-stock-unit'),
                     ledgerList: document.getElementById('ledger-list'),
                     rangeLabels: document.querySelectorAll('[data-range-label]'),
                     rangeChip: document.getElementById('range-chip'),
                     period: document.getElementById('stock-card-period'),
                     locationFilter: document.getElementById('stock-card-location-filter'),
                     locationLabel: document.getElementById('stock-card-location-label'),
+                    variantControl: document.getElementById('stock-card-variant-control'),
+                    variantFilter: document.getElementById('stock-card-variant-filter'),
+                    variantLabel: document.getElementById('stock-card-variant-label'),
                     ledgerType: document.getElementById('ledger-type-filter'),
                     movementCount: document.getElementById('movement-count'),
                     warning: document.getElementById('range-warning'),
+                    locationBucketCount: document.getElementById('location-bucket-count'),
+                    locationBucketList: document.getElementById('location-bucket-list'),
+                    variantBucketCount: document.getElementById('variant-bucket-count'),
+                    variantBucketList: document.getElementById('variant-bucket-list'),
+                    costMethod: document.getElementById('cost-method'),
+                    averageCostValue: document.getElementById('average-cost-value'),
+                    stockValueValue: document.getElementById('stock-value-value'),
+                    lastCostSource: document.getElementById('last-cost-source'),
                     fifoMethod: document.getElementById('fifo-method'),
                     fifoWarning: document.getElementById('fifo-warning'),
                     layerList: document.getElementById('layer-list'),
@@ -214,12 +289,19 @@
                     maximumFractionDigits: 2,
                 }).format(Number(value || 0));
 
+                const resolveUnitLabel = (value) => {
+                    const unit = String(value || '').trim();
+                    return unit !== '' ? unit : 'unit';
+                };
+
                 const ledgerTypeMap = {
                     purchase_receive: { label: 'Pembelian (Stok Masuk)', tone: 'in' },
                     purchase: { label: 'Pembelian (Stok Masuk)', tone: 'in' },
                     sale: { label: 'Penjualan POS', tone: 'out' },
+                    online_order: { label: 'Penjualan Online', tone: 'out' },
                     sales: { label: 'Penjualan POS', tone: 'out' },
                     stock_adjustment: { label: 'Penyesuaian Stok', tone: 'adjust' },
+                    stock_opname: { label: 'Stock Opname', tone: 'adjust' },
                     stock_transfer_in: { label: 'Mutasi Masuk', tone: 'in' },
                     stock_transfer_out: { label: 'Mutasi Keluar', tone: 'out' },
                     stock_transfer: { label: 'Mutasi Stok', tone: 'adjust' },
@@ -230,12 +312,18 @@
                     purchase_receive: 'Pembelian',
                     purchase: 'Pembelian',
                     stock_adjustment: 'Penyesuaian',
+                    stock_opname: 'Stock Opname',
                     stock_transfer_in: 'Mutasi Masuk',
                     stock_transfer: 'Mutasi Stok',
                     opening_balance: 'Stok Awal',
                 };
 
                 const resolveLedgerMeta = (row) => {
+                    if (row.source_label) {
+                        const isSale = ['sale', 'sale_recipe_input'].includes(String(row.reference_type || '').toLowerCase());
+                        return { label: row.source_label, tone: isSale ? 'out' : 'adjust' };
+                    }
+
                     const key = String(row.reference_type || '').toLowerCase();
                     return ledgerTypeMap[key] || { label: row.reference_type || 'Pergerakan Stok', tone: 'adjust' };
                 };
@@ -246,16 +334,54 @@
                 };
 
                 const resolveAllocationLabel = (row) => {
+                    if (row.source_label) {
+                        return row.source_label;
+                    }
+
                     const key = String(row.reference_type || '').toLowerCase();
                     return ledgerTypeMap[key]?.label || row.reference_type || 'Alokasi Keluar';
                 };
 
-                const loadBootstrap = async () => {
-                    const response = await fetch('/api/v1/bootstrap', { headers });
-                    if (!response.ok) {
-                        throw new Error('Gagal memuat daftar produk.');
+                const resolveSourceLabel = (referenceType) => {
+                    const key = String(referenceType || '').toLowerCase();
+                    const labels = {
+                        purchase: 'Pembelian',
+                        purchase_receive: 'Pembelian',
+                        sale: 'Penjualan',
+                        sale_recipe_input: 'Penjualan',
+                        online_order: 'Penjualan Online',
+                        stock_adjustment: 'Penyesuaian',
+                        stock_opname: 'Stock Opname',
+                        stock_transfer: 'Mutasi Stok',
+                        stock_transfer_in: 'Mutasi Stok',
+                        stock_transfer_out: 'Mutasi Stok',
+                        production_batch: 'Produksi',
+                        opening_balance: 'Stok Awal',
+                    };
+
+                    return labels[key] || (key !== '' ? key.replaceAll('_', ' ') : 'Sumber Stok');
+                };
+
+                const buildSourceHref = (row) => {
+                    const referenceType = String(row?.reference_type || '').toLowerCase();
+                    const referenceId = String(row?.reference_id || '').trim();
+                    if (!referenceId) {
+                        return null;
                     }
-                    return response.json();
+
+                    const targetMap = {
+                        purchase: `${stockCardPortalPrefix}/purchases/${encodeURIComponent(referenceId)}`,
+                        purchase_receive: `${stockCardPortalPrefix}/purchases/${encodeURIComponent(referenceId)}`,
+                        sale: `${stockCardPortalPrefix}/sales/${encodeURIComponent(referenceId)}`,
+                        sale_recipe_input: `${stockCardPortalPrefix}/sales/${encodeURIComponent(referenceId)}`,
+                        production_batch: `${stockCardPortalPrefix}/inventory/production-batches/${encodeURIComponent(referenceId)}`,
+                    };
+
+                    return targetMap[referenceType] || null;
+                };
+
+                const loadBootstrap = async () => {
+                    return window.PosUi.getBootstrap({ headers, ttlMs: 20000 });
                 };
 
                 const updateHistoryUrl = () => {
@@ -265,7 +391,53 @@
                     } else {
                         url.searchParams.delete('location_id');
                     }
+                    if (state.variantId) {
+                        url.searchParams.set('product_variant_id', state.variantId);
+                    } else {
+                        url.searchParams.delete('product_variant_id');
+                    }
                     window.history.replaceState({}, '', `${url.pathname}${url.search}`);
+                };
+
+                const buildVariantOptions = (variants) => {
+                    if (!el.variantFilter || !el.variantControl) {
+                        return;
+                    }
+
+                    if (!Array.isArray(variants) || variants.length === 0) {
+                        el.variantControl.classList.add('hidden');
+                        el.variantFilter.innerHTML = '';
+                        state.variantId = '';
+                        if (el.variantLabel) {
+                            el.variantLabel.textContent = 'Semua Varian';
+                        }
+                        return;
+                    }
+
+                    el.variantControl.classList.remove('hidden');
+                    el.variantFilter.innerHTML = '';
+
+                    const defaultOption = document.createElement('option');
+                    defaultOption.value = '';
+                    defaultOption.textContent = 'Semua Varian';
+                    el.variantFilter.appendChild(defaultOption);
+
+                    variants.forEach((variant) => {
+                        const option = document.createElement('option');
+                        option.value = variant.id;
+                        option.textContent = `${variant.name}${variant.sku ? ` · ${variant.sku}` : ''}`;
+                        el.variantFilter.appendChild(option);
+                    });
+
+                    const hasSelectedVariant = variants.some((variant) => variant.id === state.variantId);
+                    if (!hasSelectedVariant) {
+                        state.variantId = '';
+                    }
+
+                    el.variantFilter.value = state.variantId;
+                    if (el.variantLabel) {
+                        el.variantLabel.textContent = el.variantFilter.options[el.variantFilter.selectedIndex]?.textContent || 'Semua Varian';
+                    }
                 };
 
                 const buildLocationOptions = (locations) => {
@@ -281,13 +453,14 @@
                     locations.forEach((location) => {
                         const option = document.createElement('option');
                         option.value = location.id;
-                        option.textContent = location.name;
+                        option.textContent = location.is_default ? `${location.name} (default)` : location.name;
                         el.locationFilter.appendChild(option);
                     });
 
                     const hasSelectedLocation = locations.some((location) => location.id === state.locationId);
                     if (!hasSelectedLocation) {
-                        state.locationId = '';
+                        const defaultLocation = locations.find((location) => location.is_default);
+                        state.locationId = defaultLocation?.id || locations[0]?.id || '';
                     }
 
                     el.locationFilter.value = state.locationId;
@@ -317,10 +490,11 @@
                         const qty = Math.round(inventory
                             .filter((item) => item.product_id === product.id)
                             .reduce((sum, item) => sum + (item.qty_on_hand || 0), 0));
-                        const image = product.image_url || 'https://placehold.co/120x120?text=Produk';
+                        const unitLabel = resolveUnitLabel(product.unit);
+                    const image = product.image_url || '/images/placeholders/product.svg';
                         const qtyColor = qty === 0 ? 'text-rose-600' : 'text-slate-900 dark:text-slate-100';
 
-                        const detailUrl = new URL(`/backoffice/inventory/products/${encodeURIComponent(product.id)}/stock-card`, window.location.origin);
+                        const detailUrl = new URL(`${stockCardPortalPrefix}/inventory/products/${encodeURIComponent(product.id)}/stock-card`, window.location.origin);
                         detailUrl.searchParams.set('from', @json($stockCardCurrentPath));
                         if (state.locationId) {
                             detailUrl.searchParams.set('location_id', state.locationId);
@@ -337,7 +511,7 @@
                             </div>
                             <div class="flex flex-col items-end shrink-0">
                                 <p class="${qtyColor} text-lg font-bold">${qty}</p>
-                                <p class="text-slate-400 text-[10px] uppercase font-bold">Unit</p>
+                                <p class="text-slate-400 text-[10px] uppercase font-bold">${unitLabel}</p>
                             </div>
                         `;
                         el.pickerList.appendChild(card);
@@ -363,6 +537,8 @@
                         const toneClass = isIn ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400';
                         const bgClass = isIn ? 'bg-emerald-100 dark:bg-emerald-900/30' : 'bg-rose-100 dark:bg-rose-900/30';
                         const iconClass = isIn ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400';
+                        const sourceHref = buildSourceHref(row);
+                        const sourceLabel = `${row.source_label || resolveSourceLabel(row.reference_type)}${row.reference_id ? ` · ${String(row.reference_id).slice(0, 8).toUpperCase()}` : ''}`;
 
                         const card = document.createElement('div');
                         card.className = 'py-4 border-b border-slate-100 dark:border-slate-800 flex items-center gap-4';
@@ -375,9 +551,15 @@
                                     <p class="text-slate-900 dark:text-white font-semibold text-sm">${meta.label}</p>
                                     <p class="font-bold text-sm ${toneClass}">${qtyLabel}</p>
                                 </div>
-                                <div class="flex justify-between items-end mt-0.5">
+                                <div class="flex justify-between items-end mt-0.5 gap-3">
                                     <p class="text-slate-500 dark:text-slate-400 text-xs">${formatDate(row.created_at)}</p>
                                     <p class="text-slate-400 dark:text-slate-500 text-[10px] font-medium uppercase tracking-tighter">Saldo: ${formatQty(row.balance_after)}</p>
+                                </div>
+                                <div class="mt-1 flex items-center justify-between gap-3 text-[11px] text-slate-400">
+                                    ${sourceHref
+                                        ? `<a class="truncate font-semibold text-primary" href="${sourceHref}">Sumber: ${sourceLabel}</a>`
+                                        : `<p class="truncate font-semibold text-slate-500">Sumber: ${sourceLabel}</p>`}
+                                    ${row.reference_item_id ? `<span class="shrink-0 uppercase tracking-widest">Item: ${String(row.reference_item_id).slice(0, 8).toUpperCase()}</span>` : ''}
                                 </div>
                             </div>
                         `;
@@ -387,6 +569,7 @@
 
                 const renderLayers = (rows) => {
                     el.layerList.innerHTML = '';
+                    const unitLabel = resolveUnitLabel(state.product?.unit);
 
                     if (!rows.length) {
                         el.layerCount.textContent = '0';
@@ -396,7 +579,7 @@
 
                     const totalQty = rows.reduce((sum, row) => sum + Number(row.qty_remaining || 0), 0);
                     const totalValue = rows.reduce((sum, row) => sum + (Number(row.qty_remaining || 0) * Number(row.cost_per_unit || 0)), 0);
-                    el.layerCount.textContent = `${formatQty(totalQty)} unit · ${formatCurrency(totalValue)}`;
+                    el.layerCount.textContent = `${formatQty(totalQty)} ${unitLabel} · ${formatCurrency(totalValue)}`;
 
                     rows.forEach((row) => {
                         const qtyRemaining = Number(row.qty_remaining || 0);
@@ -411,7 +594,7 @@
                                     <p class="text-[11px] text-slate-400">Diterima: ${row.received_at ? formatDate(row.received_at) : '-'}</p>
                                 </div>
                                 <div class="text-right">
-                                    <p class="text-sm font-semibold text-slate-900 dark:text-white">${formatQty(qtyRemaining)} unit</p>
+                                    <p class="text-sm font-semibold text-slate-900 dark:text-white">${formatQty(qtyRemaining)} ${unitLabel}</p>
                                     <p class="text-[11px] text-slate-400">Awal: ${formatQty(qtyOriginal)} · ${formatCurrency(row.cost_per_unit)}</p>
                                 </div>
                             </div>
@@ -426,6 +609,7 @@
 
                 const renderAllocations = (rows) => {
                     el.allocList.innerHTML = '';
+                    const unitLabel = resolveUnitLabel(state.product?.unit);
 
                     if (!rows.length) {
                         el.allocCount.textContent = '0';
@@ -435,7 +619,7 @@
 
                     const totalQty = rows.reduce((sum, row) => sum + Number(row.qty || 0), 0);
                     const totalCost = rows.reduce((sum, row) => sum + Number(row.total_cost || 0), 0);
-                    el.allocCount.textContent = `${formatQty(totalQty)} unit · ${formatCurrency(totalCost)}`;
+                    el.allocCount.textContent = `${formatQty(totalQty)} ${unitLabel} · ${formatCurrency(totalCost)}`;
 
                     rows.forEach((row) => {
                         const card = document.createElement('div');
@@ -448,8 +632,8 @@
                                     <p class="text-[11px] text-slate-400">${row.created_at ? formatDate(row.created_at) : '-'}</p>
                                 </div>
                                 <div class="text-right">
-                                    <p class="text-sm font-semibold text-slate-900 dark:text-white">${formatQty(row.qty)} unit</p>
-                                    <p class="text-[11px] text-slate-400">${formatCurrency(row.unit_cost)} / unit</p>
+                                    <p class="text-sm font-semibold text-slate-900 dark:text-white">${formatQty(row.qty)} ${unitLabel}</p>
+                                    <p class="text-[11px] text-slate-400">${formatCurrency(row.unit_cost)} / ${unitLabel}</p>
                                 </div>
                             </div>
                             <div class="mt-2 flex items-center justify-between text-[11px] text-slate-400">
@@ -461,10 +645,131 @@
                     });
                 };
 
+                const renderBucketSummary = (rows, listEl, countEl, emptyMessage, unitLabel, kind = 'location') => {
+                    if (!listEl || !countEl) {
+                        return;
+                    }
+
+                    listEl.innerHTML = '';
+
+                    if (!rows.length) {
+                        countEl.textContent = kind === 'location' ? '0 lokasi' : '0 varian';
+                        listEl.innerHTML = `<div class="text-xs text-slate-400">${emptyMessage}</div>`;
+                        return;
+                    }
+
+                    countEl.textContent = kind === 'location' ? `${rows.length} lokasi` : `${rows.length} varian`;
+
+                    rows.slice(0, 6).forEach((row) => {
+                        const card = document.createElement('div');
+                        card.className = 'flex items-center justify-between gap-3 rounded-lg border border-slate-100 dark:border-slate-800 px-3 py-2';
+                        const title = kind === 'location'
+                            ? `${row.name || '-'}${row.is_default ? ' (default)' : ''}`
+                            : `${row.name || 'Tanpa Varian'}${row.sku ? ` · ${row.sku}` : ''}`;
+                        card.innerHTML = `
+                            <div class="min-w-0">
+                                <p class="truncate text-sm font-semibold text-slate-900 dark:text-white">${title}</p>
+                                ${kind === 'location' && row.branch_id ? `<p class="text-[11px] text-slate-400">Cabang: ${row.branch_id}</p>` : '<p class="text-[11px] text-slate-400">Bucket stok</p>'}
+                            </div>
+                            <div class="text-right">
+                                <p class="text-sm font-bold text-slate-900 dark:text-white">${formatQty(row.qty_on_hand || 0)} <span class="text-[11px] font-normal text-slate-400">${unitLabel}</span></p>
+                            </div>
+                        `;
+                        listEl.appendChild(card);
+                    });
+                };
+
+                const renderCostSummary = (data) => {
+                    const costState = data.cost_state || null;
+                    const valuationMethod = String(data.valuation_method || '').toLowerCase();
+
+                    if (el.costMethod) {
+                        el.costMethod.textContent = valuationMethod === 'fifo' ? 'FIFO' : 'AVERAGE';
+                    }
+
+                    if (!costState) {
+                        if (el.averageCostValue) {
+                            el.averageCostValue.textContent = '-';
+                        }
+                        if (el.stockValueValue) {
+                            el.stockValueValue.textContent = '-';
+                        }
+                        if (el.lastCostSource) {
+                            el.lastCostSource.textContent = 'Belum ada cost state untuk bucket ini.';
+                        }
+                        return;
+                    }
+
+                    if (el.averageCostValue) {
+                        el.averageCostValue.textContent = formatCurrency(costState.average_cost || 0);
+                    }
+                    if (el.stockValueValue) {
+                        el.stockValueValue.textContent = formatCurrency(costState.stock_value || 0);
+                    }
+
+                    const source = data.last_cost_source || null;
+                    if (!el.lastCostSource) {
+                        return;
+                    }
+
+                    if (!source) {
+                        el.lastCostSource.textContent = 'Sumber cost terakhir belum tercatat.';
+                        return;
+                    }
+
+                    const href = buildSourceHref(source);
+                    const text = `${resolveSourceLabel(source.reference_type)} · ${source.reference_id ? String(source.reference_id).slice(0, 8).toUpperCase() : '-'}`;
+                    if (href) {
+                        el.lastCostSource.innerHTML = `<a class="underline decoration-dotted underline-offset-4" href="${href}">${text}</a>`;
+                    } else {
+                        el.lastCostSource.textContent = text;
+                    }
+                };
+
+                const renderDetailData = (data) => {
+                    if (!data.product) {
+                        el.name.textContent = 'Produk tidak ditemukan';
+                        return;
+                    }
+
+                    state.product = data.product;
+                    buildVariantOptions(Array.isArray(data.product_variants) ? data.product_variants : []);
+                    el.currentStockUnit.textContent = resolveUnitLabel(data.product.unit);
+
+                    const imageUrl = data.product.image_url || '/images/placeholders/product.svg';
+                    el.image.style.backgroundImage = `url("${imageUrl}")`;
+                    el.name.textContent = data.product.name || '-';
+                    el.sku.textContent = `SKU: ${data.product.sku || '-'}`;
+                    el.category.textContent = data.product.category_name || 'Produk';
+                    el.currentStock.textContent = formatQty(data.balance || 0);
+
+                    const locationBuckets = Array.isArray(data.product_location_balances) ? data.product_location_balances : [];
+                    const variantBuckets = Array.isArray(data.product_variant_balances) ? data.product_variant_balances : [];
+                    renderBucketSummary(locationBuckets, el.locationBucketList, el.locationBucketCount, 'Belum ada stok per lokasi.', resolveUnitLabel(data.product.unit), 'location');
+                    renderBucketSummary(variantBuckets, el.variantBucketList, el.variantBucketCount, 'Belum ada stok per varian.', resolveUnitLabel(data.product.unit), 'variant');
+                    renderCostSummary(data);
+
+                    const ledger = Array.isArray(data.ledger) ? data.ledger : [];
+                    el.totalIn.textContent = formatQty(data.summary?.total_in || 0);
+                    el.totalOut.textContent = formatQty(data.summary?.total_out || 0);
+                    if (el.movementCount) {
+                        el.movementCount.textContent = `${data.summary?.movement_count || 0} movement`;
+                    }
+                    el.fifoMethod.textContent = String(data.valuation_method || '-').toUpperCase();
+                    el.fifoWarning.classList.toggle('hidden', String(data.valuation_method || '').toLowerCase() === 'fifo');
+                    renderLayers(Array.isArray(data.layers) ? data.layers : []);
+                    renderAllocations(Array.isArray(data.allocations) ? data.allocations : []);
+                    renderRange(data.range);
+                    renderLedger(ledger);
+                };
+
                 const loadStockCard = async (period) => {
                     const url = new URL('/api/v1/stock-card', window.location.origin);
                     if (productId) {
                         url.searchParams.set('product_id', productId);
+                    }
+                    if (state.variantId) {
+                        url.searchParams.set('product_variant_id', state.variantId);
                     }
                     if (state.locationId) {
                         url.searchParams.set('location_id', state.locationId);
@@ -519,7 +824,9 @@
                     ledgerType: 'all',
                     showEmptyLayers: false,
                     allocationType: 'all',
+                    variantId: initialVariantId,
                     term: '',
+                    product: null,
                 };
 
                 const reload = async () => {
@@ -531,35 +838,27 @@
                     state.period = event.detail;
                     reload()
                         .then((data) => {
-                            if (!data.product) {
-                                el.name.textContent = 'Produk tidak ditemukan';
-                                return;
-                            }
-                            const imageUrl = data.product.image_url || 'https://placehold.co/200x200?text=Produk';
-                            el.image.style.backgroundImage = `url("${imageUrl}")`;
-                            el.name.textContent = data.product.name || '-';
-                            el.sku.textContent = `SKU: ${data.product.sku || '-'}`;
-                            el.category.textContent = data.product.category_name || 'Produk';
-                            el.currentStock.textContent = formatQty(data.balance || 0);
-
-                            const ledger = Array.isArray(data.ledger) ? data.ledger : [];
-                            el.totalIn.textContent = formatQty(data.summary?.total_in || 0);
-                            el.totalOut.textContent = formatQty(data.summary?.total_out || 0);
-                            if (el.movementCount) {
-                                el.movementCount.textContent = `${data.summary?.movement_count || 0} movement`;
-                            }
-
-                            el.fifoMethod.textContent = String(data.valuation_method || '-').toUpperCase();
-                            el.fifoWarning.classList.toggle('hidden', String(data.valuation_method || '').toLowerCase() === 'fifo');
-                            renderLayers(Array.isArray(data.layers) ? data.layers : []);
-                            renderAllocations(Array.isArray(data.allocations) ? data.allocations : []);
-
-                            renderRange(data.range);
-                            renderLedger(ledger);
+                            renderDetailData(data);
                         })
                         .catch((error) => {
                             el.name.textContent = error.message || 'Gagal memuat kartu stok.';
                             el.ledgerList.innerHTML = '<div class="py-6 text-sm text-red-500">Gagal memuat pergerakan stok.</div>';
+                        });
+                });
+
+                el.variantFilter?.addEventListener('change', (event) => {
+                    state.variantId = event.target?.value || '';
+                    const label = el.variantFilter.options[el.variantFilter.selectedIndex]?.textContent || 'Semua Varian';
+                    if (el.variantLabel) {
+                        el.variantLabel.textContent = label;
+                    }
+                    updateHistoryUrl();
+                    reload()
+                        .then((data) => {
+                            renderDetailData(data);
+                        })
+                        .catch((error) => {
+                            el.ledgerList.innerHTML = `<div class="py-6 text-sm text-red-500">${error.message || 'Gagal memuat kartu stok.'}</div>`;
                         });
                 });
 
@@ -622,20 +921,7 @@
 
                     reload()
                         .then((data) => {
-                            if (!data.product) {
-                                el.name.textContent = 'Produk tidak ditemukan';
-                                return;
-                            }
-                            el.currentStock.textContent = formatQty(data.balance || 0);
-                            el.totalIn.textContent = formatQty(data.summary?.total_in || 0);
-                            el.totalOut.textContent = formatQty(data.summary?.total_out || 0);
-                            if (el.movementCount) {
-                                el.movementCount.textContent = `${data.summary?.movement_count || 0} movement`;
-                            }
-                            renderLayers(Array.isArray(data.layers) ? data.layers : []);
-                            renderAllocations(Array.isArray(data.allocations) ? data.allocations : []);
-                            renderRange(data.range);
-                            renderLedger(Array.isArray(data.ledger) ? data.ledger : []);
+                            renderDetailData(data);
                         })
                         .catch((error) => {
                             el.ledgerList.innerHTML = `<div class="py-6 text-sm text-red-500">${error.message || 'Gagal memuat kartu stok.'}</div>`;
@@ -648,6 +934,16 @@
                         const bootstrapData = window.PosUi.unwrapApiPayload(bootstrapPayload) || bootstrapPayload;
                         const locations = Array.isArray(bootstrapData.locations) ? bootstrapData.locations : [];
                         buildLocationOptions(locations);
+                        if (!state.locationId) {
+                            const defaultLocation = locations.find((location) => location.is_default);
+                            state.locationId = defaultLocation?.id || locations[0]?.id || '';
+                            if (el.locationFilter) {
+                                el.locationFilter.value = state.locationId;
+                            }
+                            if (el.locationLabel) {
+                                el.locationLabel.textContent = el.locationFilter?.options[el.locationFilter.selectedIndex]?.textContent || 'Semua Lokasi';
+                            }
+                        }
 
                         if (!productId) {
                             el.picker.classList.remove('hidden');
@@ -667,30 +963,7 @@
                         el.picker.classList.add('hidden');
                         el.detail.classList.remove('hidden');
                         const data = await reload();
-                        if (!data.product) {
-                            el.name.textContent = 'Produk tidak ditemukan';
-                            return;
-                        }
-                        const imageUrl = data.product.image_url || 'https://placehold.co/200x200?text=Produk';
-                        el.image.style.backgroundImage = `url("${imageUrl}")`;
-                        el.name.textContent = data.product.name || '-';
-                        el.sku.textContent = `SKU: ${data.product.sku || '-'}`;
-                        el.category.textContent = data.product.category_name || 'Produk';
-                        el.currentStock.textContent = formatQty(data.balance || 0);
-
-                        const ledger = Array.isArray(data.ledger) ? data.ledger : [];
-                        el.totalIn.textContent = formatQty(data.summary?.total_in || 0);
-                        el.totalOut.textContent = formatQty(data.summary?.total_out || 0);
-                        if (el.movementCount) {
-                            el.movementCount.textContent = `${data.summary?.movement_count || 0} movement`;
-                        }
-                        el.fifoMethod.textContent = String(data.valuation_method || '-').toUpperCase();
-                        el.fifoWarning.classList.toggle('hidden', String(data.valuation_method || '').toLowerCase() === 'fifo');
-                        renderLayers(Array.isArray(data.layers) ? data.layers : []);
-                        renderAllocations(Array.isArray(data.allocations) ? data.allocations : []);
-                        renderRange(data.range);
-
-                        renderLedger(ledger);
+                        renderDetailData(data);
                     } catch (error) {
                         el.name.textContent = error.message || 'Gagal memuat kartu stok.';
                         el.ledgerList.innerHTML = '<div class="py-6 text-sm text-red-500">Gagal memuat pergerakan stok.</div>';

@@ -3,7 +3,7 @@
 @section('page_title', 'Void & Refund Transaksi')
 @section('body_class', 'bg-background-light dark:bg-background-dark font-display text-slate-800 dark:text-slate-100')
 @section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-background-light dark:bg-background-dark shadow-2xl')
-@section('main_class', 'flex-1 overflow-hidden p-0')
+@section('main_class', 'flex-1 min-h-0 overflow-hidden p-0')
 
 @push('head')
         <style>
@@ -21,7 +21,7 @@
     $submenuBackUrl = $backUrl ?? ($voidRefundSaleId !== '' ? '/pos/sales/'.$voidRefundSaleId : '/pos/history');
     $detailUrl = $detailUrl ?? ($voidRefundSaleId !== '' ? '/pos/sales/'.$voidRefundSaleId : '/pos/history');
     $salesHistoryHref = $historyUrl ?? '/pos/history';
-    $voidRefundDashboardHref = '/pos/dashboard';
+    $voidRefundDashboardHref = pos_default_url();
     $voidRefundBackofficeHref = static function (string $targetPath) use ($voidRefundCurrentPath): string {
         $separator = str_contains($targetPath, '?') ? '&' : '?';
 
@@ -41,8 +41,8 @@
 @endsection
 
 @section('content')
-        <div class="relative flex h-full flex-col">
-            <div class="flex-1 overflow-y-auto bg-slate-50 pb-32">
+        <div class="relative flex h-full min-h-0 flex-col">
+            <div class="flex-1 min-h-0 overflow-y-auto bg-slate-50 pb-6">
                 <div class="px-4 py-4 space-y-4">
                     <div class="bg-blue-50 border border-blue-100 p-3 rounded-xl flex gap-3">
                         <span class="material-symbols-outlined text-primary text-xl">info</span>
@@ -50,11 +50,6 @@
                             Pilih item yang ingin di-refund. Nominal refund dihitung per line item, dan payout akan mengikuti alokasi metode pembayaran transaksi asal.
                         </p>
                     </div>
-                    @include('partials.owner-pos-panel', [
-                        'compact' => true,
-                        'title' => 'Mode Owner',
-                        'subtitle' => 'Tetap proses void di POS, lalu buka laporan atau stok bila butuh investigasi.',
-                    ])
                     <div class="space-y-3">
                         <h2 class="text-xs font-bold text-slate-500 uppercase tracking-widest px-1">Daftar Item Transaksi</h2>
                         <div id="refund-items" class="space-y-3"></div>
@@ -84,7 +79,7 @@
                     </div>
                 </div>
             </div>
-            <section class="absolute bottom-0 left-0 right-0 bg-white border-t border-slate-200 shadow-[0_-10px_25px_-5px_rgba(0,0,0,0.05)] rounded-t-[2rem] overflow-hidden z-50">
+            <section class="shrink-0 bg-white border-t border-slate-200 shadow-[0_-10px_25px_-5px_rgba(0,0,0,0.05)] overflow-hidden z-50 app-bottom-safe-footer">
                 <div class="w-12 h-1.5 bg-slate-200 rounded-full mx-auto my-3"></div>
                 <div class="px-6 py-4 space-y-4">
                     <div class="flex justify-between items-center">

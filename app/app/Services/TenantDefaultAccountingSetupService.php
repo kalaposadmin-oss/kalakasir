@@ -15,6 +15,7 @@ class TenantDefaultAccountingSetupService
             '1201' => ['name' => 'Piutang Usaha', 'type' => 'asset'],
             '1301' => ['name' => 'Persediaan Barang', 'type' => 'asset'],
             '2101' => ['name' => 'Hutang Usaha', 'type' => 'liability'],
+            '3101' => ['name' => 'Modal Pemilik', 'type' => 'equity'],
             '4101' => ['name' => 'Penjualan', 'type' => 'revenue'],
             '5101' => ['name' => 'Harga Pokok Penjualan', 'type' => 'expense'],
             '6101' => ['name' => 'Penyesuaian Beban', 'type' => 'expense'],

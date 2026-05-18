@@ -18,6 +18,7 @@ class LoyaltyTenantScopingTest extends TestCase
     {
         [$tenant, $user] = $this->bootApiActor('admin', 'admin+loyalty-primary@example.test');
         [$foreignTenant] = $this->bootApiActor('admin', 'admin+loyalty-foreign@example.test');
+        $tenant->forceFill(['plan' => 'M'])->save();
 
         $this->actingAs($user, 'sanctum');
 

@@ -492,6 +492,7 @@ class SalesReportSummaryTest extends TestCase
             'voided_by' => null,
             'created_at' => $createdAt,
             'transaction_date' => '2026-02-27',
+            'cogs_total' => 8000,
         ]);
 
         \DB::table('sale_items')->insert([
@@ -504,6 +505,25 @@ class SalesReportSummaryTest extends TestCase
             'price' => 10000,
             'discount' => 2000,
             'hpp_snapshot' => 4000,
+        ]);
+
+        \DB::table('sale_cost_components')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $tenant->id,
+            'sale_id' => $saleId,
+            'sale_item_id' => $saleItemId,
+            'component_type' => 'sale_item',
+            'product_id' => $fixture['product_id'],
+            'product_variant_id' => null,
+            'qty' => 2,
+            'unit_cost' => 4000,
+            'total_cost' => 8000,
+            'source_reference_type' => 'sale',
+            'source_reference_id' => $saleId,
+            'source_reference_item_id' => $saleItemId,
+            'source' => 'repair',
+            'created_at' => $createdAt,
+            'updated_at' => $createdAt,
         ]);
 
         \DB::table('payments')->insert([

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Exceptions\MissingSalesCostAggregateException;
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
 use App\Models\AccountMapping;
@@ -12,6 +13,7 @@ use App\Models\Shift;
 use App\Models\User;
 use App\Services\TenantDefaultAccountingSetupService;
 use App\Services\DailyFinanceControlService;
+use App\Services\ShiftLifecycleService;
 use App\Support\Decimal;
 use App\Support\TenantContext;
 use Carbon\CarbonImmutable;
@@ -27,6 +29,10 @@ class ShiftController extends Controller
         $tenant = TenantContext::get();
         $tenantId = $tenant?->id;
         $timezone = $tenant?->timezone ?? 'UTC';
+        $shiftLifecycle = app(ShiftLifecycleService::class);
+
+        $shiftLifecycle->autoCloseExpiredOpenShifts($tenant);
+        $pendingReconciliation = $shiftLifecycle->pendingReconciliation($tenant, $request->user()?->id);
 
         if ($tenantId) {
             app(TenantDefaultAccountingSetupService::class)->ensure($tenantId, $request->user()?->id);
@@ -60,15 +66,37 @@ class ShiftController extends Controller
                 'id' => $cashDrawer->id,
                 'name' => $cashDrawer->name,
             ] : null,
+            'pending_reconciliation' => $pendingReconciliation ? [
+                'shift_id' => $pendingReconciliation->id,
+                'opened_at' => $this->formatShiftDateTime($pendingReconciliation->opened_at, $timezone),
+                'closed_at' => $this->formatShiftDateTime($pendingReconciliation->closed_at, $timezone),
+                'opening_cash' => (float) $pendingReconciliation->opening_cash,
+                'expected_cash' => (float) $pendingReconciliation->system_cash_total,
+                'branch_id' => $pendingReconciliation->branch_id,
+                'message' => 'Shift kemarin ditutup otomatis karena melewati 00.00. Isi kas akhir fisik dulu sebelum membuka shift baru.',
+            ] : null,
         ]);
     }
 
     public function open(Request $request)
     {
-        $tenantId = TenantContext::id();
+        $tenant = TenantContext::get();
+        $tenantId = $tenant?->id;
+        $shiftLifecycle = app(ShiftLifecycleService::class);
+
+        $shiftLifecycle->autoCloseExpiredOpenShifts($tenant);
 
         if ($tenantId) {
             app(TenantDefaultAccountingSetupService::class)->ensure($tenantId, $request->user()?->id);
+        }
+
+        $pendingReconciliation = $shiftLifecycle->pendingReconciliation($tenant, $request->user()?->id);
+        if ($pendingReconciliation) {
+            return response()->json([
+                'code' => 'SHIFT_RECONCILIATION_REQUIRED',
+                'message' => 'Selesaikan kas akhir shift kemarin terlebih dahulu sebelum membuka shift baru.',
+                'pending_shift_id' => $pendingReconciliation->id,
+            ], 422);
         }
 
         $validated = $request->validate([
@@ -119,6 +147,7 @@ class ShiftController extends Controller
         $tenantId = $tenant?->id;
         $timezone = $tenant?->timezone ?? 'UTC';
         $shiftId = $request->query('shift_id');
+        app(ShiftLifecycleService::class)->autoCloseExpiredOpenShifts($tenant);
 
         $shift = Shift::query()
             ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
@@ -132,20 +161,7 @@ class ShiftController extends Controller
             ->where('id', $shift->user_id)
             ->first(['id', 'name']);
 
-        $saleIds = Sale::query()
-            ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
-            ->where('shift_id', $shift->id)
-            ->where('status', 'completed')
-            ->pluck('id');
-
-        $cashTotal = Decimal::money('0');
-        if ($saleIds->isNotEmpty()) {
-            $cashTotal = Decimal::money(Payment::query()
-                ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
-                ->whereIn('sale_id', $saleIds)
-                ->where('method', 'cash')
-                ->sum('amount'));
-        }
+        $cashComponents = app(ShiftLifecycleService::class)->cashComponentsForShift($tenantId, $shift);
 
         return response()->json([
             'shift' => [
@@ -160,7 +176,9 @@ class ShiftController extends Controller
                 'id' => $cashier->id,
                 'name' => $cashier->name,
             ] : null,
-            'expected_cash' => Decimal::float($cashTotal, Decimal::MONEY_SCALE),
+            'cash_sales' => Decimal::float($cashComponents['cash_sales'], Decimal::MONEY_SCALE),
+            'receivable_cash' => Decimal::float($cashComponents['receivable_cash'], Decimal::MONEY_SCALE),
+            'expected_cash' => Decimal::float($cashComponents['expected_cash'], Decimal::MONEY_SCALE),
         ]);
     }
 
@@ -182,20 +200,8 @@ class ShiftController extends Controller
             ->where('status', 'open')
             ->firstOrFail();
 
-        $saleIds = Sale::query()
-            ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
-            ->where('shift_id', $shift->id)
-            ->where('status', 'completed')
-            ->pluck('id');
-
-        $cashTotal = Decimal::money('0');
-        if ($saleIds->isNotEmpty()) {
-            $cashTotal = Decimal::money(Payment::query()
-                ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
-                ->whereIn('sale_id', $saleIds)
-                ->where('method', 'cash')
-                ->sum('amount'));
-        }
+        $cashComponents = app(ShiftLifecycleService::class)->cashComponentsForShift($tenantId, $shift);
+        $cashTotal = $cashComponents['expected_cash'];
 
         $difference = Decimal::subtract(Decimal::money($validated['closing_cash']), $cashTotal, Decimal::MONEY_SCALE);
 
@@ -206,18 +212,65 @@ class ShiftController extends Controller
             'close_note' => $validated['close_note'] ?? null,
             'closed_at' => CarbonImmutable::now('UTC'),
             'status' => 'closed',
+            'closed_by_system' => false,
+            'requires_reconciliation' => false,
+            'reconciliation_completed_at' => CarbonImmutable::now('UTC'),
+            'reconciliation_completed_by' => $request->user()?->id,
         ]);
 
         if ($tenantId) {
-            app(DailyFinanceControlService::class)->capture(
-                tenantId: $tenantId,
-                date: CarbonImmutable::now('UTC')->toDateString(),
-            );
+            try {
+                app(DailyFinanceControlService::class)->capture(
+                    tenantId: $tenantId,
+                    date: CarbonImmutable::now('UTC')->toDateString(),
+                );
+            } catch (MissingSalesCostAggregateException $exception) {
+                report($exception);
+            }
         }
 
         return response()->json([
             'status' => 'closed',
             'difference' => Decimal::float($difference, Decimal::MONEY_SCALE),
+        ]);
+    }
+
+    public function reconcileOvernight(Request $request)
+    {
+        $tenant = TenantContext::get();
+        $tenantId = $tenant?->id;
+
+        $validated = $request->validate([
+            'shift_id' => ['required', 'uuid', $tenantId
+                ? Rule::exists('shifts', 'id')->where('tenant_id', $tenantId)
+                : 'exists:shifts,id'],
+            'closing_cash' => ['required', 'numeric', 'min:0'],
+            'close_note' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $shift = Shift::query()
+            ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
+            ->where('id', $validated['shift_id'])
+            ->where('status', 'closed')
+            ->where('requires_reconciliation', true)
+            ->firstOrFail();
+
+        $resolved = app(ShiftLifecycleService::class)->reconcile(
+            $shift,
+            $validated['closing_cash'],
+            $validated['close_note'] ?? null,
+            $request->user()?->id,
+        );
+
+        return response()->json([
+            'status' => 'reconciled',
+            'shift' => [
+                'id' => $resolved->id,
+                'closing_cash' => (float) $resolved->closing_cash,
+                'system_cash_total' => (float) $resolved->system_cash_total,
+                'difference' => (float) $resolved->difference,
+                'requires_reconciliation' => (bool) $resolved->requires_reconciliation,
+            ],
         ]);
     }
 
@@ -278,6 +331,21 @@ class ShiftController extends Controller
                 ->all();
         }
 
+        $receivableCashTotal = Decimal::money(
+            DB::table('receivable_payments')
+                ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
+                ->where('shift_id', $shift->id)
+                ->where('payment_method', 'cash')
+                ->sum('amount')
+        );
+
+        if (Decimal::compare($receivableCashTotal, '0') > 0) {
+            $payments[] = [
+                'method' => 'receivable_cash',
+                'total' => Decimal::float($receivableCashTotal, Decimal::MONEY_SCALE),
+            ];
+        }
+
             $findings = $this->buildCloseFindings(
                 difference: (float) $shift->difference,
                 closeNote: (string) ($shift->close_note ?? ''),
@@ -295,6 +363,8 @@ class ShiftController extends Controller
                 'system_cash_total' => (float) $shift->system_cash_total,
                 'difference' => (float) $shift->difference,
                 'close_note' => $shift->close_note,
+                'closed_by_system' => (bool) ($shift->closed_by_system ?? false),
+                'requires_reconciliation' => (bool) ($shift->requires_reconciliation ?? false),
             ],
             'cashier' => $cashier ? [
                 'id' => $cashier->id,
@@ -318,9 +388,16 @@ class ShiftController extends Controller
         $tenant = TenantContext::get();
         $tenantId = $tenant?->id;
         $timezone = $tenant?->timezone ?? 'UTC';
+        $range = $request->query('preset', $request->query('range', 'last7'));
+        $from = $request->query('start_date', $request->query('from'));
+        $to = $request->query('end_date', $request->query('to'));
+
+        [$fromAt, $toAt, $rangeMeta] = $this->resolveClosedShiftRange($range, $from, $to, $timezone);
 
         $limit = (int) $request->query('limit', 20);
         $limit = max(1, min($limit, 100));
+        $statusFilter = (string) $request->query('status', 'all');
+        $search = trim((string) $request->query('q', ''));
 
         $shifts = Shift::query()
             ->leftJoin('users', function ($join) {
@@ -333,6 +410,20 @@ class ShiftController extends Controller
             })
             ->when($tenantId, fn ($query) => $query->where('shifts.tenant_id', $tenantId))
             ->where('shifts.status', 'closed')
+            ->where('shifts.closed_at', '>=', $fromAt)
+            ->where('shifts.closed_at', '<', $toAt)
+            ->when($request->filled('branch_id'), fn ($query) => $query->where('shifts.branch_id', $request->query('branch_id')))
+            ->when($request->filled('cashier_id'), fn ($query) => $query->where('shifts.user_id', $request->query('cashier_id')))
+            ->when($statusFilter === 'balanced', fn ($query) => $query->where('shifts.difference', '=', 0))
+            ->when($statusFilter === 'difference', fn ($query) => $query->where('shifts.difference', '<>', 0))
+            ->when($search !== '', function ($query) use ($search) {
+                $like = '%'.$search.'%';
+
+                $query->where(function ($inner) use ($like) {
+                    $inner->where('users.name', 'like', $like)
+                        ->orWhere('branches.name', 'like', $like);
+                });
+            })
             ->orderByDesc('shifts.closed_at')
             ->limit($limit)
             ->get([
@@ -341,6 +432,12 @@ class ShiftController extends Controller
                 'shifts.branch_id',
                 'shifts.opened_at',
                 'shifts.closed_at',
+                'shifts.opening_cash',
+                'shifts.closing_cash',
+                'shifts.system_cash_total',
+                'shifts.difference',
+                'shifts.closed_by_system',
+                'shifts.requires_reconciliation',
                 'users.name as cashier_name',
                 'branches.name as branch_name',
             ]);
@@ -361,10 +458,18 @@ class ShiftController extends Controller
 
             return [
                 'id' => $shift->id,
+                'cashier_id' => $shift->user_id,
+                'branch_id' => $shift->branch_id,
                 'cashier' => $shift->cashier_name,
                 'branch' => $shift->branch_name,
                 'opened_at' => $this->formatShiftDateTime($shift->opened_at, $timezone),
                 'closed_at' => $this->formatShiftDateTime($shift->closed_at, $timezone),
+                'opening_cash' => (float) $shift->opening_cash,
+                'closing_cash' => (float) $shift->closing_cash,
+                'system_cash_total' => (float) $shift->system_cash_total,
+                'difference' => (float) $shift->difference,
+                'closed_by_system' => (bool) ($shift->closed_by_system ?? false),
+                'requires_reconciliation' => (bool) ($shift->requires_reconciliation ?? false),
                 'sales_total' => (float) ($sales->sales_total ?? 0),
                 'sales_count' => (int) ($sales->sales_count ?? 0),
             ];
@@ -372,7 +477,61 @@ class ShiftController extends Controller
 
         return response()->json([
             'shifts' => $rows,
+            'range' => $rangeMeta,
         ]);
+    }
+
+    private function resolveClosedShiftRange(string $range, ?string $from, ?string $to, string $timezone): array
+    {
+        $today = CarbonImmutable::now($timezone)->startOfDay();
+
+        [$startLocal, $endLocal, $label] = match ($range) {
+            'today' => [$today, $today, 'Hari Ini'],
+            'yesterday' => [$today->subDay(), $today->subDay(), 'Kemarin'],
+            'last30' => [$today->subDays(29), $today, '30 Hari Terakhir'],
+            'thisMonth' => [$today->startOfMonth(), $today->endOfMonth()->startOfDay(), 'Bulan Ini'],
+            'lastMonth' => [
+                $today->subMonthNoOverflow()->startOfMonth(),
+                $today->subMonthNoOverflow()->endOfMonth()->startOfDay(),
+                'Bulan Lalu',
+            ],
+            'custom' => $this->resolveClosedShiftCustomRange($from, $to, $today, $timezone),
+            '7days', 'last7' => [$today->subDays(6), $today, '7 Hari Terakhir'],
+            default => [$today->subDays(6), $today, '7 Hari Terakhir'],
+        };
+
+        $days = $startLocal->diffInDays($endLocal) + 1;
+        $limited = false;
+        if ($days > 90) {
+            $endLocal = $startLocal->addDays(89);
+            $limited = true;
+        }
+
+        return [
+            $startLocal->setTimezone('UTC'),
+            $endLocal->addDay()->startOfDay()->setTimezone('UTC'),
+            [
+                'preset' => $range,
+                'start_date' => $startLocal->toDateString(),
+                'end_date' => $endLocal->toDateString(),
+                'label' => $label,
+                'timezone' => $timezone,
+                'limited' => $limited,
+                'limit_days' => 90,
+            ],
+        ];
+    }
+
+    private function resolveClosedShiftCustomRange(?string $from, ?string $to, CarbonImmutable $fallback, string $timezone): array
+    {
+        $startLocal = CarbonImmutable::parse($from ?? $fallback->toDateString(), $timezone)->startOfDay();
+        $endLocal = CarbonImmutable::parse($to ?? $from ?? $fallback->toDateString(), $timezone)->startOfDay();
+
+        if ($endLocal < $startLocal) {
+            [$startLocal, $endLocal] = [$endLocal, $startLocal];
+        }
+
+        return [$startLocal, $endLocal, 'Periode Kustom'];
     }
 
     private function buildCloseFindings(float $difference, string $closeNote, int $salesCount, array $paymentRows): array

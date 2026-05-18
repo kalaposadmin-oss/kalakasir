@@ -67,6 +67,49 @@ class SubscriptionModuleHardeningTest extends TestCase
             ->assertJsonPath('code', 'FEATURE_NOT_ALLOWED');
     }
 
+    public function test_plan_s_cannot_access_inventory_export_endpoints(): void
+    {
+        DB::table('tenants')->where('id', $this->tenant->id)->update(['plan' => 'S']);
+
+        $headers = $this->tenantHeaders($this->tenant->id);
+
+        $this->withHeaders($headers)
+            ->get('/api/v1/reports/inventory/export/csv')
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'FEATURE_NOT_ALLOWED')
+            ->assertJsonPath('details.feature', 'reports.export_csv');
+
+        $this->withHeaders($headers)
+            ->get('/api/v1/reports/inventory/export/pdf')
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'FEATURE_NOT_ALLOWED')
+            ->assertJsonPath('details.feature', 'reports.download_pdf');
+    }
+
+    public function test_plan_m_cannot_access_stock_card_export_premium_endpoint(): void
+    {
+        DB::table('tenants')->where('id', $this->tenant->id)->update(['plan' => 'M']);
+
+        $this->withHeaders($this->tenantHeaders($this->tenant->id))
+            ->get('/api/v1/reports/inventory/stock-card/product-001/export/csv')
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'FEATURE_NOT_ALLOWED')
+            ->assertJsonPath('details.feature', 'reports.inventory_stock_card')
+            ->assertJsonPath('details.plan', 'M');
+    }
+
+    public function test_plan_m_cannot_access_stock_card_read_premium_endpoint(): void
+    {
+        DB::table('tenants')->where('id', $this->tenant->id)->update(['plan' => 'M']);
+
+        $this->withHeaders($this->tenantHeaders($this->tenant->id))
+            ->getJson('/api/v1/stock-card')
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'FEATURE_NOT_ALLOWED')
+            ->assertJsonPath('details.feature', 'reports.inventory_stock_card')
+            ->assertJsonPath('details.plan', 'M');
+    }
+
     public function test_past_due_subscription_cannot_access_valuation_sensitive_endpoints(): void
     {
         DB::table('tenants')->where('id', $this->tenant->id)->update(['plan' => 'P']);
@@ -107,6 +150,391 @@ class SubscriptionModuleHardeningTest extends TestCase
             ->assertJsonStructure([
                 'balance_sheet' => ['assets', 'liabilities', 'equity'],
             ]);
+    }
+
+    public function test_finance_summary_hides_balance_tab_for_starter_and_shows_it_for_pro(): void
+    {
+        config([
+            'platform.portals.pos_hosts' => ['pos.kalakasir.test'],
+            'platform.portals.backoffice_hosts' => ['office.kalakasir.test'],
+        ]);
+
+        DB::table('tenants')->where('id', $this->tenant->id)->update(['plan' => 'S']);
+
+        $starter = $this->from('http://office.kalakasir.test/backoffice/login')
+            ->actingAs($this->user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('http://office.kalakasir.test/backoffice/finance/summary');
+
+        $starter->assertOk();
+        $starter->assertDontSee('id="tab-balance"', false);
+
+        DB::table('tenants')->where('id', $this->tenant->id)->update(['plan' => 'P']);
+
+        $pro = $this->from('http://office.kalakasir.test/backoffice/login')
+            ->actingAs($this->user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('http://office.kalakasir.test/backoffice/finance/summary');
+
+        $pro->assertOk();
+        $pro->assertSee('id="tab-balance"', false);
+    }
+
+    public function test_suspended_subscription_cannot_access_finance_control_daily_endpoints(): void
+    {
+        DB::table('tenants')->where('id', $this->tenant->id)->update(['plan' => 'S']);
+        DB::table('subscriptions')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->id,
+            'plan' => 'S',
+            'status' => 'suspended',
+            'started_at' => now('UTC')->subMonth(),
+            'current_period_start' => now('UTC')->subMonth(),
+            'current_period_end' => now('UTC')->addMonth(),
+            'is_current' => true,
+            'created_at' => now('UTC')->subMonth(),
+            'updated_at' => now('UTC')->subDay(),
+        ]);
+
+        $headers = $this->tenantHeaders($this->tenant->id);
+
+        $this->withHeaders($headers)
+            ->getJson('/api/v1/finance-control-daily?date=2026-02-27')
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'FEATURE_NOT_ALLOWED')
+            ->assertJsonPath('details.feature', 'finance.summary_basic')
+            ->assertJsonPath('details.plan', 'S')
+            ->assertJsonPath('details.status', 'suspended');
+
+        $this->withHeaders($headers)
+            ->postJson('/api/v1/finance-control-daily/snapshot', [
+                'date' => '2026-02-27',
+            ])
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'FEATURE_NOT_ALLOWED')
+            ->assertJsonPath('details.feature', 'finance.summary_basic');
+
+        $this->withHeaders($headers)
+            ->get('/api/v1/finance-control-daily/export?from=2026-02-27&to=2026-02-27')
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'FEATURE_NOT_ALLOWED')
+            ->assertJsonPath('details.feature', 'finance.summary_basic');
+    }
+
+    public function test_suspended_subscription_cannot_access_basic_operational_write_endpoints(): void
+    {
+        DB::table('tenants')->where('id', $this->tenant->id)->update(['plan' => 'S']);
+        DB::table('subscriptions')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->id,
+            'plan' => 'S',
+            'status' => 'suspended',
+            'started_at' => now('UTC')->subMonth(),
+            'current_period_start' => now('UTC')->subMonth(),
+            'current_period_end' => now('UTC')->addMonth(),
+            'is_current' => true,
+            'created_at' => now('UTC')->subMonth(),
+            'updated_at' => now('UTC')->subDay(),
+        ]);
+
+        $headers = $this->tenantHeaders($this->tenant->id);
+
+        $this->withHeaders($headers)
+            ->postJson('/api/v1/shifts/open', [
+                'branch_id' => 'branch-test',
+                'opening_cash' => 0,
+            ])
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'FEATURE_NOT_ALLOWED')
+            ->assertJsonPath('details.feature', 'shift.open')
+            ->assertJsonPath('details.status', 'suspended');
+
+        $this->withHeaders($headers)
+            ->postJson('/api/v1/shifts/close', [
+                'shift_id' => 'shift-test',
+                'closing_cash' => 0,
+            ])
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'FEATURE_NOT_ALLOWED')
+            ->assertJsonPath('details.feature', 'shift.close');
+
+        $this->withHeaders($headers)
+            ->postJson('/api/v1/sales/test-sale-id/void', [
+                'reason' => 'test',
+            ])
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'FEATURE_NOT_ALLOWED')
+            ->assertJsonPath('details.feature', 'pos.void');
+
+        $this->withHeaders($headers)
+            ->postJson('/api/v1/stock-adjustments', [
+                'location_id' => 'test-location',
+                'reason' => 'test',
+                'items' => [],
+            ])
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'FEATURE_NOT_ALLOWED')
+            ->assertJsonPath('details.feature', 'inventory.adjustment');
+
+        $this->withHeaders($headers)
+            ->postJson('/api/v1/stock-adjustments/test-adjustment/post', [])
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'FEATURE_NOT_ALLOWED')
+            ->assertJsonPath('details.feature', 'inventory.adjustment');
+    }
+
+    public function test_suspended_subscription_cannot_access_purchase_write_endpoints(): void
+    {
+        DB::table('tenants')->where('id', $this->tenant->id)->update(['plan' => 'S']);
+        DB::table('subscriptions')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->id,
+            'plan' => 'S',
+            'status' => 'suspended',
+            'started_at' => now('UTC')->subMonth(),
+            'current_period_start' => now('UTC')->subMonth(),
+            'current_period_end' => now('UTC')->addMonth(),
+            'is_current' => true,
+            'created_at' => now('UTC')->subMonth(),
+            'updated_at' => now('UTC')->subDay(),
+        ]);
+
+        $headers = $this->tenantHeaders($this->tenant->id);
+
+        $this->withHeaders($headers)
+            ->postJson('/api/v1/purchases', [
+                'supplier_id' => 'supplier-test',
+                'items' => [],
+            ])
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'FEATURE_NOT_ALLOWED')
+            ->assertJsonPath('details.feature', 'purchase.order')
+            ->assertJsonPath('details.status', 'suspended');
+
+        $this->withHeaders($headers)
+            ->postJson('/api/v1/purchases/test-purchase/receive', [
+                'items' => [],
+            ])
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'FEATURE_NOT_ALLOWED')
+            ->assertJsonPath('details.feature', 'purchase.receive');
+    }
+
+    public function test_plan_s_cannot_access_purchase_return_endpoint(): void
+    {
+        DB::table('tenants')->where('id', $this->tenant->id)->update(['plan' => 'S']);
+
+        $this->withHeaders($this->tenantHeaders($this->tenant->id))
+            ->postJson('/api/v1/purchase-returns', [
+                'purchase_id' => 'purchase-test',
+                'items' => [],
+            ])
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'FEATURE_NOT_ALLOWED')
+            ->assertJsonPath('details.feature', 'purchase.return')
+            ->assertJsonPath('details.plan', 'S');
+    }
+
+    public function test_plan_s_cannot_access_customer_and_loyalty_endpoints(): void
+    {
+        DB::table('tenants')->where('id', $this->tenant->id)->update(['plan' => 'S']);
+
+        $headers = $this->tenantHeaders($this->tenant->id);
+
+        $this->withHeaders($headers)
+            ->getJson('/api/v1/customers')
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'FEATURE_NOT_ALLOWED')
+            ->assertJsonPath('details.feature', 'customer.manage')
+            ->assertJsonPath('details.plan', 'S');
+
+        $this->withHeaders($headers)
+            ->getJson('/api/v1/loyalty')
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'FEATURE_NOT_ALLOWED')
+            ->assertJsonPath('details.feature', 'loyalty.program')
+            ->assertJsonPath('details.plan', 'S');
+    }
+
+    public function test_suspended_subscription_cannot_access_supplier_endpoint(): void
+    {
+        DB::table('tenants')->where('id', $this->tenant->id)->update(['plan' => 'S']);
+        DB::table('subscriptions')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->id,
+            'plan' => 'S',
+            'status' => 'suspended',
+            'started_at' => now('UTC')->subMonth(),
+            'current_period_start' => now('UTC')->subMonth(),
+            'current_period_end' => now('UTC')->addMonth(),
+            'is_current' => true,
+            'created_at' => now('UTC')->subMonth(),
+            'updated_at' => now('UTC')->subDay(),
+        ]);
+
+        $this->withHeaders($this->tenantHeaders($this->tenant->id))
+            ->getJson('/api/v1/suppliers')
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'FEATURE_NOT_ALLOWED')
+            ->assertJsonPath('details.feature', 'supplier.manage')
+            ->assertJsonPath('details.status', 'suspended');
+    }
+
+    public function test_plan_s_cannot_access_staff_and_branch_management_endpoints(): void
+    {
+        DB::table('tenants')->where('id', $this->tenant->id)->update(['plan' => 'S']);
+
+        $headers = $this->tenantHeaders($this->tenant->id);
+
+        $this->withHeaders($headers)
+            ->getJson('/api/v1/users')
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'FEATURE_NOT_ALLOWED')
+            ->assertJsonPath('details.feature', 'settings.staff_basic')
+            ->assertJsonPath('details.plan', 'S');
+
+        $this->withHeaders($headers)
+            ->postJson('/api/v1/branches', [
+                'name' => 'Cabang Baru',
+            ])
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'FEATURE_NOT_ALLOWED')
+            ->assertJsonPath('details.feature', 'settings.branches_manage')
+            ->assertJsonPath('details.plan', 'S');
+    }
+
+    public function test_suspended_subscription_cannot_access_chart_of_accounts_support_endpoint(): void
+    {
+        DB::table('tenants')->where('id', $this->tenant->id)->update(['plan' => 'S']);
+        DB::table('subscriptions')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->id,
+            'plan' => 'S',
+            'status' => 'suspended',
+            'started_at' => now('UTC')->subMonth(),
+            'current_period_start' => now('UTC')->subMonth(),
+            'current_period_end' => now('UTC')->addMonth(),
+            'is_current' => true,
+            'created_at' => now('UTC')->subMonth(),
+            'updated_at' => now('UTC')->subDay(),
+        ]);
+
+        $this->withHeaders($this->tenantHeaders($this->tenant->id))
+            ->getJson('/api/v1/chart-of-accounts')
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'FEATURE_NOT_ALLOWED')
+            ->assertJsonPath('details.feature', 'finance.bank_accounts')
+            ->assertJsonPath('details.status', 'suspended');
+    }
+
+    public function test_suspended_subscription_cannot_access_subscription_billing_endpoints(): void
+    {
+        DB::table('tenants')->where('id', $this->tenant->id)->update(['plan' => 'S']);
+
+        $invoiceId = (string) Str::uuid();
+
+        DB::table('subscriptions')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->id,
+            'plan' => 'S',
+            'status' => 'suspended',
+            'started_at' => now('UTC')->subMonth(),
+            'current_period_start' => now('UTC')->subMonth(),
+            'current_period_end' => now('UTC')->addMonth(),
+            'is_current' => true,
+            'created_at' => now('UTC')->subMonth(),
+            'updated_at' => now('UTC')->subDay(),
+        ]);
+
+        DB::table('invoices')->insert([
+            'id' => $invoiceId,
+            'tenant_id' => $this->tenant->id,
+            'number' => 'INV-SUB-HARD-001',
+            'period_start' => now('UTC')->subMonth()->toDateString(),
+            'period_end' => now('UTC')->toDateString(),
+            'amount_due' => 50000,
+            'amount_paid' => 0,
+            'status' => 'unpaid',
+            'issued_at' => now('UTC')->subDays(5),
+            'due_at' => now('UTC')->addDays(5),
+            'created_at' => now('UTC')->subDays(5),
+            'updated_at' => now('UTC')->subDays(5),
+        ]);
+
+        $headers = $this->tenantHeaders($this->tenant->id);
+
+        $this->withHeaders($headers)
+            ->getJson('/api/v1/subscription/current')
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'FEATURE_NOT_ALLOWED')
+            ->assertJsonPath('details.feature', 'settings.subscription_billing')
+            ->assertJsonPath('details.status', 'suspended');
+
+        $this->withHeaders($headers)
+            ->getJson('/api/v1/subscription/invoices')
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'FEATURE_NOT_ALLOWED')
+            ->assertJsonPath('details.feature', 'settings.subscription_billing');
+
+        $this->withHeaders(array_merge($headers, [
+            'X-Idempotency-Key' => 'mark-paid-subscription-hardening',
+        ]))
+            ->postJson('/api/v1/subscription/invoices/'.$invoiceId.'/mark-paid', [
+                'provider' => 'manual',
+                'reference' => 'SUB-HARD-001',
+            ])
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'FEATURE_NOT_ALLOWED')
+            ->assertJsonPath('details.feature', 'settings.subscription_billing');
+    }
+
+    public function test_suspended_subscription_cannot_access_product_and_category_endpoints(): void
+    {
+        DB::table('tenants')->where('id', $this->tenant->id)->update(['plan' => 'S']);
+        DB::table('subscriptions')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->id,
+            'plan' => 'S',
+            'status' => 'suspended',
+            'started_at' => now('UTC')->subMonth(),
+            'current_period_start' => now('UTC')->subMonth(),
+            'current_period_end' => now('UTC')->addMonth(),
+            'is_current' => true,
+            'created_at' => now('UTC')->subMonth(),
+            'updated_at' => now('UTC')->subDay(),
+        ]);
+
+        $headers = $this->tenantHeaders($this->tenant->id);
+
+        $this->withHeaders($headers)
+            ->getJson('/api/v1/products')
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'FEATURE_NOT_ALLOWED')
+            ->assertJsonPath('details.feature', 'product.list');
+
+        $this->withHeaders($headers)
+            ->postJson('/api/v1/products', [
+                'name' => 'Produk Tes',
+                'sku' => 'SKU-TES',
+                'price' => 10000,
+            ])
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'FEATURE_NOT_ALLOWED')
+            ->assertJsonPath('details.feature', 'product.list');
+
+        $this->withHeaders($headers)
+            ->getJson('/api/v1/categories')
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'FEATURE_NOT_ALLOWED')
+            ->assertJsonPath('details.feature', 'product.category');
+
+        $this->withHeaders($headers)
+            ->postJson('/api/v1/categories', [
+                'name' => 'Kategori Tes',
+            ])
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'FEATURE_NOT_ALLOWED')
+            ->assertJsonPath('details.feature', 'product.category');
     }
 
     public function test_warehouse_can_access_subscription_read_endpoints(): void

@@ -22,6 +22,9 @@
     abort_unless(in_array($branchesRole, ['warehouse', 'supervisor', 'admin', 'owner', 'superadmin'], true), 403);
 
     $canManageBranches = in_array($branchesRole, ['admin', 'owner', 'superadmin'], true);
+    $branchesPortalPrefix = request()->is('pos/*') ? '/pos' : '/backoffice';
+    $branchesCurrentPath = $branchesPortalPrefix.'/branches';
+    $branchesBackUrl = $branchesPortalPrefix === '/pos' ? pos_default_url() : '/backoffice/dashboard';
 @endphp
 
 @section('page_title', 'Manajemen Lokasi & Cabang')
@@ -30,10 +33,10 @@
 @section('main_class', 'flex-1 overflow-hidden p-0')
 
 @section('header')
-    <x-page-header title="Manajemen Cabang" backUrl="/backoffice/dashboard">
+    <x-page-header title="Manajemen Cabang" :backUrl="$branchesBackUrl">
         <x-slot name="actions">
             @if ($canManageBranches)
-                <a class="flex items-center justify-center rounded-full size-10 bg-primary/10 text-primary hover:bg-primary/20 transition-colors" href="/backoffice/branches/edit">
+                <a class="flex items-center justify-center rounded-full size-10 bg-primary/10 text-primary hover:bg-primary/20 transition-colors" href="{{ $branchesPortalPrefix.'/branches/edit' }}">
                     <span class="material-symbols-outlined">add</span>
                 </a>
             @endif
@@ -99,7 +102,7 @@
                             <p class="text-sm font-bold text-slate-900 dark:text-slate-100">${defaultLocation}</p>
                         </div>
                         @if ($canManageBranches)
-                            <a class="text-xs font-bold text-primary px-3 py-1.5 rounded-lg bg-white shadow-sm border border-primary/10" href="/backoffice/branches/${encodeURIComponent(defaultBranch.id)}/edit?from=${encodeURIComponent('/backoffice/branches')}">Ubah</a>
+                            <a class="text-xs font-bold text-primary px-3 py-1.5 rounded-lg bg-white shadow-sm border border-primary/10" href="{{ $branchesPortalPrefix }}/branches/${encodeURIComponent(defaultBranch.id)}/edit?from=${encodeURIComponent(@js($branchesCurrentPath))}">Ubah</a>
                         @endif
                     `;
                 };
@@ -132,7 +135,7 @@
                                 </div>
                                 @if ($canManageBranches)
                                     <div class="flex gap-1">
-                                        <a class="size-8 flex items-center justify-center text-slate-400 hover:text-primary transition-colors" href="/backoffice/branches/${encodeURIComponent(branch.id)}/edit?from=${encodeURIComponent('/backoffice/branches')}">
+                                        <a class="size-8 flex items-center justify-center text-slate-400 hover:text-primary transition-colors" href="{{ $branchesPortalPrefix }}/branches/${encodeURIComponent(branch.id)}/edit?from=${encodeURIComponent(@js($branchesCurrentPath))}">
                                             <span class="material-symbols-outlined text-xl">edit</span>
                                         </a>
                                         <button class="size-8 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors" data-branch-id="${branch.id}">
@@ -174,11 +177,7 @@
                 };
 
                 const loadBootstrap = async () => {
-                    const response = await fetch('/api/v1/bootstrap', { headers });
-                    if (!response.ok) {
-                        return null;
-                    }
-                    return response.json();
+                    return window.PosUi.getBootstrap({ headers, ttlMs: 20000 });
                 };
 
                 el.search.addEventListener('input', (event) => {

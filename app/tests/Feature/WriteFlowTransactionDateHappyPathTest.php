@@ -23,6 +23,7 @@ class WriteFlowTransactionDateHappyPathTest extends TestCase
         parent::setUp();
 
         [$this->tenant, $this->user] = $this->bootApiActor('admin', 'admin-happy@example.com', 'Admin Happy');
+        $this->tenant->forceFill(['plan' => 'M'])->save();
         $this->checkoutFixture = $this->seedCheckoutFixture($this->tenant->id, $this->user->id);
     }
 

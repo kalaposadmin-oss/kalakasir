@@ -43,15 +43,15 @@
         <section class="grid grid-cols-1 gap-4 md:grid-cols-3">
             <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                 <p class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Kode Aktif</p>
-                <p id="ref-kpi-codes" class="mt-2 text-3xl font-bold text-primary">42</p>
+                <p id="ref-kpi-codes" class="mt-2 text-3xl font-bold text-primary">0</p>
             </article>
             <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                 <p class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Total Referral</p>
-                <p id="ref-kpi-members" class="mt-2 text-3xl font-bold text-slate-900 dark:text-white">1,540</p>
+                <p id="ref-kpi-members" class="mt-2 text-3xl font-bold text-slate-900 dark:text-white">0</p>
             </article>
             <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                 <p class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Total Reward Terbayar</p>
-                <p id="ref-kpi-reward" class="mt-2 text-3xl font-bold text-slate-900 dark:text-white">Rp 8.450.000</p>
+                <p id="ref-kpi-reward" class="mt-2 text-3xl font-bold text-slate-900 dark:text-white">Rp 0</p>
             </article>
         </section>
 
@@ -65,7 +65,7 @@
                             <input type="text" class="w-64 rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-3 text-xs dark:border-slate-700 dark:bg-slate-800" placeholder="Cari kode..." />
                         </div>
                         @if ($canManageReferral)
-                            <button class="rounded-lg bg-primary px-3 py-2 text-xs font-bold text-white">Buat Kode Baru</button>
+                            <button class="rounded-lg bg-slate-200 px-3 py-2 text-xs font-bold text-slate-500 dark:bg-slate-800 dark:text-slate-400" type="button" disabled>Modul belum aktif</button>
                         @endif
                     </div>
                 </div>
@@ -100,7 +100,7 @@
                     <div class="px-5 py-4 text-xs text-slate-500">Memuat riwayat reward...</div>
                 </div>
                 <div class="border-t border-slate-100 px-5 py-3 text-center dark:border-slate-800">
-                    <button class="text-[11px] font-bold uppercase tracking-wider text-slate-500 hover:text-primary">Lihat Semua Riwayat</button>
+                    <button class="text-[11px] font-bold uppercase tracking-wider text-slate-400" type="button" disabled>Belum ada riwayat</button>
                 </div>
             </aside>
         </section>
@@ -131,12 +131,6 @@
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;')
                 .replace(/'/g, '&#39;');
-
-            const fallbackCodes = [
-                { code: 'MERDEKA10', users: 124, reward: 1240000, created_at: '12 Agt 2024', status: 'aktif' },
-                { code: 'PROMOHEBAT', users: 89, reward: 890000, created_at: '05 Agt 2024', status: 'aktif' },
-                { code: 'EXPIRED50', users: 210, reward: 2100000, created_at: '20 Jan 2024', status: 'nonaktif' },
-            ];
 
             const renderCodes = (rows) => {
                 if (!rows.length) {
@@ -177,37 +171,25 @@
                 `).join('');
             };
 
-            const hydrateFallback = () => {
-                el.codes.textContent = '3';
-                el.members.textContent = '423';
-                el.reward.textContent = formatCurrency(4230000);
-                renderCodes(fallbackCodes);
-                renderHistory([
-                    { name: 'Andi Wijaya', reward: 15000, code: 'MERDEKA10', time: 'Tadi, 14:20', type: 'Saldo Akun' },
-                    { name: 'Budi Santoso', reward: 10000, code: 'PROMOHEBAT', time: '1 jam lalu', type: 'Kupon' },
-                    { name: 'Siska Amelia', reward: 15000, code: 'MERDEKA10', time: '3 jam lalu', type: 'Saldo Akun' },
-                ]);
+            const hydrateEmpty = () => {
+                el.codes.textContent = '0';
+                el.members.textContent = '0';
+                el.reward.textContent = formatCurrency(0);
+                renderCodes([]);
+                renderHistory([]);
             };
 
             const load = async () => {
                 const response = await fetch('/api/v1/loyalty', { headers });
                 if (!response.ok) {
-                    hydrateFallback();
+                    hydrateEmpty();
                     return;
                 }
 
                 const payload = await response.json().catch(() => ({}));
                 const data = window.PosUi.unwrapApiPayload(payload) || {};
                 const members = Array.isArray(data.members) ? data.members : [];
-                const referralCodes = Array.isArray(data.referral_codes) && data.referral_codes.length
-                    ? data.referral_codes
-                    : members.slice(0, 8).map((member, index) => ({
-                        code: `REF${String(index + 1).padStart(3, '0')}`,
-                        users: member.transactions || 0,
-                        reward: (member.points || 0) * 100,
-                        created_at: '-',
-                        status: 'aktif',
-                    }));
+                const referralCodes = Array.isArray(data.referral_codes) ? data.referral_codes : [];
 
                 const activeCodeCount = referralCodes.filter((code) => String(code.status || 'aktif').toLowerCase() !== 'nonaktif').length;
                 const totalReward = data.total_reward_paid
@@ -218,19 +200,11 @@
                 el.reward.textContent = formatCurrency(totalReward);
 
                 renderCodes(referralCodes.slice(0, 8));
-                const historyRows = Array.isArray(data.reward_history) && data.reward_history.length
-                    ? data.reward_history
-                    : members.slice(0, 3).map((member, index) => ({
-                        name: member.name || `Member ${index + 1}`,
-                        reward: (member.points || 0) * 100,
-                        code: referralCodes[index]?.code || 'REF001',
-                        time: 'Baru saja',
-                        type: 'Saldo Akun',
-                    }));
+                const historyRows = Array.isArray(data.reward_history) ? data.reward_history : [];
                 renderHistory(historyRows.slice(0, 6));
             };
 
-            load().catch(() => hydrateFallback());
+            load().catch(() => hydrateEmpty());
         })();
     </script>
 @endsection

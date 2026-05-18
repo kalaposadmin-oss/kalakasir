@@ -65,6 +65,10 @@
                 <p class="text-xs font-medium" id="sale-cashier">-</p>
             </div>
             <div>
+                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Sumber</p>
+                <p class="text-xs font-medium" id="sale-channel">-</p>
+            </div>
+            <div>
                 <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Pelanggan</p>
                 <p class="text-xs font-medium" id="sale-customer">-</p>
             </div>
@@ -73,13 +77,6 @@
                 <p class="text-xs font-medium" id="sale-payment">-</p>
             </div>
         </div>
-    </div>
-    <div class="px-4 mb-6">
-        @include('partials.owner-pos-panel', [
-            'compact' => true,
-            'title' => 'Mode Owner',
-            'subtitle' => 'Butuh tindakan manajemen tanpa keluar dari detail transaksi.',
-        ])
     </div>
     <div class="px-4 mb-6">
         <h3 class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3 px-1" id="item-count">Daftar Item (0)</h3>
@@ -105,6 +102,15 @@
             </div>
         </div>
     </div>
+    @if ($detailPortal === 'pos')
+    <div class="px-4 mb-6">
+        <button id="edit-sale-draft" class="w-full bg-primary text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-primary/20 hover:opacity-90 transition-colors" type="button">
+            <span class="material-symbols-outlined">edit</span>
+            Edit di Kasir
+        </button>
+        <p class="mt-2 px-2 text-[11px] leading-relaxed text-slate-400">Item dan jumlah akan disalin ke keranjang kasir. Ini membuat draft baru untuk diedit, bukan mengubah transaksi lama langsung.</p>
+    </div>
+    @endif
     <div class="px-4">
         @if ($allowVoidRefundAction)
         <button id="void-button" class="w-full bg-white dark:bg-slate-900 border-2 border-red-500/20 text-red-600 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-red-50 transition-colors">
@@ -138,6 +144,7 @@
                     status: document.getElementById('sale-status'),
                     time: document.getElementById('sale-time'),
                     cashier: document.getElementById('sale-cashier'),
+                    channel: document.getElementById('sale-channel'),
                     customer: document.getElementById('sale-customer'),
                     payment: document.getElementById('sale-payment'),
                     count: document.getElementById('item-count'),
@@ -146,9 +153,13 @@
                     tax: document.getElementById('tax'),
                     discount: document.getElementById('discount'),
                     total: document.getElementById('total'),
+                    editSaleDraft: document.getElementById('edit-sale-draft'),
                     voidButton: document.getElementById('void-button'),
                     voidRefundLink: document.getElementById('void-refund-link'),
                 };
+
+                const cartStorageKey = 'pos_cart_draft';
+                const checkoutUrl = '/pos/checkout';
 
                 const formatCurrency = (value) => new Intl.NumberFormat('id-ID', {
                     style: 'currency',
@@ -222,6 +233,32 @@
                     return response.json();
                 };
 
+                const prepareCheckoutDraft = (sale, items) => {
+                    const draftItems = (Array.isArray(items) ? items : []).map((item) => ({
+                        product_id: item.product_id,
+                        qty: Number(item.qty || 1),
+                        discounts: [],
+                        note: '',
+                    })).filter((item) => Boolean(item.product_id));
+
+                    if (!draftItems.length) {
+                        throw new Error('Item transaksi tidak ditemukan untuk diedit.');
+                    }
+
+                    sessionStorage.setItem(cartStorageKey, JSON.stringify({
+                        items: draftItems,
+                        customer_id: sale.customer_id || null,
+                        fees: [],
+                        selected_promos: [],
+                        transaction_discounts: [],
+                           order_holder_name: sale.order_holder_name || sale.customer_name || '',
+                           order_note: sale.order_note || `Salinan transaksi ${sale.id}`,
+                        replace_sale_id: sale.id,
+                        transaction_date: sale.transaction_date || null,
+                        updated_at: new Date().toISOString(),
+                    }));
+                };
+
                 const setVoidState = (sale) => {
                     const isVoid = sale.status === 'void';
                     el.voidBanner.classList.toggle('hidden', !isVoid);
@@ -250,6 +287,8 @@
                     try {
                         const data = await loadSale(saleId);
                         const sale = data.sale;
+                        const hasAnyPayments = (Array.isArray(data.payments) && data.payments.length > 0)
+                            || (Array.isArray(data.receivable?.payments) && data.receivable.payments.length > 0);
                         if (el.voidRefundLink && detailVoidRefundBaseUrl) {
                             const voidParams = new URLSearchParams();
                             if (currentFrom) {
@@ -262,6 +301,7 @@
                         el.invoice.textContent = formatInvoice(sale);
                         el.time.textContent = formatDateTime(sale.created_at);
                         el.cashier.textContent = sale.cashier_name || '-';
+                        el.channel.textContent = sale.sales_channel_label || '-';
                         el.customer.textContent = sale.customer_name || 'Guest (Umum)';
                         el.payment.textContent = paymentLabel(data.payments);
                         el.subtotal.textContent = formatCurrency(sale.subtotal);
@@ -270,6 +310,26 @@
                         el.total.textContent = formatCurrency(sale.total);
                         setVoidState(sale);
                         renderItems(data.items || []);
+
+                        if (el.editSaleDraft) {
+                            const blocked = sale.status === 'void' || hasAnyPayments;
+                            el.editSaleDraft.disabled = blocked;
+                            el.editSaleDraft.classList.toggle('opacity-60', blocked);
+                            el.editSaleDraft.classList.toggle('cursor-not-allowed', blocked);
+                            el.editSaleDraft.title = blocked
+                                ? 'Transaksi yang sudah punya pembayaran tidak bisa diedit langsung.'
+                                : 'Edit transaksi di kasir';
+                            el.editSaleDraft.addEventListener('click', () => {
+                                try {
+                                    prepareCheckoutDraft(sale, data.items || []);
+                                    const nextUrl = new URL(checkoutUrl, window.location.origin);
+                                    nextUrl.searchParams.set('from', currentFrom || @json($detailCurrentPath));
+                                    window.location.href = nextUrl.toString();
+                                } catch (error) {
+                                    alert(error.message || 'Gagal menyiapkan draft edit.');
+                                }
+                            });
+                        }
 
                         if (el.voidButton) {
                             el.voidButton.addEventListener('click', async () => {

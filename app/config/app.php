@@ -69,6 +69,8 @@ return [
 
     'max_backdate_days' => (int) env('APP_MAX_BACKDATE_DAYS', env('MAX_BACKDATE_DAYS', 1)),
 
+    'slow_query_ms' => (int) env('APP_SLOW_QUERY_MS', 250),
+
     /*
     |--------------------------------------------------------------------------
     | Application Locale Configuration

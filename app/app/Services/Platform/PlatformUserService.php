@@ -62,7 +62,8 @@ class PlatformUserService
             $query->where('ll.last_activity', '<=', $to);
         }
 
-        $total = (int) $query->distinct('u.id')->count('u.id');
+        $totalQuery = clone $query;
+        $total = (int) $totalQuery->distinct('u.id')->count('u.id');
 
         $query->select([
             'u.id',

@@ -12,6 +12,7 @@ use App\Support\WebPortalResolver;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
@@ -19,6 +20,15 @@ use RuntimeException;
 
 class PortalAuthController extends Controller
 {
+    public function showRoot(Request $request)
+    {
+        if ($this->shouldStartOnboarding()) {
+            return redirect('/register/step-1');
+        }
+
+        return $this->renderPosLogin($request, '/', true);
+    }
+
     public function showGeneric(Request $request)
     {
         if (Auth::check()) {
@@ -28,52 +38,48 @@ class PortalAuthController extends Controller
             return redirect($this->portalDashboard($activePortal));
         }
 
-        return view('auth-login', array_merge([
+        return view('auth-login', [
             'tenantId' => $this->resolveTenantId(),
+            'loginAction' => '/login',
+            'loginTitle' => 'Pilih Area Kerja',
+            'loginSubtitle' => 'Masuk ke POS untuk transaksi harian atau ke Backoffice untuk laporan dan pengaturan toko.',
+            'portalLabel' => null,
+            'portalTone' => 'primary',
             'showMenu' => false,
-        ], $this->portalLoginViewData(app(WebPortalResolver::class)->resolvePortalFromRequest($request))));
+            'showRegisterLink' => true,
+        ]);
     }
 
     public function showPos(Request $request)
     {
-        if (Auth::check()) {
-            $targetPortal = $this->resolveAuthenticatedPortal($request, Auth::user(), 'pos');
-            $request->session()->put('auth_portal', $targetPortal);
-
-            return redirect($this->portalDashboard($targetPortal));
+        if (! Auth::check()) {
+            return redirect('/');
         }
 
-        return view('auth-login', [
-            'tenantId' => $this->resolveTenantId(),
-            'loginAction' => '/pos/login',
-            'loginTitle' => 'Login POS',
-            'loginSubtitle' => 'Masuk cepat untuk operasional kasir harian.',
-            'portalLabel' => 'POS',
-            'portalTone' => 'primary',
-            'showMenu' => false,
-            'showRegisterLink' => false,
-        ]);
+        return $this->renderPosLogin($request, '/pos/login', false);
+    }
+
+    public function showBackofficeEntry(Request $request)
+    {
+        if ($this->shouldStartOnboarding()) {
+            return redirect('/register/step-1');
+        }
+
+        return $this->renderBackofficeLogin($request, '/backoffice');
     }
 
     public function showBackoffice(Request $request)
     {
-        if (Auth::check()) {
-            $targetPortal = $this->resolveAuthenticatedPortal($request, Auth::user(), 'backoffice');
-            $request->session()->put('auth_portal', $targetPortal);
-
-            return redirect($this->portalDashboard($targetPortal));
+        if (! Auth::check()) {
+            return redirect('/backoffice');
         }
 
-        return view('auth-login', [
-            'tenantId' => $this->resolveTenantId(),
-            'loginAction' => '/backoffice/login',
-            'loginTitle' => 'Login Backoffice',
-            'loginSubtitle' => 'Masuk untuk mengelola master data, laporan, dan pengaturan toko.',
-            'portalLabel' => 'BACKOFFICE',
-            'portalTone' => 'slate',
-            'showMenu' => false,
-            'showRegisterLink' => false,
-        ]);
+        return $this->renderBackofficeLogin($request, '/backoffice/login');
+    }
+
+    public function loginRoot(Request $request)
+    {
+        return $this->attemptLogin($request, 'pos');
     }
 
     public function loginGeneric(Request $request)
@@ -89,6 +95,65 @@ class PortalAuthController extends Controller
     public function loginBackoffice(Request $request)
     {
         return $this->attemptLogin($request, 'backoffice');
+    }
+
+    private function renderPosLogin(Request $request, string $loginAction, bool $showRegisterLink)
+    {
+        if (Auth::check()) {
+            $targetPortal = $this->resolveAuthenticatedPortal($request, Auth::user(), 'pos');
+            $request->session()->put('auth_portal', $targetPortal);
+
+            return redirect($this->portalDashboard($targetPortal));
+        }
+
+        return view('auth-login', [
+            'tenantId' => $this->resolveTenantId(),
+            'loginAction' => $loginAction,
+            'loginTitle' => 'Login POS',
+            'loginSubtitle' => 'Area kerja kasir untuk transaksi dan operasional harian.',
+            'portalLabel' => 'POS',
+            'portalTone' => 'primary',
+            'showMenu' => false,
+            'showRegisterLink' => $showRegisterLink,
+        ]);
+    }
+
+    private function renderBackofficeLogin(Request $request, string $loginAction)
+    {
+        $isSuperadminLogin = $this->isSuperadminLoginIntent($request);
+
+        if (Auth::check()) {
+            $targetPortal = $this->resolveAuthenticatedPortal($request, Auth::user(), $isSuperadminLogin ? 'superadmin' : 'backoffice');
+            $request->session()->put('auth_portal', $targetPortal);
+
+            return redirect($this->portalDashboard($targetPortal));
+        }
+
+        return view('auth-login', [
+            'tenantId' => $this->resolveTenantId(),
+            'loginAction' => $loginAction,
+            'loginTitle' => $isSuperadminLogin ? 'Login Superadmin' : 'Login Backoffice',
+            'loginSubtitle' => $isSuperadminLogin
+                ? 'Area kontrol platform untuk memantau tenant, insiden, billing, dan kesehatan sistem.'
+                : 'Area kerja owner dan admin untuk laporan, data master, dan pengaturan toko.',
+            'loginButtonLabel' => $isSuperadminLogin ? 'Masuk Superadmin' : 'Masuk Backoffice',
+            'accessBoxTitle' => $isSuperadminLogin ? 'Akses superadmin' : 'Akses backoffice',
+            'accessBoxDescription' => $isSuperadminLogin
+                ? 'Gunakan akun dengan role superadmin. Akun owner/admin toko akan tetap diarahkan ke backoffice.'
+                : 'Gunakan akun owner, admin, supervisor, atau gudang yang sudah terdaftar.',
+            'portalLabel' => $isSuperadminLogin ? 'SUPERADMIN' : 'BACKOFFICE',
+            'portalTone' => 'slate',
+            'showMenu' => false,
+            'showRegisterLink' => false,
+        ]);
+    }
+
+    private function isSuperadminLoginIntent(Request $request): bool
+    {
+        $intended = (string) $request->session()->get('url.intended', '');
+        $intendedPath = parse_url($intended, PHP_URL_PATH) ?: $intended;
+
+        return str_starts_with($intendedPath, '/superadmin');
     }
 
     private function attemptLogin(Request $request, ?string $forcedPortal)
@@ -257,7 +322,7 @@ class PortalAuthController extends Controller
     {
         $role = $this->resolvePortalRole($user);
 
-        if (in_array($forcedPortal, ['pos', 'backoffice'], true)
+        if (in_array($forcedPortal, ['pos', 'backoffice', 'superadmin'], true)
             && $this->portalAccessError($forcedPortal, $role) === null) {
             return $forcedPortal;
         }
@@ -277,6 +342,10 @@ class PortalAuthController extends Controller
             }
         }
 
+        if ($this->portalAccessError('superadmin', $role) === null) {
+            return 'superadmin';
+        }
+
         if ($this->portalAccessError('backoffice', $role) === null) {
             return 'backoffice';
         }
@@ -286,18 +355,22 @@ class PortalAuthController extends Controller
 
     private function portalAccessError(string $portal, ?string $role): ?string
     {
-        $allowedRoles = $portal === 'backoffice'
-            ? ['warehouse', 'supervisor', 'admin', 'owner', 'superadmin']
-            : ['cashier', 'staff', 'warehouse', 'supervisor', 'admin', 'owner', 'superadmin'];
+        $allowedRoles = match ($portal) {
+            'superadmin' => ['superadmin'],
+            'backoffice' => ['warehouse', 'supervisor', 'admin', 'owner', 'superadmin'],
+            default => ['cashier', 'staff', 'warehouse', 'supervisor', 'admin', 'owner', 'superadmin'],
+        };
 
         if ($portal === 'pos' && $role === null) {
             return null;
         }
 
         if (! in_array($role, $allowedRoles, true)) {
-            return $portal === 'backoffice'
-                ? 'Akun ini tidak memiliki akses ke backoffice.'
-                : 'Akun ini tidak memiliki akses ke POS.';
+            return match ($portal) {
+                'superadmin' => 'Akun ini tidak memiliki akses ke superadmin.',
+                'backoffice' => 'Akun ini tidak memiliki akses ke backoffice.',
+                default => 'Akun ini tidak memiliki akses ke POS.',
+            };
         }
 
         return null;
@@ -305,7 +378,30 @@ class PortalAuthController extends Controller
 
     private function portalDashboard(string $portal): string
     {
-        return $portal === 'backoffice' ? '/backoffice/dashboard' : '/pos/dashboard';
+        if ($portal === 'superadmin') {
+            return '/superadmin/dashboard';
+        }
+
+        if ($portal === 'backoffice') {
+            return '/backoffice/dashboard';
+        }
+
+        // For POS portal: if the user already has an open shift,
+        // go directly to the checkout page for faster transaction flow.
+        return pos_default_url(Auth::user());
+    }
+
+    private function shouldStartOnboarding(): bool
+    {
+        $tenantId = $this->resolveTenantId();
+
+        if (! $tenantId || ! Schema::hasTable('users')) {
+            return false;
+        }
+
+        return ! DB::table('users')
+            ->where('tenant_id', $tenantId)
+            ->exists();
     }
 
     private function portalLoginViewData(?string $portal = null): array
@@ -314,7 +410,7 @@ class PortalAuthController extends Controller
             'pos' => [
                 'loginAction' => '/login',
                 'loginTitle' => 'Login POS',
-                'loginSubtitle' => 'Masuk cepat untuk operasional kasir harian.',
+                'loginSubtitle' => 'Area kerja kasir untuk transaksi dan operasional harian.',
                 'portalLabel' => 'POS',
                 'portalTone' => 'primary',
                 'showRegisterLink' => true,
@@ -322,7 +418,7 @@ class PortalAuthController extends Controller
             'backoffice' => [
                 'loginAction' => '/login',
                 'loginTitle' => 'Login Backoffice',
-                'loginSubtitle' => 'Masuk untuk mengelola master data, laporan, dan pengaturan toko.',
+                'loginSubtitle' => 'Area kerja owner dan admin untuk laporan, data master, dan pengaturan toko.',
                 'portalLabel' => 'BACKOFFICE',
                 'portalTone' => 'slate',
                 'showRegisterLink' => false,
@@ -330,8 +426,8 @@ class PortalAuthController extends Controller
             default => [
                 'loginAction' => '/login',
                 'loginTitle' => 'Masuk ke KalaKasir',
-                'loginSubtitle' => 'Masuk untuk mulai transaksi dan mengelola toko.',
-                'portalLabel' => 'PORTAL UTAMA',
+                'loginSubtitle' => 'Gunakan satu akun untuk masuk ke POS atau Backoffice sesuai peran Anda.',
+                'portalLabel' => null,
                 'portalTone' => 'primary',
                 'showRegisterLink' => true,
             ],

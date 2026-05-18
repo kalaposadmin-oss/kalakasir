@@ -34,7 +34,7 @@ class WebSalesFlowContext
                 $portal === 'backoffice' ? '/backoffice/reports/sales' : '/pos/history',
                 $portal === 'backoffice'
                     ? ['/backoffice/reports/sales', '/backoffice/sales/']
-                    : ['/pos/history', '/pos/sales/', '/pos/sales/'.$saleId.'/void-refund', '/pos/sales/'.$saleId.'/receipt']
+                    : ['/pos/history', '/pos/sales/', '/pos/sales/'.$saleId.'/void-refund', '/pos/sales/'.$saleId.'/receipt', '/pos/finance/summary']
             ),
             'showVoidRefundAction' => $canVoidRefund,
             'voidRefundUrl' => $canVoidRefund ? $currentPath.'/void-refund' : null,

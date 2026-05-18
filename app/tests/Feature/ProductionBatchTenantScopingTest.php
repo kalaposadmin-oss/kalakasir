@@ -115,6 +115,7 @@ class ProductionBatchTenantScopingTest extends TestCase
         [$foreignTenant] = $this->bootApiActor('admin', 'admin+production-update-scope-foreign@example.test');
 
         $this->actingAs($user, 'sanctum');
+        DB::table('tenants')->where('id', $tenant->id)->update(['plan' => 'M']);
 
         $foreignFixture = $this->seedFixture($foreignTenant);
         $foreignBatchId = (string) Str::uuid();
@@ -225,6 +226,8 @@ class ProductionBatchTenantScopingTest extends TestCase
 
     private function seedFixture(Tenant $tenant): array
     {
+        DB::table('tenants')->where('id', $tenant->id)->update(['plan' => 'M']);
+
         $branchId = (string) Str::uuid();
         $locationId = (string) Str::uuid();
 
@@ -260,6 +263,7 @@ class ProductionBatchTenantScopingTest extends TestCase
             'item_type' => 'finished_good',
             'track_stock' => true,
             'price' => 10000,
+            'recipe_output_qty' => 10,
             'bom_items' => json_encode([
                 [
                     'product_id' => $rawMaterialId,
@@ -296,6 +300,7 @@ class ProductionBatchTenantScopingTest extends TestCase
             'product_mode' => 'default',
             'production_mode' => Product::PRODUCTION_MODE_NONE,
             'item_type' => 'finished_good',
+            'recipe_output_qty' => null,
             'variants' => json_encode([]),
             'bom_items' => json_encode([]),
             'bundle_items' => json_encode([]),

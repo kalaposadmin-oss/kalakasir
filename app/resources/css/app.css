@@ -1,11 +1,516 @@
-@import 'tailwindcss';
+@import 'tailwindcss' source(none);
+@import 'material-symbols/outlined.css';
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
-@source '../../storage/framework/views/*.php';
-@source '../**/*.blade.php';
-@source '../**/*.js';
+@source '../views/**/*.blade.php';
+@source '../js/**/*.js';
 
 @theme {
-    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
-        'Segoe UI Symbol', 'Noto Color Emoji';
+    --font-sans: ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+        'Noto Color Emoji';
+    --font-display: ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+        'Noto Color Emoji';
+    --font-receipt: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+    --color-primary: #F97316; --color-primary-dark: #EA580C;
+    --color-secondary: #FB923C; --color-secondary-light: #FED7AA; --color-secondary-lightest: #FFF7ED;
+    --color-accent: #22C55E; --color-accent-light: #DCFCE7;
+    --color-warning: #F59E0B; --color-warning-light: #FEF3C7; --color-danger: #EF4444; --color-danger-light: #FEE2E2;
+    --color-background-light: #f6f6f8;
+    --color-background-dark: #101622;
+    --radius-lg: 0.5rem;
+    --radius-xl: 0.75rem;
+    --radius-full: 9999px;
+}
+
+@layer base {
+    html {
+        letter-spacing: 0;
+    }
+
+    body {
+        background: #f8fafc;
+        font-family: var(--font-display);
+    }
+
+    button,
+    input,
+    select,
+    textarea {
+        font: inherit;
+        letter-spacing: 0;
+    }
+}
+
+@layer components {
+    .app-surface {
+        border: 1px solid #e2e8f0;
+        border-radius: 1rem;
+        background: #fff;
+        box-shadow: 0 1px 2px rgb(15 23 42 / 0.06), 0 1px 6px rgb(15 23 42 / 0.04);
+    }
+
+    .app-card {
+        border: 1px solid #e2e8f0;
+        border-radius: 1rem;
+        background: #fff;
+        box-shadow: 0 1px 2px rgb(15 23 42 / 0.06), 0 1px 6px rgb(15 23 42 / 0.04);
+    }
+
+    .app-soft-panel {
+        border: 1px solid #e2e8f0;
+        border-radius: 1rem;
+        background: #f8fafc;
+    }
+
+    .app-kicker {
+        color: #94a3b8;
+        font-size: 0.625rem;
+        font-weight: 700;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+    }
+
+    .app-search-control {
+        width: 100%;
+        min-height: 3rem;
+        border: 0;
+        border-radius: 9999px;
+        background: #f1f5f9;
+        color: #0f172a;
+        font-size: 0.875rem;
+        box-shadow: inset 0 0 0 1px rgb(226 232 240 / 0.7);
+    }
+
+    .app-search-control:focus {
+        box-shadow: inset 0 0 0 1px var(--color-primary), 0 0 0 3px rgb(249 115 22 / 0.12);
+        outline: 2px solid transparent;
+        outline-offset: 2px;
+    }
+
+    .app-icon-button {
+        display: inline-flex;
+        width: 2.5rem;
+        height: 2.5rem;
+        align-items: center;
+        justify-content: center;
+        border-radius: 9999px;
+        background: #f1f5f9;
+        color: #475569;
+    }
+
+    .app-primary-button {
+        display: inline-flex;
+        min-height: 2.75rem;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        border-radius: 0.875rem;
+        background: var(--color-primary);
+        padding: 0.625rem 1rem;
+        color: #fff;
+        font-size: 0.875rem;
+        font-weight: 700;
+        box-shadow: 0 8px 18px rgb(249 115 22 / 0.18);
+    }
+
+    .app-secondary-button {
+        display: inline-flex;
+        min-height: 2.75rem;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.875rem;
+        background: #fff;
+        padding: 0.625rem 1rem;
+        color: #334155;
+        font-size: 0.875rem;
+        font-weight: 700;
+        box-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
+    }
+
+    .form-input,
+    .form-select,
+    .form-textarea,
+    .form-multiselect {
+        width: 100%;
+        border: 1px solid #e2e8f0;
+        background-color: #fff;
+        color: #0f172a;
+        border-radius: 0.75rem;
+        padding: 0.625rem 0.75rem;
+        font: inherit;
+        line-height: 1.5;
+    }
+
+    .form-select {
+        padding-right: 2.25rem;
+    }
+
+    .form-textarea {
+        min-height: 6rem;
+    }
+
+    .form-input:focus,
+    .form-select:focus,
+    .form-textarea:focus,
+    .form-multiselect:focus {
+        border-color: var(--color-primary);
+        box-shadow: 0 0 0 3px rgb(249 115 22 / 0.14);
+        outline: 2px solid transparent;
+        outline-offset: 2px;
+    }
+
+    .form-checkbox,
+    .form-radio {
+        width: 1rem;
+        height: 1rem;
+        border: 1px solid #cbd5e1;
+        color: var(--color-primary);
+    }
+
+    .form-checkbox {
+        border-radius: 0.25rem;
+    }
+
+    .form-radio {
+        border-radius: 9999px;
+    }
+
+    /* Levia Bakery Brand Colors */
+    .levia-bg-primary {
+        background-color: var(--color-primary);
+    }
+
+    .levia-bg-primary-light {
+        background-color: var(--color-secondary-light);
+    }
+
+    .levia-bg-primary-lightest {
+        background-color: var(--color-secondary-lightest);
+    }
+
+    .levia-text-primary {
+        color: var(--color-primary);
+    }
+
+    .levia-text-secondary {
+        color: var(--color-secondary);
+    }
+
+    .levia-border-primary {
+        border-color: var(--color-primary);
+    }
+
+    .levia-btn-primary {
+        background-color: var(--color-primary);
+        color: white;
+        border-radius: 0.875rem;
+        padding: 0.625rem 1rem;
+        font-weight: 700;
+        box-shadow: 0 8px 18px rgb(249 115 22 / 0.18);
+        transition: all 0.2s ease;
+    }
+
+    .levia-btn-primary:hover {
+        background-color: var(--color-primary-dark);
+        transform: translateY(-1px);
+        box-shadow: 0 10px 20px rgb(249 115 22 / 0.25);
+    }
+
+    .levia-btn-secondary {
+        background-color: white;
+        color: var(--color-primary);
+        border: 2px solid var(--color-primary);
+        border-radius: 0.875rem;
+        padding: 0.625rem 1rem;
+        font-weight: 700;
+        transition: all 0.2s ease;
+    }
+
+    .levia-btn-secondary:hover {
+        background-color: var(--color-secondary-light);
+        transform: translateY(-1px);
+    }
+
+    .levia-card {
+        border: 1px solid #e2e8f0;
+        border-radius: 1rem;
+        background: #fff;
+        box-shadow: 0 1px 2px rgb(15 23 42 / 0.06), 0 1px 6px rgb(15 23 42 / 0.04);
+        transition: all 0.3s ease;
+    }
+
+    .levia-card:hover {
+        box-shadow: 0 8px 16px rgb(249 115 22 / 0.1);
+        transform: translateY(-2px);
+    }
+
+    .levia-badge {
+        background-color: var(--color-secondary-lightest);
+        color: var(--color-primary);
+        padding: 0.25rem 0.75rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .levia-gradient {
+        background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
+    }
+
+    .levia-accent {
+        color: var(--color-accent);
+        font-weight: 600;
+    }
+
+    .levia-warning {
+        color: var(--color-warning);
+        font-weight: 600;
+    }
+
+    .levia-danger {
+        color: var(--color-danger);
+        font-weight: 600;
+    }
+
+    /* Special animations for bakery feel */
+    @keyframes gentle-float {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-5px); }
+    }
+
+    .levia-float {
+        animation: gentle-float 3s ease-in-out infinite;
+    }
+
+    /* Warm background for bakery feel */
+    .levia-warm-bg {
+        background-color: #FFF7ED;
+    }
+
+    .levia-warm-bg-light {
+        background-color: #FEF3C7;
+    }
+}
+
+.ios-shadow,
+.ios-shadow-sm {
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.06), 0 1px 6px rgb(15 23 42 / 0.04) !important;
+}
+
+.history-surface,
+.production-card,
+.production-filter-panel,
+[data-batch-panel],
+.cust-card {
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 1rem !important;
+    background: #fff !important;
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.06), 0 1px 6px rgb(15 23 42 / 0.04) !important;
+}
+
+.cust-sheet,
+.production-sheet,
+.history-sheet {
+    background: #fff;
+    border-radius: 1.25rem 1.25rem 0 0 !important;
+    box-shadow: 0 -10px 28px rgb(15 23 42 / 0.14) !important;
+}
+
+.rounded-3xl {
+    border-radius: 1rem !important;
+}
+
+.app-shell-page main [class*="rounded-2xl"][class*="bg-white"],
+.app-shell-page main [class*="rounded-xl"][class*="bg-white"] {
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.06), 0 1px 6px rgb(15 23 42 / 0.04);
+}
+
+.app-shell-page header [class*="rounded-full"][class*="bg-slate-100"] {
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
+}
+
+html.menu-open,
+html.menu-open body {
+    overflow: hidden;
+}
+
+.app-shell-backoffice {
+    --app-page-bg: #f6f8fb;
+    color: #0f172a;
+}
+
+.app-shell-backoffice main {
+    background: var(--app-page-bg);
+}
+
+.app-shell-backoffice .app-page-header {
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+}
+
+.app-shell-backoffice main [class*="rounded-2xl"][class*="bg-white"],
+.app-shell-backoffice main [class*="rounded-xl"][class*="bg-white"],
+.app-shell-backoffice main .app-card,
+.app-shell-backoffice main .app-surface,
+.app-shell-backoffice main .app-soft-panel {
+    border-radius: 0.5rem !important;
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.05) !important;
+}
+
+.app-shell-backoffice input,
+.app-shell-backoffice select,
+.app-shell-backoffice textarea {
+    border-radius: 0.5rem;
+}
+
+.backoffice-page {
+    width: 100%;
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 1.25rem;
+}
+
+@media (min-width: 1024px) {
+    .backoffice-page {
+        padding: 1.5rem 2rem 2rem;
+    }
+}
+
+.backoffice-stat-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 0.5rem;
+    background: #fff;
+    padding: 1.25rem;
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.05);
+}
+
+.backoffice-action-link {
+    display: flex;
+    min-height: 4.5rem;
+    align-items: center;
+    gap: 0.75rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.5rem;
+    background: #fff;
+    padding: 0.875rem;
+    color: #334155;
+    transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+.backoffice-action-link:hover {
+    border-color: rgb(249 115 22 / 0.45);
+    box-shadow: 0 8px 20px rgb(15 23 42 / 0.08);
+    transform: translateY(-1px);
+}
+
+.backoffice-home-panel {
+    border: 1px solid #e2e8f0;
+    border-radius: 0.5rem;
+    background: #fff;
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.05);
+}
+
+.backoffice-top-action {
+    display: inline-flex;
+    min-height: 2.5rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+    border-radius: 0.5rem;
+    padding: 0.625rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.backoffice-mini-kpi {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0.75rem;
+    border-bottom: 1px solid #f1f5f9;
+    padding: 0.875rem 1rem;
+}
+
+.backoffice-mini-kpi:last-child {
+    border-bottom: 0;
+}
+
+.backoffice-kpi-icon,
+.backoffice-app-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid;
+    border-radius: 0.5rem;
+    flex-shrink: 0;
+}
+
+.backoffice-kpi-icon {
+    width: 2.25rem;
+    height: 2.25rem;
+}
+
+.backoffice-app-tile {
+    display: flex;
+    min-height: 5.75rem;
+    min-width: 0;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.5rem;
+    background: #fff;
+    padding: 0.75rem 0.5rem;
+    transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+.backoffice-app-icon {
+    width: 2.5rem;
+    height: 2.5rem;
+}
+
+.backoffice-app-tile:hover {
+    border-color: rgb(249 115 22 / 0.35);
+    box-shadow: 0 8px 18px rgb(15 23 42 / 0.07);
+    transform: translateY(-1px);
+}
+
+.backoffice-small-link {
+    display: inline-flex;
+    min-height: 2.5rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.5rem;
+    background: #fff;
+    padding: 0.625rem 0.75rem;
+    color: #334155;
+    font-size: 0.75rem;
+    font-weight: 800;
+}
+
+@media (min-width: 640px) {
+    .backoffice-mini-kpi {
+        border-right: 1px solid #f1f5f9;
+        border-bottom: 0;
+    }
+
+    .backoffice-mini-kpi:nth-child(2n) {
+        border-right: 0;
+    }
+}
+
+@media (min-width: 1280px) {
+    .backoffice-mini-kpi:nth-child(2n) {
+        border-right: 1px solid #f1f5f9;
+    }
+
+    .backoffice-mini-kpi:last-child {
+        border-right: 0;
+    }
 }

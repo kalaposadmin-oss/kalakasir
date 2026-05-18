@@ -2,7 +2,10 @@
 
 namespace App\Services;
 
+use App\Models\AccountMapping;
 use App\Models\InventoryBalance;
+use App\Models\JournalEntry;
+use App\Models\JournalItem;
 use App\Models\StockAdjustment;
 use App\Models\StockAdjustmentItem;
 use App\Models\StockLedger;
@@ -175,10 +178,14 @@ class StockAdjustmentService
             );
 
             $ledgerRows = [];
+            $decreaseValue = Decimal::money(0);
+            $increaseValue = Decimal::money(0);
 
             foreach ($items as $item) {
                 $difference = Decimal::qty($item->difference_qty);
                 $productVariantId = $item->product_variant_id ? (string) $item->product_variant_id : null;
+                $movementUnitCost = Decimal::cost($item->unit_cost_snapshot);
+                $movementTotalCost = Decimal::money(0);
 
                 if (Decimal::compare($difference, 0) === 0) {
                     continue;
@@ -209,7 +216,7 @@ class StockAdjustmentService
                         throw new RuntimeException('Stok tidak mencukupi untuk penyesuaian.');
                     }
 
-                    $valuationService->issue(
+                    $valuation = $valuationService->issue(
                         tenantId: $tenantId,
                         productId: $item->product_id,
                         productVariantId: $productVariantId,
@@ -220,9 +227,15 @@ class StockAdjustmentService
                         referenceItemId: $item->id,
                         at: $now
                     );
+
+                    $movementUnitCost = Decimal::cost($valuation['unit_cost'] ?? $movementUnitCost);
+                    $movementTotalCost = Decimal::money($valuation['total_cost'] ?? Decimal::multiply($qty, $movementUnitCost, Decimal::MONEY_SCALE));
+                    $decreaseValue = Decimal::add($decreaseValue, $movementTotalCost, Decimal::MONEY_SCALE);
                 } else {
                     $this->ensureInventoryBalanceBucket($tenantId, (string) $item->product_id, $productVariantId, (string) $adjustment->location_id);
                     $this->incrementInventory($tenantId, (string) $item->product_id, $productVariantId, (string) $adjustment->location_id, $difference);
+                    $movementTotalCost = Decimal::multiply($difference, $movementUnitCost, Decimal::MONEY_SCALE);
+                    $increaseValue = Decimal::add($increaseValue, $movementTotalCost, Decimal::MONEY_SCALE);
 
                     $valuationService->receive(
                         tenantId: $tenantId,
@@ -230,13 +243,16 @@ class StockAdjustmentService
                         productVariantId: $productVariantId,
                         locationId: $adjustment->location_id,
                         qty: Decimal::float($difference, Decimal::QTY_SCALE),
-                        unitCost: Decimal::float($item->unit_cost_snapshot, Decimal::COST_SCALE),
+                        unitCost: Decimal::float($movementUnitCost, Decimal::COST_SCALE),
                         sourceType: 'stock_adjustment',
                         sourceId: $adjustment->id,
-                        sourceItemId: null,
+                        sourceItemId: (string) $item->id,
                         at: $now
                     );
                 }
+
+                $item->unit_cost_snapshot = $movementUnitCost;
+                $item->save();
 
                 $balanceAfter = Decimal::qty(InventoryBalance::query()
                     ->where('tenant_id', $tenantId)
@@ -261,6 +277,8 @@ class StockAdjustmentService
                     'qty_in' => Decimal::compare($difference, 0) > 0 ? $difference : Decimal::qty(0),
                     'qty_out' => Decimal::compare($difference, 0) < 0 ? Decimal::abs($difference, Decimal::QTY_SCALE) : Decimal::qty(0),
                     'balance_after' => $balanceAfter,
+                    'unit_cost' => Decimal::float($movementUnitCost, Decimal::COST_SCALE),
+                    'total_cost' => Decimal::float($movementTotalCost, Decimal::MONEY_SCALE),
                     'created_at' => $now,
                     'created_by' => $userId,
                 ];
@@ -274,6 +292,17 @@ class StockAdjustmentService
             if (! empty($ledgerRows)) {
                 StockLedger::query()->insert($ledgerRows);
             }
+
+            $this->createJournalEntries(
+                tenantId: $tenantId,
+                adjustment: $adjustment,
+                items: $items,
+                userId: $userId,
+                now: $now,
+                transactionDate: $transactionDate,
+                decreaseValue: $decreaseValue,
+                increaseValue: $increaseValue,
+            );
 
             $adjustment->update([
                 'status' => 'posted',
@@ -424,6 +453,125 @@ class StockAdjustmentService
             'UPDATE inventory_balances SET qty_on_hand = qty_on_hand + ? WHERE tenant_id = ? AND product_id = ? AND location_id = ? AND product_variant_id IS NULL',
             [$qty, $tenantId, $productId, $locationId]
         );
+    }
+
+    private function createJournalEntries(
+        string $tenantId,
+        StockAdjustment $adjustment,
+        iterable $items,
+        ?string $userId,
+        CarbonImmutable $now,
+        CarbonImmutable $transactionDate,
+        ?string $decreaseValue = null,
+        ?string $increaseValue = null
+    ): void {
+        $mapping = AccountMapping::query()
+            ->where('tenant_id', $tenantId)
+            ->first();
+
+        if (! $mapping || ! $mapping->inventory_account_id || ! $mapping->expense_adjustment_account_id) {
+            throw new RuntimeException('Account mapping inventory/penyesuaian beban wajib diset sebelum posting stock adjustment.');
+        }
+
+        if ($decreaseValue === null || $increaseValue === null) {
+            $decreaseValue = Decimal::money(0);
+            $increaseValue = Decimal::money(0);
+
+            foreach ($items as $item) {
+                $lineValue = Decimal::multiply(
+                    Decimal::abs($item->difference_qty, Decimal::QTY_SCALE),
+                    $item->unit_cost_snapshot,
+                    Decimal::MONEY_SCALE
+                );
+
+                if (Decimal::compare($item->difference_qty, 0) < 0) {
+                    $decreaseValue = Decimal::add($decreaseValue, $lineValue, Decimal::MONEY_SCALE);
+                }
+
+                if (Decimal::compare($item->difference_qty, 0) > 0) {
+                    $increaseValue = Decimal::add($increaseValue, $lineValue, Decimal::MONEY_SCALE);
+                }
+            }
+        }
+
+        $totalValue = Decimal::add($decreaseValue, $increaseValue, Decimal::MONEY_SCALE);
+        if (Decimal::compare($totalValue, 0) <= 0) {
+            return;
+        }
+
+        $entryId = (string) Str::uuid();
+        JournalEntry::query()->create([
+            'id' => $entryId,
+            'tenant_id' => $tenantId,
+            'reference_type' => $this->isStockOpname($adjustment) ? 'stock_opname' : 'stock_adjustment',
+            'reference_id' => (string) $adjustment->id,
+            'date' => $transactionDate->toDateString(),
+            'description' => $this->journalDescription($adjustment),
+            'status' => 'posted',
+            'posted_at' => $now,
+            'created_by' => $userId,
+            'created_at' => $now,
+        ]);
+
+        $itemsToInsert = [];
+        if (Decimal::compare($decreaseValue, 0) > 0) {
+            $itemsToInsert[] = [
+                'id' => (string) Str::uuid(),
+                'journal_entry_id' => $entryId,
+                'tenant_id' => $tenantId,
+                'account_id' => $mapping->expense_adjustment_account_id,
+                'debit' => Decimal::float($decreaseValue, Decimal::MONEY_SCALE),
+                'credit' => 0,
+                'is_reversal' => false,
+            ];
+            $itemsToInsert[] = [
+                'id' => (string) Str::uuid(),
+                'journal_entry_id' => $entryId,
+                'tenant_id' => $tenantId,
+                'account_id' => $mapping->inventory_account_id,
+                'debit' => 0,
+                'credit' => Decimal::float($decreaseValue, Decimal::MONEY_SCALE),
+                'is_reversal' => false,
+            ];
+        }
+
+        if (Decimal::compare($increaseValue, 0) > 0) {
+            $itemsToInsert[] = [
+                'id' => (string) Str::uuid(),
+                'journal_entry_id' => $entryId,
+                'tenant_id' => $tenantId,
+                'account_id' => $mapping->inventory_account_id,
+                'debit' => Decimal::float($increaseValue, Decimal::MONEY_SCALE),
+                'credit' => 0,
+                'is_reversal' => false,
+            ];
+            $itemsToInsert[] = [
+                'id' => (string) Str::uuid(),
+                'journal_entry_id' => $entryId,
+                'tenant_id' => $tenantId,
+                'account_id' => $mapping->expense_adjustment_account_id,
+                'debit' => 0,
+                'credit' => Decimal::float($increaseValue, Decimal::MONEY_SCALE),
+                'is_reversal' => false,
+            ];
+        }
+
+        if ($itemsToInsert !== []) {
+            JournalItem::query()->insert($itemsToInsert);
+        }
+    }
+
+    private function isStockOpname(StockAdjustment $adjustment): bool
+    {
+        return in_array((string) $adjustment->reason_code, ['A01', 'A04'], true);
+    }
+
+    private function journalDescription(StockAdjustment $adjustment): string
+    {
+        $base = $this->isStockOpname($adjustment) ? 'Stock opname posted' : 'Stock adjustment posted';
+        $reasonCode = trim((string) ($adjustment->reason_code ?? ''));
+
+        return $reasonCode !== '' ? $base.' ['.$reasonCode.']' : $base;
     }
 
 }

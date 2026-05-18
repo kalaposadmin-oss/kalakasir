@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Services\RefundService;
 use App\Support\TenantContext;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -32,7 +33,10 @@ class VariantProductInitialStockRefundLifecycleTest extends TestCase
 
         DB::table('tenants')
             ->where('id', $tenant->id)
-            ->update(['inventory_valuation_method' => 'fifo']);
+            ->update([
+                'inventory_valuation_method' => 'fifo',
+                'plan' => 'M',
+            ]);
 
         $variantA = (string) Str::uuid();
         $variantB = (string) Str::uuid();
@@ -58,11 +62,15 @@ class VariantProductInitialStockRefundLifecycleTest extends TestCase
         $createResponse->assertCreated();
         $productId = (string) $createResponse->json('product.id');
 
+        DB::table('lock_periods')
+            ->where('tenant_id', $tenant->id)
+            ->delete();
+
         $this->assertVariantBucketState($tenant->id, $productId, $variantA, $fixture['location_id'], 5.0, 11000.0);
         $this->assertVariantBucketState($tenant->id, $productId, $variantB, $fixture['location_id'], 3.0, 15000.0);
         $this->assertNoNullVariantBucketArtifacts($tenant->id, $productId, $fixture['location_id']);
 
-        $checkoutPayload = $this->checkoutPayload($fixture, '2026-02-27');
+        $checkoutPayload = $this->checkoutPayload($fixture, CarbonImmutable::now('UTC')->subDay()->toDateString());
         $checkoutPayload['subtotal'] = 50000;
         $checkoutPayload['total'] = 50000;
         $checkoutPayload['payments'][0]['amount'] = 50000;

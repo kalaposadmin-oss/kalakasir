@@ -23,6 +23,7 @@ class WriteFlowLockPeriodApiEnforcementTest extends TestCase
         parent::setUp();
 
         [$this->tenant, $this->user] = $this->bootApiActor('admin', 'admin-lock@example.com', 'Admin Lock');
+        $this->tenant->forceFill(['plan' => 'M'])->save();
         $this->checkoutFixture = $this->seedCheckoutFixture($this->tenant->id, $this->user->id);
 
         \DB::table('lock_periods')->insert([

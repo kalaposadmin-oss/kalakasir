@@ -141,7 +141,50 @@ class ShiftReadScopingTest extends TestCase
         $response->assertOk()
             ->assertJsonPath('shift.id', $tenantShift->id)
             ->assertJsonPath('cashier.id', $user->id)
-            ->assertJsonPath('expected_cash', 12000);
+            ->assertJsonPath('expected_cash', 27000);
+    }
+
+    public function test_opening_data_auto_closes_expired_shift_and_returns_pending_reconciliation(): void
+    {
+        [$tenant, $user] = $this->bootApiActor('cashier', 'cashier+shift-overnight@example.test');
+        $tenant->update(['timezone' => 'Asia/Jakarta']);
+
+        $tenantBranch = Branch::query()->create([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $tenant->id,
+            'name' => 'Tenant Branch',
+        ]);
+
+        $expiredShift = Shift::query()->create([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $tenant->id,
+            'branch_id' => $tenantBranch->id,
+            'user_id' => $user->id,
+            'opened_at' => CarbonImmutable::parse('2026-02-26 10:00:00', 'UTC'),
+            'closed_at' => null,
+            'opening_cash' => 10000,
+            'closing_cash' => 0,
+            'system_cash_total' => 0,
+            'difference' => 0,
+            'status' => 'open',
+        ]);
+
+        $saleId = $this->insertCompletedSale($tenant->id, $expiredShift->id, $tenantBranch->id, $user->id, 18000);
+        $this->insertPayment($tenant->id, $saleId, 18000);
+
+        $response = $this->withHeaders($this->tenantHeaders($tenant->id))
+            ->getJson('/api/v1/shifts/opening');
+
+        $response->assertOk()
+            ->assertJsonPath('shift_number', 1)
+            ->assertJsonPath('pending_reconciliation.shift_id', $expiredShift->id)
+            ->assertJsonPath('pending_reconciliation.expected_cash', 28000);
+
+        $expiredShift->refresh();
+        $this->assertSame('closed', $expiredShift->status);
+        $this->assertTrue((bool) $expiredShift->closed_by_system);
+        $this->assertTrue((bool) $expiredShift->requires_reconciliation);
+        $this->assertSame(28000.0, (float) $expiredShift->system_cash_total);
     }
 
     public function test_close_summary_and_closed_history_exclude_foreign_tenant_shift_data(): void

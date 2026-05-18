@@ -21,6 +21,7 @@ class StockTransferTransactionDateValidationTest extends TestCase
         parent::setUp();
 
         [$this->tenant, $this->user] = $this->bootApiActor('admin', 'admin-transfer@example.com', 'Admin A');
+        $this->tenant->forceFill(['plan' => 'M'])->save();
     }
 
     protected function tearDown(): void

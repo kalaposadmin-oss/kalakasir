@@ -78,6 +78,7 @@ class BackofficeRoleAuthorizationTest extends TestCase
     public function test_warehouse_can_access_stock_transfer_read_api(): void
     {
         [$tenant] = $this->bootApiActor('warehouse', 'warehouse-transfer-read@example.com', 'Warehouse Transfer');
+        $tenant->forceFill(['plan' => 'M'])->save();
 
         $this->withHeaders($this->tenantHeaders($tenant->id))
             ->getJson('/api/v1/stock-transfers')
@@ -203,6 +204,7 @@ class BackofficeRoleAuthorizationTest extends TestCase
     public function test_admin_can_access_admin_only_support_read_api(): void
     {
         [$tenant] = $this->bootApiActor('admin', 'admin-support-read@example.com', 'Admin Support Read');
+        $tenant->forceFill(['plan' => 'M'])->save();
 
         $headers = $this->tenantHeaders($tenant->id);
 

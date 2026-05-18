@@ -27,7 +27,7 @@
 @section('main_class', 'flex-1 overflow-y-auto p-4 space-y-3 pb-8')
 
 @section('header')
-    <x-page-header title="Observability" backUrl="/backoffice/settings/inventory-valuation" :showMenuButton="true">
+    <x-page-header title="Observability" backUrl="/backoffice/dashboard" :showMenuButton="true">
         <x-slot:actions>
             <button id="btn-refresh" class="px-3 py-1.5 rounded-lg bg-slate-100 text-xs font-semibold">Refresh</button>
         </x-slot:actions>
@@ -260,13 +260,9 @@
                 };
 
                 const loadBootstrap = async () => {
-                    const response = await window.PosUi.fetchWithTimeout('/api/v1/bootstrap', { headers }, 15000);
-                    if (!response.ok) {
+                    state.bootstrap = await window.PosUi.getBootstrap({ headers, ttlMs: 20000 }).catch(() => {
                         throw new Error('Gagal memuat master data observability.');
-                    }
-
-                    const payload = await response.json().catch(() => ({}));
-                    state.bootstrap = payload?.data || payload || {};
+                    });
                     setOptions(el.branchFilter, state.bootstrap.branches || [], 'name', 'Semua Cabang');
                     el.branchFilter.value = state.anomalyFilters.branch_id || '';
                     syncLocationOptions();

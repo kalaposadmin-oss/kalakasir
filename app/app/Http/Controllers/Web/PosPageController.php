@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Web;
 use App\Http\Controllers\Controller;
 use App\Models\AccountMapping;
 use App\Models\ChartOfAccount;
+use App\Models\Tenant;
+use App\Services\ShiftLifecycleService;
 use App\Services\WebRouteContextService;
 use App\Support\WebEntityFlowContext;
 use App\Support\WebSalesFlowContext;
@@ -24,6 +26,16 @@ class PosPageController extends Controller
 
     public function checkout(Request $request): RedirectResponse|View
     {
+        $tenantId = $this->routeContext->resolveTenantId();
+        $tenant = $tenantId ? Tenant::query()->find($tenantId) : null;
+        $shiftLifecycle = app(ShiftLifecycleService::class);
+        $shiftLifecycle->autoCloseExpiredOpenShifts($tenant);
+        $pendingReconciliation = $shiftLifecycle->pendingReconciliation($tenant, $request->user()?->id);
+
+        if ($pendingReconciliation) {
+            return redirect()->to('/pos/shifts/open?from=%2Fpos%2Fcheckout');
+        }
+
         if (! $this->routeContext->userHasOpenShift($request->user())) {
             return redirect()->to('/pos/shifts/open?from=%2Fpos%2Fcheckout');
         }
@@ -98,7 +110,7 @@ class PosPageController extends Controller
         return view('shift-close-summary', $this->routeContext->withTenant([
             'showMenu' => true,
             'currentPath' => '/pos/shifts/summary',
-            'backUrl' => '/pos/dashboard',
+            'backUrl' => pos_default_url($request->user()),
             'shiftId' => null,
         ]));
     }
@@ -114,8 +126,26 @@ class PosPageController extends Controller
                 'pos',
                 '/pos/shifts/'.$shift.'/summary',
                 '/pos/shifts/summary',
-                ['/pos/shifts/summary', '/pos/dashboard'],
+                ['/pos/shifts/summary', '/pos/dashboard', '/pos/checkout'],
                 ['shiftId' => $shift],
+            ),
+        ));
+    }
+
+    public function productDetail(Request $request, string $product): View
+    {
+        return view('product-detail', array_merge(
+            $this->routeContext->withTenant([
+                'showMenu' => true,
+                'productId' => $product,
+            ]),
+            $this->entityFlow->detailContext(
+                $request,
+                'pos',
+                '/pos/products/'.$product,
+                '/pos/products',
+                ['/pos/products', '/pos/dashboard', '/pos/checkout'],
+                ['productId' => $product],
             ),
         ));
     }

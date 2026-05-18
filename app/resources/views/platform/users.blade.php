@@ -4,6 +4,9 @@
     $pageTitle = 'Global Users';
     $active = 'users';
     $users = $users ?? [];
+    $filters = $filters ?? [];
+    $page = (int) ($page ?? 1);
+    $lastPage = (int) ($lastPage ?? 1);
 @endphp
 
 @section('platform_content')
@@ -12,22 +15,35 @@
             <h1 class="text-2xl font-bold text-slate-900">Global Users</h1>
             <p class="mt-1 text-sm text-slate-500">Pantau akun lintas tenant dan status akses.</p>
         </div>
-        <div class="flex flex-wrap items-center gap-2">
-            <button class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600">Export CSV</button>
-            <button class="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white shadow-sm">Invite User</button>
-        </div>
+        <a href="/superadmin/audit-logs" class="inline-flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50">
+            <span class="material-symbols-outlined text-[18px]">policy</span>
+            Audit logs
+        </a>
     </div>
 
-    <div class="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4">
-        <div class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
-            <span class="material-symbols-outlined text-[18px]">search</span>
-            <span>Cari nama, email, tenant</span>
+    <form method="GET" action="/superadmin/users" class="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm lg:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,0.8fr))_auto]">
+        <input name="q" value="{{ $filters['q'] ?? '' }}" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700" placeholder="Cari nama atau email" />
+        <select name="role" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+            <option value="">Semua role</option>
+            @foreach (['owner', 'admin', 'supervisor', 'cashier'] as $role)
+                <option value="{{ $role }}" @selected(($filters['role'] ?? '') === $role)>{{ ucfirst($role) }}</option>
+            @endforeach
+        </select>
+        <select name="status" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+            <option value="">Semua status</option>
+            <option value="active" @selected(($filters['status'] ?? '') === 'active')>Active</option>
+            <option value="inactive" @selected(($filters['status'] ?? '') === 'inactive')>Inactive</option>
+        </select>
+        <select name="sort_by" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+            <option value="created_at" @selected(($filters['sort_by'] ?? 'created_at') === 'created_at')>Terbaru</option>
+            <option value="name" @selected(($filters['sort_by'] ?? '') === 'name')>Nama</option>
+            <option value="last_login_at" @selected(($filters['sort_by'] ?? '') === 'last_login_at')>Last login</option>
+        </select>
+        <div class="flex items-center gap-2">
+            <button class="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white" type="submit">Filter</button>
+            <a href="/superadmin/users" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600">Reset</a>
         </div>
-        <div class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">Role: Admin</div>
-        <div class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">Status: Active</div>
-        <div class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">Last Login: 7 hari</div>
-        <button class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600">Reset</button>
-    </div>
+    </form>
 
     <section class="rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div class="flex items-center justify-between border-b border-slate-100 px-6 py-4">
@@ -35,7 +51,7 @@
                 <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Users</p>
                 <h3 class="text-sm font-bold text-slate-900">{{ number_format((int) ($total ?? 0)) }} pengguna ditemukan</h3>
             </div>
-            <button class="text-xs font-semibold text-primary">Lihat semua</button>
+            <span class="text-xs font-semibold text-slate-500">Live data</span>
         </div>
         <div class="overflow-x-auto">
             <table class="min-w-full text-left text-sm">
@@ -70,7 +86,7 @@
                             <td class="px-6 py-4 text-xs text-slate-500">{{ $user['last_login_at'] ?? '-' }}</td>
                             <td class="px-6 py-4">
                                 <div class="flex items-center gap-2 text-xs">
-                                    <a class="font-semibold text-primary" href="/platform/users/{{ $user['user_id'] ?? '' }}">Detail</a>
+                                    <a class="font-semibold text-primary" href="/superadmin/users/{{ $user['user_id'] ?? '' }}">Detail</a>
                                     <button
                                         class="rounded-lg border border-slate-200 bg-white px-2 py-1 text-slate-600 js-user-action"
                                         data-user-id="{{ $user['user_id'] ?? '' }}"
@@ -88,9 +104,8 @@
                 </tbody>
             </table>
         </div>
+        @include('platform.partials.pagination')
     </section>
-
-    @include('platform.partials.states')
 
     <div id="user-action-modal" class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-900/20 px-4">
         <div class="pointer-events-auto w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">

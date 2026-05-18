@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Product;
+use App\Models\ProductionBatch;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -60,6 +61,34 @@ class ProductItemTypeValidator
         }
     }
 
+    /**
+     * Prevent switching to auto_consume_on_sell if the product has ever been
+     * manufactured via batch production.  Allowing the switch would cause
+     * double deduction: raw materials already consumed during production
+     * would be consumed *again* at POS sale time.
+     */
+    public static function assertNotProducedForAutoConsume(
+        string $tenantId,
+        string $productId,
+        string $productionMode
+    ): void {
+        if ($productionMode !== Product::PRODUCTION_MODE_AUTO_CONSUME_ON_SELL) {
+            return;
+        }
+
+        $hasPostedBatch = DB::table('production_batches')
+            ->where('tenant_id', $tenantId)
+            ->where('product_id', $productId)
+            ->where('status', ProductionBatch::STATUS_POSTED)
+            ->exists();
+
+        if ($hasPostedBatch) {
+            throw ValidationException::withMessages([
+                'production_mode' => 'Produk ini pernah diproduksi. Tidak bisa menggunakan mode auto-consume saat jual karena bahan baku sudah dipotong saat produksi.',
+            ]);
+        }
+    }
+
     public static function assertBomComponentsValid(string $tenantId, array $bomItems): void
     {
         $bomProductIds = collect($bomItems)
@@ -105,6 +134,7 @@ class ProductItemTypeValidator
             ->all();
 
         $errors = [];
+        $seenLines = [];
 
         foreach ($bomItems as $index => $bomItem) {
             $productId = (string) ($bomItem['product_id'] ?? '');
@@ -125,7 +155,16 @@ class ProductItemTypeValidator
 
             if ($variantId !== null && (($variantProductMap[$variantId] ?? null) !== $productId)) {
                 $errors['bom_items.'.$index.'.product_variant_id'] = 'Variant recipe tidak cocok dengan bahan baku yang dipilih.';
+                continue;
             }
+
+            $lineKey = $productId.'|'.($variantId ?? '__no_variant__');
+            if (isset($seenLines[$lineKey])) {
+                $errors['bom_items.'.$index.'.product_id'] = 'Bahan baku duplikat. Gabungkan qty pada satu line yang sama.';
+                continue;
+            }
+
+            $seenLines[$lineKey] = true;
         }
 
         if ($errors !== []) {

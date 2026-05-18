@@ -1,0 +1,29 @@
+* text=auto eol=lf
+
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+*.docx binary
+*.gif binary
+*.ico binary
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.webp binary
+*.zip binary
+
+/.claude export-ignore
+/.github export-ignore
+/.idea export-ignore
+/.vscode export-ignore
+/Downloads export-ignore
+"/UI Tambahan" export-ignore
+/_upload-ready export-ignore
+/apk export-ignore
+/app/.claude export-ignore
+/app/node_modules export-ignore
+/app/vendor export-ignore
+/mobile/android/.gradle export-ignore
+*.log export-ignore
+*.docx export-ignore

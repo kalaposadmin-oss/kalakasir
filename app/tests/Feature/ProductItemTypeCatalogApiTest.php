@@ -37,6 +37,37 @@ class ProductItemTypeCatalogApiTest extends TestCase
         ]);
     }
 
+    public function test_lite_catalog_hides_raw_material_products_from_sellable_pos_list(): void
+    {
+        [$tenant] = $this->bootApiActor('Admin', 'admin+lite-catalog-sellable@example.test');
+
+        $sellableProductId = $this->insertProduct($tenant, [
+            'sku' => 'SELL-001',
+            'name' => 'Kopi Susu',
+            'product_mode' => 'default',
+            'item_type' => 'finished_good',
+            'track_stock' => true,
+            'price' => 18000,
+        ]);
+
+        $rawMaterialId = $this->insertProduct($tenant, [
+            'sku' => 'RAW-001',
+            'name' => 'Gula Aren',
+            'product_mode' => 'add_on',
+            'item_type' => 'raw_material',
+            'track_stock' => true,
+            'price' => 5000,
+        ]);
+
+        $response = $this->getJson('/api/v1/products?lite=1&per_page=20', $this->tenantHeaders($tenant->id));
+
+        $response->assertOk();
+        $productIds = collect($response->json('products'))->pluck('id')->all();
+
+        $this->assertContains($sellableProductId, $productIds);
+        $this->assertNotContains($rawMaterialId, $productIds);
+    }
+
     public function test_update_product_without_item_type_uses_mode_fallback(): void
     {
         [$tenant] = $this->bootApiActor('Admin', 'admin+update-fallback@example.test');
@@ -66,6 +97,70 @@ class ProductItemTypeCatalogApiTest extends TestCase
             'tenant_id' => $tenant->id,
             'item_type' => 'raw_material',
             'product_mode' => 'add_on',
+        ]);
+    }
+
+    public function test_raw_material_create_update_and_show_keep_unit_and_supplier_metadata(): void
+    {
+        [$tenant] = $this->bootApiActor('Admin', 'admin+raw-material-meta@example.test');
+
+        $supplierId = (string) Str::uuid();
+        DB::table('suppliers')->insert([
+            'id' => $supplierId,
+            'tenant_id' => $tenant->id,
+            'name' => 'Supplier Bahan A',
+            'balance' => 0,
+            'created_at' => now('UTC'),
+        ]);
+
+        $createResponse = $this->postJson('/api/v1/products', [
+            'name' => 'Bahan Tepung',
+            'sku' => 'RM-META-001',
+            'price' => 12000,
+            'hpp_average' => 9000,
+            'track_stock' => true,
+            'product_mode' => 'add_on',
+            'item_type' => 'raw_material',
+            'unit' => 'kg',
+            'supplier_id' => $supplierId,
+        ], $this->tenantHeaders($tenant->id));
+
+        $createResponse->assertCreated()
+            ->assertJsonPath('product.item_type', 'raw_material')
+            ->assertJsonPath('product.unit', 'kg')
+            ->assertJsonPath('product.supplier_id', $supplierId);
+
+        $productId = (string) $createResponse->json('product.id');
+
+        $showResponse = $this->getJson('/api/v1/products/'.$productId, $this->tenantHeaders($tenant->id));
+
+        $showResponse->assertOk()
+            ->assertJsonPath('product.unit', 'kg')
+            ->assertJsonPath('product.supplier_id', $supplierId);
+
+        $updateResponse = $this->putJson('/api/v1/products/'.$productId, [
+            'name' => 'Bahan Tepung Protein Tinggi',
+            'sku' => 'RM-META-001',
+            'price' => 13000,
+            'hpp_average' => 9500,
+            'track_stock' => true,
+            'product_mode' => 'add_on',
+            'item_type' => 'raw_material',
+            'production_mode' => 'none',
+            'unit' => 'gram',
+            'supplier_id' => $supplierId,
+        ], $this->tenantHeaders($tenant->id));
+
+        $updateResponse->assertOk()
+            ->assertJsonPath('product.unit', 'gram')
+            ->assertJsonPath('product.supplier_id', $supplierId);
+
+        $this->assertDatabaseHas('products', [
+            'id' => $productId,
+            'tenant_id' => $tenant->id,
+            'item_type' => 'raw_material',
+            'unit' => 'gram',
+            'supplier_id' => $supplierId,
         ]);
     }
 
@@ -221,6 +316,7 @@ class ProductItemTypeCatalogApiTest extends TestCase
     public function test_create_bom_with_service_component_returns_422(): void
     {
         [$tenant] = $this->bootApiActor('Admin', 'admin+bom-service@example.test');
+        DB::table('tenants')->where('id', $tenant->id)->update(['plan' => 'M']);
 
         $serviceComponentId = $this->insertProduct($tenant, [
             'sku' => 'CMP-SRV-001',
@@ -254,6 +350,7 @@ class ProductItemTypeCatalogApiTest extends TestCase
     public function test_create_bom_with_variant_raw_material_requires_product_variant_id(): void
     {
         [$tenant] = $this->bootApiActor('Admin', 'admin+bom-variant-required@example.test');
+        DB::table('tenants')->where('id', $tenant->id)->update(['plan' => 'M']);
 
         $rawMaterialId = $this->insertProduct($tenant, [
             'sku' => 'CMP-VAR-001',
@@ -288,6 +385,7 @@ class ProductItemTypeCatalogApiTest extends TestCase
     public function test_create_bom_rejects_variant_that_does_not_belong_to_component_product(): void
     {
         [$tenant] = $this->bootApiActor('Admin', 'admin+bom-variant-mismatch@example.test');
+        DB::table('tenants')->where('id', $tenant->id)->update(['plan' => 'M']);
 
         $rawMaterialAId = $this->insertProduct($tenant, [
             'sku' => 'CMP-VAR-A01',
@@ -328,6 +426,42 @@ class ProductItemTypeCatalogApiTest extends TestCase
         $this->assertValidationErrorLiteralKey($response, 'bom_items.0.product_variant_id');
     }
 
+    public function test_create_bom_rejects_duplicate_component_line_for_same_product_and_variant_bucket(): void
+    {
+        [$tenant] = $this->bootApiActor('Admin', 'admin+bom-duplicate-line@example.test');
+        DB::table('tenants')->where('id', $tenant->id)->update(['plan' => 'M']);
+
+        $rawMaterialId = $this->insertProduct($tenant, [
+            'sku' => 'CMP-DUP-001',
+            'name' => 'Komponen Duplikat',
+            'product_mode' => 'add_on',
+            'item_type' => 'raw_material',
+            'track_stock' => true,
+            'price' => 5000,
+        ]);
+
+        $response = $this->postJson('/api/v1/products', [
+            'name' => 'Paket BOM Duplikat',
+            'sku' => 'BOM-DUP-001',
+            'price' => 30000,
+            'product_mode' => 'bom',
+            'item_type' => 'finished_good',
+            'track_stock' => true,
+            'bom_items' => [
+                [
+                    'product_id' => $rawMaterialId,
+                    'qty' => 1,
+                ],
+                [
+                    'product_id' => $rawMaterialId,
+                    'qty' => 2,
+                ],
+            ],
+        ], $this->tenantHeaders($tenant->id));
+
+        $this->assertValidationErrorLiteralKey($response, 'bom_items.1.product_id');
+    }
+
     public function test_create_non_variant_initial_stock_posts_to_null_variant_bucket(): void
     {
         [$tenant] = $this->bootApiActor('Admin', 'admin+initial-stock-non-variant@example.test');
@@ -351,7 +485,7 @@ class ProductItemTypeCatalogApiTest extends TestCase
         $productId = (string) $response->json('product.id');
 
         $this->assertInventoryBalanceQty($tenant->id, $productId, null, $locationId, 5.0);
-        $this->assertLedgerQtyIn($tenant->id, $productId, null, $locationId, 'initial_stock', 5.0);
+        $this->assertLedgerQtyIn($tenant->id, $productId, null, $locationId, 'opening_balance', 5.0);
         $this->assertValuationStateQty($tenant->id, $productId, null, $locationId, 5.0);
         $this->assertFifoLayerQty($tenant->id, $productId, null, $locationId, 5.0);
     }
@@ -406,8 +540,8 @@ class ProductItemTypeCatalogApiTest extends TestCase
         $this->assertInventoryBalanceQty($tenant->id, $productId, $variantA, $locationId, 3.0);
         $this->assertInventoryBalanceQty($tenant->id, $productId, $variantB, $locationId, 2.0);
         $this->assertSame(0, $this->inventoryBalanceQuery($tenant->id, $productId, null, $locationId)->count());
-        $this->assertLedgerQtyIn($tenant->id, $productId, $variantA, $locationId, 'initial_stock', 3.0);
-        $this->assertLedgerQtyIn($tenant->id, $productId, $variantB, $locationId, 'initial_stock', 2.0);
+        $this->assertLedgerQtyIn($tenant->id, $productId, $variantA, $locationId, 'opening_balance', 3.0);
+        $this->assertLedgerQtyIn($tenant->id, $productId, $variantB, $locationId, 'opening_balance', 2.0);
         $this->assertValuationStateQty($tenant->id, $productId, $variantA, $locationId, 3.0);
         $this->assertValuationStateQty($tenant->id, $productId, $variantB, $locationId, 2.0);
         $this->assertFifoLayerQty($tenant->id, $productId, $variantA, $locationId, 3.0);
@@ -472,7 +606,7 @@ class ProductItemTypeCatalogApiTest extends TestCase
         $this->assertInventoryBalanceQty($tenant->id, $productId, $variantA, $locationId, 4.0);
         $this->assertSame(0, $this->inventoryBalanceQuery($tenant->id, $productId, $variantB, $locationId)->count());
         $this->assertSame(0, $this->inventoryBalanceQuery($tenant->id, $productId, null, $locationId)->count());
-        $this->assertLedgerQtyIn($tenant->id, $productId, $variantA, $locationId, 'initial_stock', 4.0);
+        $this->assertLedgerQtyIn($tenant->id, $productId, $variantA, $locationId, 'opening_balance', 4.0);
         $this->assertValuationStateQty($tenant->id, $productId, $variantA, $locationId, 4.0);
         $this->assertFifoLayerQty($tenant->id, $productId, $variantA, $locationId, 4.0);
     }
@@ -507,6 +641,7 @@ class ProductItemTypeCatalogApiTest extends TestCase
     public function test_create_and_update_product_persists_production_mode(): void
     {
         [$tenant] = $this->bootApiActor('Admin', 'admin+production-mode-product@example.test');
+        DB::table('tenants')->where('id', $tenant->id)->update(['plan' => 'M']);
 
         $createResponse = $this->postJson('/api/v1/products', [
             'name' => 'Roti Batch',
@@ -542,6 +677,26 @@ class ProductItemTypeCatalogApiTest extends TestCase
 
         $showResponse->assertOk()
             ->assertJsonPath('product.production_mode', 'auto_consume_on_sell');
+    }
+
+    public function test_plan_s_cannot_create_recipe_or_production_product(): void
+    {
+        [$tenant] = $this->bootApiActor('Admin', 'admin+recipe-plan-s@example.test');
+
+        $response = $this->postJson('/api/v1/products', [
+            'name' => 'Produk Resep',
+            'sku' => 'RECIPE-S-001',
+            'price' => 18000,
+            'track_stock' => true,
+            'product_mode' => 'bom',
+            'item_type' => 'finished_good',
+            'production_mode' => 'auto_consume_on_sell',
+            'bom_items' => [],
+        ], $this->tenantHeaders($tenant->id));
+
+        $response->assertStatus(403)
+            ->assertJsonPath('code', 'FEATURE_NOT_ALLOWED')
+            ->assertJsonPath('details.feature', 'product.recipe_management');
     }
 
     public function test_show_product_returns_decoded_bom_items_and_active_product_variants(): void
@@ -604,6 +759,83 @@ class ProductItemTypeCatalogApiTest extends TestCase
         $rawMaterialShow->assertJsonPath('product.has_variants', true);
         $rawMaterialShow->assertJsonCount(1, 'product.product_variants');
         $rawMaterialShow->assertJsonPath('product.product_variants.0.id', $activeVariantId);
+    }
+
+    public function test_show_product_returns_supplier_name_and_location_balances(): void
+    {
+        [$tenant] = $this->bootApiActor('Admin', 'admin+show-location-balances@example.test');
+
+        $supplierId = (string) Str::uuid();
+        DB::table('suppliers')->insert([
+            'id' => $supplierId,
+            'tenant_id' => $tenant->id,
+            'name' => 'Supplier Detail Bahan',
+            'balance' => 0,
+            'created_at' => now('UTC'),
+        ]);
+
+        $branchId = (string) Str::uuid();
+        $locationA = (string) Str::uuid();
+        $locationB = (string) Str::uuid();
+
+        DB::table('branches')->insert([
+            'id' => $branchId,
+            'tenant_id' => $tenant->id,
+            'name' => 'Cabang Detail',
+        ]);
+
+        DB::table('locations')->insert([
+            [
+                'id' => $locationA,
+                'tenant_id' => $tenant->id,
+                'branch_id' => $branchId,
+                'name' => 'Gudang A',
+                'is_default' => true,
+            ],
+            [
+                'id' => $locationB,
+                'tenant_id' => $tenant->id,
+                'branch_id' => $branchId,
+                'name' => 'Gudang B',
+                'is_default' => false,
+            ],
+        ]);
+
+        $productId = $this->insertProduct($tenant, [
+            'sku' => 'SHOW-LOC-001',
+            'name' => 'Produk Detail Lokasi',
+            'item_type' => 'raw_material',
+            'product_mode' => 'add_on',
+            'supplier_id' => $supplierId,
+            'unit' => 'kg',
+            'min_stock' => 2,
+        ]);
+
+        DB::table('inventory_balances')->insert([
+            [
+                'tenant_id' => $tenant->id,
+                'product_id' => $productId,
+                'location_id' => $locationA,
+                'qty_on_hand' => 7,
+            ],
+            [
+                'tenant_id' => $tenant->id,
+                'product_id' => $productId,
+                'location_id' => $locationB,
+                'qty_on_hand' => 3,
+            ],
+        ]);
+
+        $response = $this->getJson('/api/v1/products/'.$productId, $this->tenantHeaders($tenant->id));
+
+        $response->assertOk()
+            ->assertJsonPath('product.unit', 'kg')
+            ->assertJsonPath('product.supplier_id', $supplierId)
+            ->assertJsonPath('product.supplier_name', 'Supplier Detail Bahan')
+            ->assertJsonPath('product.product_location_balances.0.qty_on_hand', 7)
+            ->assertJsonPath('product.product_location_balances.0.name', 'Gudang A')
+            ->assertJsonPath('product.product_location_balances.1.qty_on_hand', 3)
+            ->assertJsonPath('product.product_location_balances.1.name', 'Gudang B');
     }
 
     private function insertProduct(Tenant $tenant, array $overrides): string

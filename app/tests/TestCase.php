@@ -19,7 +19,7 @@ abstract class TestCase extends BaseTestCase
         $compiledPath = storage_path('framework/testing-views/'.Str::uuid()->toString());
         File::ensureDirectoryExists($compiledPath);
 
-        config()->set('view.compiled', $compiledPath);
+        config()->set('view.compiled', str_replace('\\', '/', $compiledPath));
         $this->baselineOutputBufferLevel = ob_get_level();
     }
 

@@ -3,9 +3,7 @@
 namespace App\Services;
 
 use App\Models\Category;
-use App\Models\InventoryBalance;
 use App\Models\Product;
-use App\Models\StockLedger;
 use App\Models\Tenant;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -17,13 +15,23 @@ class OnboardingInitialProductService
 {
     public function __construct(
         private readonly TenantDefaultOperationalSetupService $operationalSetup,
-        private readonly InventoryValuationService $inventoryValuation,
+        private readonly OpeningBalancePostingService $openingPosting,
     ) {
     }
 
     /**
      * @param  array{tenant_id:string,user_id?:string|null,operational_address?:string|null}  $step2
-     * @param  array{name:string,sku?:string|null,category?:string|null,hpp_average:numeric-string|int|float,price:numeric-string|int|float,initial_stock:numeric-string|int|float,variants?:array<int,array{id?:string|null,sku:string,name:string}>,initial_stock_lines?:array<int,array{product_variant_id?:string|null,qty?:numeric-string|int|float,unit_cost?:numeric-string|int|float|null}>}  $payload
+    * @param  array{name:string,sku?:string|null,category?:string|null,hpp_average?:numeric-string|int|float|null,price?:numeric-string|int|float|null,initial_stock:numeric-string|int|float,variants?:array<int,array{id?:string|null,sku:string,name:string}>,initial_stock_lines?:array<int,array{product_variant_id?:string|null,qty?:numeric-string|int|float,unit_cost?:numeric-string|int|float|null}>}  $payload
+     */
+    public function validateDraftPayload(array $payload): void
+    {
+        $normalizedVariants = $this->normalizeVariants((array) ($payload['variants'] ?? []));
+        $this->resolveInitialReceipts($normalizedVariants, $payload);
+    }
+
+    /**
+     * @param  array{tenant_id:string,user_id?:string|null,operational_address?:string|null}  $step2
+     * @param  array{name:string,sku?:string|null,category?:string|null,hpp_average?:numeric-string|int|float|null,price?:numeric-string|int|float|null,initial_stock:numeric-string|int|float,variants?:array<int,array{id?:string|null,sku:string,name:string}>,initial_stock_lines?:array<int,array{product_variant_id?:string|null,qty?:numeric-string|int|float,unit_cost?:numeric-string|int|float|null}>}  $payload
      */
     public function bootstrap(array $step2, array $payload): Product
     {
@@ -43,14 +51,16 @@ class OnboardingInitialProductService
             $now = CarbonImmutable::now('UTC');
             $category = $this->resolveCategory($tenant->id, (string) ($payload['category'] ?? ''), $now);
             $normalizedVariants = $this->normalizeVariants((array) ($payload['variants'] ?? []));
+            $normalizedPrice = $this->normalizeDecimal($payload['price'] ?? null);
+            $normalizedAverageCost = $this->normalizeDecimal($payload['hpp_average'] ?? null);
 
             $product = Product::query()->create([
                 'tenant_id' => $tenant->id,
                 'category_id' => $category?->id,
                 'name' => $payload['name'],
                 'sku' => $sku,
-                'price' => (float) $payload['price'],
-                'hpp_average' => (float) $payload['hpp_average'],
+                'price' => $normalizedPrice,
+                'hpp_average' => $normalizedAverageCost,
                 'min_stock' => 0,
                 'track_stock' => true,
                 'is_active' => true,
@@ -79,74 +89,18 @@ class OnboardingInitialProductService
 
             $receipts = $this->resolveInitialReceipts($normalizedVariants, $payload);
 
-            foreach ($receipts as $receipt) {
-                if (! $location || (float) $receipt['qty'] <= 0) {
-                    continue;
-                }
-
-                InventoryBalance::query()->firstOrCreate(
-                    [
-                        'tenant_id' => $tenant->id,
-                        'product_id' => $product->id,
-                        'product_variant_id' => $receipt['product_variant_id'],
-                        'location_id' => $location->id,
-                    ],
-                    [
-                        'qty_on_hand' => 0,
+            if ($location && $receipts !== []) {
+                $this->openingPosting->postInventoryOnlyOpening(
+                    tenantId: (string) $tenant->id,
+                    openingDate: $now->toDateString(),
+                    locationId: (string) $location->id,
+                    productId: (string) $product->id,
+                    receipts: $receipts,
+                    actorId: $step2['user_id'] ?? null,
+                    context: [
+                        'source' => 'onboarding_initial_stock',
+                        'reference_note' => 'Onboarding initial stock',
                     ]
-                );
-
-                InventoryBalance::query()
-                    ->where('tenant_id', $tenant->id)
-                    ->where('product_id', $product->id)
-                    ->where('location_id', $location->id)
-                    ->when($receipt['product_variant_id'], function ($query, $variantId) {
-                        $query->where('product_variant_id', $variantId);
-                    }, function ($query) {
-                        $query->whereNull('product_variant_id');
-                    })
-                    ->update([
-                        'qty_on_hand' => DB::raw('qty_on_hand + '.(float) $receipt['qty']),
-                    ]);
-
-                $balanceAfter = (float) InventoryBalance::query()
-                    ->where('tenant_id', $tenant->id)
-                    ->where('product_id', $product->id)
-                    ->where('location_id', $location->id)
-                    ->when($receipt['product_variant_id'], function ($query, $variantId) {
-                        $query->where('product_variant_id', $variantId);
-                    }, function ($query) {
-                        $query->whereNull('product_variant_id');
-                    })
-                    ->value('qty_on_hand');
-
-                StockLedger::query()->create([
-                    'id' => (string) Str::uuid(),
-                    'tenant_id' => $tenant->id,
-                    'product_id' => $product->id,
-                    'product_variant_id' => $receipt['product_variant_id'],
-                    'location_id' => $location->id,
-                    'reference_type' => 'initial_stock',
-                    'reference_id' => $product->id,
-                    'reference_item_id' => $receipt['reference_item_id'],
-                    'qty_in' => (float) $receipt['qty'],
-                    'qty_out' => 0,
-                    'balance_after' => $balanceAfter,
-                    'created_at' => $now,
-                    'created_by' => $step2['user_id'] ?? null,
-                ]);
-
-                $this->inventoryValuation->receive(
-                    tenantId: $tenant->id,
-                    productId: $product->id,
-                    productVariantId: $receipt['product_variant_id'],
-                    locationId: $location->id,
-                    qty: (float) $receipt['qty'],
-                    unitCost: (float) $receipt['unit_cost'],
-                    sourceType: 'initial_stock',
-                    sourceId: $product->id,
-                    sourceItemId: $receipt['reference_item_id'] ?? null,
-                    at: $now,
                 );
             }
 
@@ -220,13 +174,14 @@ class OnboardingInitialProductService
 
     /**
      * @param  Collection<int, array{id:string,sku:string,name:string}>  $normalizedVariants
-     * @param  array{name:string,hpp_average:numeric-string|int|float,initial_stock:numeric-string|int|float,initial_stock_lines?:array<int,array{product_variant_id?:string|null,qty?:numeric-string|int|float,unit_cost?:numeric-string|int|float|null}>}  $payload
+      * @param  array{name:string,hpp_average?:numeric-string|int|float|null,initial_stock:numeric-string|int|float,initial_stock_lines?:array<int,array{product_variant_id?:string|null,qty?:numeric-string|int|float,unit_cost?:numeric-string|int|float|null}>}  $payload
      * @return list<array{product_variant_id:?string,reference_item_id:?string,qty:float,unit_cost:float}>
      */
     private function resolveInitialReceipts(Collection $normalizedVariants, array $payload): array
     {
         $initialStockLines = collect($payload['initial_stock_lines'] ?? [])->values();
         $variantIds = $normalizedVariants->pluck('id')->map(fn ($id) => (string) $id)->all();
+          $defaultUnitCost = $this->normalizeDecimal($payload['hpp_average'] ?? null);
 
         if (! empty($variantIds) && (float) $payload['initial_stock'] > 0) {
             throw ValidationException::withMessages([
@@ -244,11 +199,17 @@ class OnboardingInitialProductService
         if (empty($variantIds)) {
             $initialStock = (float) $payload['initial_stock'];
             if ($initialStock > 0) {
+                if ($defaultUnitCost <= 0) {
+                    throw ValidationException::withMessages([
+                        'hpp_average' => 'Unit cost opening stock wajib lebih dari 0 saat qty stok awal diisi.',
+                    ]);
+                }
+
                 $receipts[] = [
                     'product_variant_id' => null,
                     'reference_item_id' => null,
                     'qty' => $initialStock,
-                    'unit_cost' => (float) $payload['hpp_average'],
+                    'unit_cost' => $defaultUnitCost,
                 ];
             }
 
@@ -283,16 +244,37 @@ class OnboardingInitialProductService
             }
 
             $seenVariantIds[$variantId] = true;
+            $resolvedUnitCost = array_key_exists('unit_cost', $line) && $line['unit_cost'] !== null
+                ? (float) $line['unit_cost']
+                : $defaultUnitCost;
+
+            if ($resolvedUnitCost <= 0) {
+                throw ValidationException::withMessages([
+                    "initial_stock_lines.$index.unit_cost" => 'Unit cost opening stock wajib lebih dari 0 saat qty stok awal diisi.',
+                ]);
+            }
+
             $receipts[] = [
                 'product_variant_id' => $variantId,
                 'reference_item_id' => $variantId,
                 'qty' => $qty,
-                'unit_cost' => array_key_exists('unit_cost', $line) && $line['unit_cost'] !== null
-                    ? (float) $line['unit_cost']
-                    : (float) $payload['hpp_average'],
+                'unit_cost' => $resolvedUnitCost,
             ];
         }
 
         return $receipts;
+    }
+
+    private function normalizeDecimal(mixed $value): float
+    {
+        if ($value === null) {
+            return 0.0;
+        }
+
+        if (is_string($value) && trim($value) === '') {
+            return 0.0;
+        }
+
+        return (float) $value;
     }
 }

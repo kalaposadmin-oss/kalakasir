@@ -173,10 +173,13 @@ class FinanceControlDashboardTest extends TestCase
             'voided_by' => null,
             'created_at' => CarbonImmutable::parse('2026-02-28 01:00:00', 'UTC'),
             'transaction_date' => '2026-02-27',
+            'cogs_total' => 70000,
         ]);
 
+        $saleItemId = (string) Str::uuid();
+
         \DB::table('sale_items')->insert([
-            'id' => (string) Str::uuid(),
+            'id' => $saleItemId,
             'tenant_id' => $this->tenant->id,
             'sale_id' => $saleId,
             'product_id' => $productId,
@@ -184,6 +187,25 @@ class FinanceControlDashboardTest extends TestCase
             'price' => 125000,
             'discount' => 0,
             'hpp_snapshot' => 70000,
+        ]);
+
+        \DB::table('sale_cost_components')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->id,
+            'sale_id' => $saleId,
+            'sale_item_id' => $saleItemId,
+            'component_type' => 'sale_item',
+            'product_id' => $productId,
+            'product_variant_id' => null,
+            'qty' => 1,
+            'unit_cost' => 70000,
+            'total_cost' => 70000,
+            'source_reference_type' => 'sale',
+            'source_reference_id' => $saleId,
+            'source_reference_item_id' => $saleItemId,
+            'source' => 'repair',
+            'created_at' => CarbonImmutable::parse('2026-02-28 01:00:00', 'UTC'),
+            'updated_at' => CarbonImmutable::parse('2026-02-28 01:00:00', 'UTC'),
         ]);
 
         $businessDay = $this->withHeaders($this->tenantHeaders($this->tenant->id))
@@ -201,6 +223,88 @@ class FinanceControlDashboardTest extends TestCase
             ->assertJsonPath('kpi_today.sales_total', 0)
             ->assertJsonPath('kpi_today.cogs_total', 0)
             ->assertJsonPath('kpi_today.transaction_count', 0);
+    }
+
+    public function test_finance_control_daily_endpoint_rejects_mismatched_header_cogs(): void
+    {
+        $saleId = (string) Str::uuid();
+        $saleItemId = (string) Str::uuid();
+        $productId = (string) Str::uuid();
+
+        \DB::table('products')->insert([
+            'id' => $productId,
+            'tenant_id' => $this->tenant->id,
+            'sku' => 'SKU-FIN-MISMATCH',
+            'name' => 'Produk Mismatch',
+            'price' => 12000,
+            'hpp_average' => 4000,
+            'min_stock' => 0,
+            'image_url' => null,
+            'is_active' => true,
+            'track_stock' => true,
+            'created_by' => $this->user->id,
+            'updated_by' => $this->user->id,
+            'created_at' => now('UTC'),
+            'updated_at' => now('UTC'),
+            'deleted_at' => null,
+        ]);
+
+        \DB::table('sales')->insert([
+            'id' => $saleId,
+            'tenant_id' => $this->tenant->id,
+            'branch_id' => \DB::table('branches')->where('tenant_id', $this->tenant->id)->value('id'),
+            'shift_id' => \DB::table('shifts')->where('tenant_id', $this->tenant->id)->value('id'),
+            'customer_id' => null,
+            'subtotal' => 12000,
+            'discount' => 0,
+            'tax' => 0,
+            'total' => 12000,
+            'status' => 'completed',
+            'idempotency_key' => (string) Str::uuid(),
+            'created_by' => $this->user->id,
+            'voided_by' => null,
+            'created_at' => CarbonImmutable::parse('2026-02-27 09:00:00', 'UTC'),
+            'transaction_date' => '2026-02-27',
+            'cogs_total' => 3000,
+        ]);
+
+        \DB::table('sale_items')->insert([
+            'id' => $saleItemId,
+            'tenant_id' => $this->tenant->id,
+            'sale_id' => $saleId,
+            'product_id' => $productId,
+            'qty' => 1,
+            'price' => 12000,
+            'discount' => 0,
+            'hpp_snapshot' => 4000,
+        ]);
+
+        \DB::table('sale_cost_components')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->id,
+            'sale_id' => $saleId,
+            'sale_item_id' => $saleItemId,
+            'component_type' => 'sale_item',
+            'product_id' => $productId,
+            'product_variant_id' => null,
+            'qty' => 1,
+            'unit_cost' => 4000,
+            'total_cost' => 4000,
+            'source_reference_type' => 'sale',
+            'source_reference_id' => $saleId,
+            'source_reference_item_id' => $saleItemId,
+            'source' => 'repair',
+            'created_at' => CarbonImmutable::parse('2026-02-27 09:00:00', 'UTC'),
+            'updated_at' => CarbonImmutable::parse('2026-02-27 09:00:00', 'UTC'),
+        ]);
+
+        $response = $this->withHeaders($this->tenantHeaders($this->tenant->id))
+            ->getJson('/api/v1/finance-control-daily?date=2026-02-27');
+
+        $response->assertStatus(409)
+            ->assertJsonPath('code', 'SALES_COST_AGGREGATE_REQUIRED')
+            ->assertJsonPath('details.context', 'finance-control-daily')
+            ->assertJsonPath('details.summary.mismatched_header_cogs', 1);
     }
 
     private function seedDailyData(): void
@@ -305,10 +409,13 @@ class FinanceControlDashboardTest extends TestCase
             'voided_by' => null,
             'created_at' => CarbonImmutable::parse('2026-02-27 12:00:00', 'UTC'),
             'transaction_date' => '2026-02-27',
+            'cogs_total' => 120000,
         ]);
 
+        $saleItemId = (string) Str::uuid();
+
         \DB::table('sale_items')->insert([
-            'id' => (string) Str::uuid(),
+            'id' => $saleItemId,
             'tenant_id' => $this->tenant->id,
             'sale_id' => $saleId,
             'product_id' => $productId,
@@ -316,6 +423,25 @@ class FinanceControlDashboardTest extends TestCase
             'price' => 200000,
             'discount' => 0,
             'hpp_snapshot' => 120000,
+        ]);
+
+        \DB::table('sale_cost_components')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenant->id,
+            'sale_id' => $saleId,
+            'sale_item_id' => $saleItemId,
+            'component_type' => 'sale_item',
+            'product_id' => $productId,
+            'product_variant_id' => null,
+            'qty' => 1,
+            'unit_cost' => 120000,
+            'total_cost' => 120000,
+            'source_reference_type' => 'sale',
+            'source_reference_id' => $saleId,
+            'source_reference_item_id' => $saleItemId,
+            'source' => 'repair',
+            'created_at' => CarbonImmutable::parse('2026-02-27 12:00:00', 'UTC'),
+            'updated_at' => CarbonImmutable::parse('2026-02-27 12:00:00', 'UTC'),
         ]);
     }
 }

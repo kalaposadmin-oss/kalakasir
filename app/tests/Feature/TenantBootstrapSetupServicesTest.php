@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Services\OnboardingProvisioningService;
 use App\Services\TenantDefaultAccountingSetupService;
 use App\Services\TenantDefaultOperationalSetupService;
+use App\Services\TenantDefaultRegisterSetupService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -30,7 +31,7 @@ class TenantBootstrapSetupServicesTest extends TestCase
         $service->ensure($tenant->id, $actorId);
         $service->ensure($tenant->id, $actorId);
 
-        $this->assertSame(8, DB::table('chart_of_accounts')->where('tenant_id', $tenant->id)->count());
+        $this->assertSame(9, DB::table('chart_of_accounts')->where('tenant_id', $tenant->id)->count());
 
         $mapping = DB::table('account_mappings')->where('tenant_id', $tenant->id)->first();
         $this->assertNotNull($mapping);
@@ -72,6 +73,32 @@ class TenantBootstrapSetupServicesTest extends TestCase
         $this->assertSame($location->id, $sameLocation->id);
         $this->assertSame('Cabang Utama 2', $sameBranch->fresh()->name);
         $this->assertSame('Jalan Merdeka 2', $sameBranch->fresh()->address);
+    }
+
+    public function test_register_setup_creates_default_active_register_idempotently(): void
+    {
+        $tenant = Tenant::query()->create([
+            'name' => 'Tenant Register',
+            'timezone' => 'UTC',
+            'plan' => 'S',
+        ]);
+
+        $service = app(TenantDefaultRegisterSetupService::class);
+        $service->ensure($tenant);
+        $service->ensure($tenant);
+
+        $registers = DB::table('registers')
+            ->where('tenant_id', $tenant->id)
+            ->get();
+
+        $locationId = (string) DB::table('locations')
+            ->where('tenant_id', $tenant->id)
+            ->where('is_default', true)
+            ->value('id');
+
+        $this->assertCount(1, $registers);
+        $this->assertSame('active', $registers[0]->status);
+        $this->assertSame($locationId, $registers[0]->location_id);
     }
 
     public function test_onboarding_provisioning_creates_owner_and_bootstraps_defaults(): void
@@ -117,6 +144,11 @@ class TenantBootstrapSetupServicesTest extends TestCase
         $this->assertDatabaseHas('account_mappings', [
             'tenant_id' => $tenant->id,
             'created_by' => $owner->id,
+        ]);
+        $this->assertDatabaseHas('registers', [
+            'tenant_id' => $tenant->id,
+            'status' => 'active',
+            'name' => 'Register Utama',
         ]);
     }
 }

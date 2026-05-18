@@ -39,6 +39,7 @@ class AnalyticsTenantScopingTest extends TestCase
         $tenantRefundId = (string) Str::uuid();
         $foreignRefundId = (string) Str::uuid();
         $tenantSaleItemId = (string) Str::uuid();
+        $foreignSaleItemId = (string) Str::uuid();
         $activeAt = CarbonImmutable::parse('2026-02-27 12:15:00', 'UTC');
 
         DB::table('sales')->insert([
@@ -62,6 +63,7 @@ class AnalyticsTenantScopingTest extends TestCase
                 'voided_at' => null,
                 'created_at' => $activeAt,
                 'transaction_date' => '2026-02-27',
+                'cogs_total' => 5000,
             ],
             [
                 'id' => $foreignSaleId,
@@ -83,6 +85,7 @@ class AnalyticsTenantScopingTest extends TestCase
                 'voided_at' => null,
                 'created_at' => $activeAt,
                 'transaction_date' => '2026-02-27',
+                'cogs_total' => 20000,
             ],
         ]);
 
@@ -99,7 +102,7 @@ class AnalyticsTenantScopingTest extends TestCase
                 'hpp_snapshot' => 2500,
             ],
             [
-                'id' => (string) Str::uuid(),
+                'id' => $foreignSaleItemId,
                 'tenant_id' => $otherTenant->id,
                 'sale_id' => $foreignSaleId,
                 'product_id' => $otherFixture['product_id'],
@@ -108,6 +111,45 @@ class AnalyticsTenantScopingTest extends TestCase
                 'price' => 40000,
                 'discount' => 2000,
                 'hpp_snapshot' => 10000,
+            ],
+        ]);
+
+        DB::table('sale_cost_components')->insert([
+            [
+                'id' => (string) Str::uuid(),
+                'tenant_id' => $tenant->id,
+                'sale_id' => $tenantSaleId,
+                'sale_item_id' => $tenantSaleItemId,
+                'component_type' => 'sale_item',
+                'product_id' => $fixture['product_id'],
+                'product_variant_id' => null,
+                'qty' => 2,
+                'unit_cost' => 2500,
+                'total_cost' => 5000,
+                'source_reference_type' => 'sale',
+                'source_reference_id' => $tenantSaleId,
+                'source_reference_item_id' => $tenantSaleItemId,
+                'source' => 'repair',
+                'created_at' => $activeAt,
+                'updated_at' => $activeAt,
+            ],
+            [
+                'id' => (string) Str::uuid(),
+                'tenant_id' => $otherTenant->id,
+                'sale_id' => $foreignSaleId,
+                'sale_item_id' => $foreignSaleItemId,
+                'component_type' => 'sale_item',
+                'product_id' => $otherFixture['product_id'],
+                'product_variant_id' => null,
+                'qty' => 2,
+                'unit_cost' => 10000,
+                'total_cost' => 20000,
+                'source_reference_type' => 'sale',
+                'source_reference_id' => $foreignSaleId,
+                'source_reference_item_id' => $foreignSaleItemId,
+                'source' => 'repair',
+                'created_at' => $activeAt,
+                'updated_at' => $activeAt,
             ],
         ]);
 

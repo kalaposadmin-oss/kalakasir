@@ -2,11 +2,16 @@
 
 @php
     $pageTitle = 'Tenant Detail';
-    $active = 'tenant-detail';
+    $active = 'tenants';
     $tenantDetail = $tenantDetail ?? ['tenant' => [], 'usage_summary' => [], 'users_preview' => [], 'recent_events' => []];
     $tenantName = $tenantDetail['tenant']['name'] ?? 'Tenant';
     $tenantStatus = $tenantDetail['tenant']['status'] ?? '-';
     $tenantPlan = $tenantDetail['tenant']['plan'] ?? '-';
+    $usageSummary = $tenantDetail['usage_summary'] ?? [];
+    $orderCount = (int) ($usageSummary['orders'] ?? 0);
+    $revenueTotal = (float) ($usageSummary['revenue'] ?? 0);
+    $averageOrder = $orderCount > 0 ? $revenueTotal / $orderCount : 0;
+    $recentEvents = $tenantDetail['recent_events'] ?? [];
 @endphp
 
 @section('platform_content')
@@ -27,17 +32,23 @@
                 data-tenant-id="{{ $targetTenantId ?? '' }}"
                 data-tenant-name="{{ $tenantName }}"
                 data-default-action="suspend"
-            >Danger Actions</button>
+            >Kelola Status</button>
         </div>
     </div>
 
-    <div class="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4">
-        <div class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
-            <span class="material-symbols-outlined text-[18px]">calendar_today</span>
-            1 Mar 2026 - 10 Mar 2026
+    <div class="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-600 md:grid-cols-3">
+        <div class="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2">
+            <span class="material-symbols-outlined text-[18px] text-primary">badge</span>
+            ID tenant: {{ $targetTenantId ?? '-' }}
         </div>
-        <div class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">Preset: Last 7 Days</div>
-        <button class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600">Reset</button>
+        <div class="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2">
+            <span class="material-symbols-outlined text-[18px] text-primary">workspace_premium</span>
+            Plan: {{ $tenantPlan }}
+        </div>
+        <div class="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2">
+            <span class="material-symbols-outlined text-[18px] text-primary">history</span>
+            Event terbaru: {{ count($recentEvents) }}
+        </div>
     </div>
 
     <section class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -48,8 +59,8 @@
         </article>
         <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Health</p>
-            <p class="mt-2 text-lg font-bold text-amber-600">Monitoring</p>
-            <p class="mt-1 text-xs text-slate-500">Pantau anomaly & invoice</p>
+            <p class="mt-2 text-lg font-bold text-slate-900">{{ count($recentEvents) }} event</p>
+            <p class="mt-1 text-xs text-slate-500">Aktivitas yang tercatat untuk review</p>
         </article>
         <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">User Count</p>
@@ -58,8 +69,8 @@
         </article>
         <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Revenue 7D</p>
-            <p class="mt-2 text-2xl font-bold text-slate-900">Rp {{ number_format((float) ($tenantDetail['usage_summary']['revenue'] ?? 0), 0, ',', '.') }}</p>
-            <p class="mt-1 text-xs text-slate-500">{{ number_format((int) ($tenantDetail['usage_summary']['orders'] ?? 0)) }} transaksi</p>
+            <p class="mt-2 text-2xl font-bold text-slate-900">Rp {{ number_format($revenueTotal, 0, ',', '.') }}</p>
+            <p class="mt-1 text-xs text-slate-500">{{ number_format($orderCount) }} transaksi</p>
         </article>
     </section>
 
@@ -70,9 +81,22 @@
                     <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Usage Summary</p>
                     <h3 class="mt-1 text-lg font-bold text-slate-900">Order & Revenue</h3>
                 </div>
-                <button class="text-xs font-semibold text-primary">30 Hari</button>
+                <span class="text-xs font-semibold text-slate-500">Data tenant</span>
             </div>
-            <div class="mt-6 h-48 rounded-2xl border border-dashed border-slate-200 bg-slate-50"></div>
+            <div class="mt-6 grid gap-3 md:grid-cols-3">
+                <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Revenue</p>
+                    <p class="mt-2 text-lg font-bold text-slate-900">Rp {{ number_format($revenueTotal, 0, ',', '.') }}</p>
+                </div>
+                <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Transaksi</p>
+                    <p class="mt-2 text-lg font-bold text-slate-900">{{ number_format($orderCount) }}</p>
+                </div>
+                <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Rata-rata</p>
+                    <p class="mt-2 text-lg font-bold text-slate-900">Rp {{ number_format($averageOrder, 0, ',', '.') }}</p>
+                </div>
+            </div>
         </div>
         <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div class="flex items-center justify-between">
@@ -82,7 +106,7 @@
                 </div>
                 <a
                     class="text-xs font-semibold text-primary"
-                    href="/platform/users?tenant_id={{ $targetTenantId ?? '' }}"
+                    href="/superadmin/users?tenant_id={{ $targetTenantId ?? '' }}"
                 >Lihat semua user</a>
             </div>
             @if (empty($tenantDetail['owner_exists']))
@@ -112,7 +136,7 @@
                         $lastLoginLabel = 'never';
                         if ($lastLoginRaw) {
                             $lastLoginTime = \Carbon\CarbonImmutable::parse($lastLoginRaw, 'UTC');
-                            $lastLoginLabel = $lastLoginTime->diffForHumans().' · '.$lastLoginTime->format('d M Y, H:i');
+                            $lastLoginLabel = $lastLoginTime->diffForHumans().' - '.$lastLoginTime->format('d M Y, H:i');
                         }
                         $createdLabel = $createdAtRaw
                             ? \Carbon\CarbonImmutable::parse($createdAtRaw, 'UTC')->format('d M Y, H:i')
@@ -170,8 +194,6 @@
             @endforelse
         </div>
     </section>
-
-    @include('platform.partials.states')
 
     <div id="tenant-action-modal" class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-900/20 px-4">
         <div class="pointer-events-auto w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
@@ -250,7 +272,7 @@
 
             const updateHint = () => {
                 if (el.action.value === 'impersonate') {
-                    el.hint.textContent = 'Impersonate akan memiliki expiry otomatis (±30 menit).';
+                    el.hint.textContent = 'Impersonate akan memiliki expiry otomatis (+/-30 menit).';
                 } else {
                     el.hint.textContent = 'Alasan akan dicatat di audit log.';
                 }

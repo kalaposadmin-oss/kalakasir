@@ -8,6 +8,7 @@ use App\Models\Anomaly;
 use App\Models\ProductionBatch;
 use App\Models\ProductionBatchItem;
 use App\Services\AnomalyService;
+use App\Services\ProductionEligibilityService;
 use App\Services\ProductionBatchService;
 use App\Support\ApiResponse;
 use App\Support\TenantContext;
@@ -127,6 +128,7 @@ class ProductionBatchController extends Controller
                 'status' => $batch->status,
                 'transaction_date' => optional($batch->transaction_date)->format('Y-m-d'),
                 'recipe_version' => $batch->recipe_version,
+                'recipe_count' => $batch->recipe_version,
                 'expected_output_qty' => (float) ($batch->expected_output_qty ?? 0),
                 'actual_output_qty' => (float) ($batch->actual_output_qty ?? 0),
                 'yield_variance_qty' => (float) ($batch->yield_variance_qty ?? 0),
@@ -201,9 +203,16 @@ class ProductionBatchController extends Controller
             'reference_no' => ['nullable', 'string', 'max:100'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'transaction_date' => ['required', 'date'],
-            'expected_output_qty' => ['required', 'numeric', 'min:0.0001'],
-            'recipe_version' => ['required', 'integer', 'min:1'],
+            'expected_output_qty' => ['nullable', 'numeric', 'min:0.0001'],
+            'recipe_version' => ['nullable', 'integer', 'min:1'],
+            'recipe_count' => ['nullable', 'integer', 'min:1'],
         ]);
+
+        if (! array_key_exists('recipe_count', $payload) && ! array_key_exists('recipe_version', $payload)) {
+            throw ValidationException::withMessages([
+                'recipe_count' => 'Jumlah resep wajib diisi.',
+            ]);
+        }
 
         try {
             $batch = $service->createDraft($payload, $request->user()?->id);
@@ -213,6 +222,7 @@ class ProductionBatchController extends Controller
                 'status' => ProductionBatch::STATUS_DRAFT,
                 'expected_output_qty' => (float) ($batch->expected_output_qty ?? 0),
                 'recipe_version' => $batch->recipe_version,
+                'recipe_count' => $batch->recipe_version,
             ], 201);
         } catch (ValidationException $exception) {
             return response()->json([
@@ -293,6 +303,7 @@ class ProductionBatchController extends Controller
                 'notes' => $batchRow->notes,
                 'transaction_date' => $batchRow->transaction_date,
                 'recipe_version' => $batchRow->recipe_version,
+                'recipe_count' => $batchRow->recipe_version,
                 'expected_output_qty' => (float) ($batchRow->expected_output_qty ?? 0),
                 'actual_output_qty' => (float) ($batchRow->actual_output_qty ?? 0),
                 'yield_variance_qty' => (float) ($batchRow->yield_variance_qty ?? 0),
@@ -321,6 +332,35 @@ class ProductionBatchController extends Controller
             ],
             'observability_url' => $this->productionBatchObservabilityUrl((string) $batchRow->id),
         ]);
+    }
+
+    public function recipePreview(Request $request, ProductionEligibilityService $eligibility)
+    {
+        $tenantId = TenantContext::id();
+
+        $payload = $request->validate([
+            'product_id' => ['required', 'uuid'],
+            'product_variant_id' => ['nullable', 'uuid'],
+            'qty' => ['nullable', 'numeric', 'min:0.0001'],
+            'recipe_count' => ['nullable', 'numeric', 'min:0.0001'],
+            'location_id' => ['required', 'uuid'],
+        ]);
+
+        $recipeCount = $payload['recipe_count'] ?? $payload['qty'] ?? null;
+        if ($recipeCount === null) {
+            throw ValidationException::withMessages([
+                'recipe_count' => 'Jumlah resep wajib diisi.',
+            ]);
+        }
+
+        return ApiResponse::success(
+            $eligibility->inspectRecipePreview(
+                $tenantId,
+                (string) $payload['product_id'],
+                (string) $payload['location_id'],
+                $recipeCount
+            )
+        );
     }
 
     public function exportProblematicCsv(Request $request): StreamedResponse
@@ -480,6 +520,7 @@ class ProductionBatchController extends Controller
             'transaction_date' => ['nullable', 'date'],
             'expected_output_qty' => ['nullable', 'numeric', 'min:0.0001'],
             'recipe_version' => ['nullable', 'integer', 'min:1'],
+            'recipe_count' => ['nullable', 'integer', 'min:1'],
             'inputs' => ['nullable', 'array', 'min:1'],
             'inputs.*.product_id' => ['required_with:inputs', 'uuid'],
             'inputs.*.product_variant_id' => ['nullable', 'uuid'],

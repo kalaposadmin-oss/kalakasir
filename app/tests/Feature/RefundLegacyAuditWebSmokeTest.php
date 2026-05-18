@@ -16,7 +16,8 @@ class RefundLegacyAuditWebSmokeTest extends TestCase
         $middleware = $route->gatherMiddleware();
         $contents = file_get_contents(resource_path('views/refund-legacy-audit.blade.php'));
 
-        $this->assertContains('web_access:backoffice,admin|owner|superadmin,dash.overview', $middleware);
+        $this->assertContains('web_access:backoffice,admin|owner|superadmin', $middleware);
+        $this->assertNotContains('web_access:backoffice,admin|owner|superadmin,dash.overview', $middleware);
         $this->assertTrue(view()->exists('refund-legacy-audit'));
         $this->assertStringContainsString('Audit Refund Legacy', $contents);
         $this->assertStringContainsString('btn-refresh', $contents);

@@ -25,6 +25,7 @@ class Product extends TenantModel
         'track_stock' => 'bool',
         'bom_items' => 'array',
         'variants' => 'array',
+        'recipe_output_qty' => 'float',
     ];
 
     protected $attributes = [

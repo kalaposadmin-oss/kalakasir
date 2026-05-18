@@ -48,7 +48,7 @@ class ShiftCloseEndpointTest extends TestCase
             'status' => 'open',
         ]);
 
-        // no sales/payments created: shift will have zero expected cash
+        // no sales/payments created: shift should still expect the opening cash.
 
         // call close endpoint
         $response = $this->postJson('/api/v1/shifts/close', [
@@ -62,10 +62,11 @@ class ShiftCloseEndpointTest extends TestCase
         $shift->refresh();
         $this->assertEquals('closed', $shift->status);
         $this->assertEquals(60000, (int) $shift->closing_cash);
+        $this->assertEquals(10000, (int) $shift->system_cash_total);
 
         // fetch close summary
         $summary = $this->getJson('/api/v1/shifts/close-summary?shift_id='.$shift->id, ['X-Tenant-Id' => $tenant->id]);
         $summary->assertStatus(200)->assertJsonPath('shift.id', $shift->id);
-        $summary->assertJsonPath('shift.difference', 60000);
+        $summary->assertJsonPath('shift.difference', 50000);
     }
 }

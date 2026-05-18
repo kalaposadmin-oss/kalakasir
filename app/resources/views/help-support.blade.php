@@ -39,29 +39,29 @@
 @section('content')
     <div class="w-full px-4 py-4 lg:px-8 space-y-6">
         <section class="flex items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs dark:border-emerald-900/50 dark:bg-emerald-900/20">
-            <p id="support-sla" class="font-bold text-emerald-700 dark:text-emerald-300">Rata-rata respon support: &lt; 30 menit</p>
-            <button class="rounded-lg bg-primary px-3 py-2 font-bold text-white">Buat Tiket Baru</button>
+            <p id="support-sla" class="font-bold text-emerald-700 dark:text-emerald-300">Dukungan mengikuti paket langganan aktif.</p>
+            <button class="rounded-lg bg-slate-200 px-3 py-2 font-bold text-slate-500 dark:bg-slate-800 dark:text-slate-400" type="button" disabled>Buat Tiket</button>
         </section>
 
         <section class="grid grid-cols-1 gap-4 md:grid-cols-3">
             <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                 <p class="text-sm font-bold">WhatsApp</p>
-                <p class="mt-1 text-xs text-slate-500">Respon cepat 08:00 - 22:00</p>
+                <p class="mt-1 text-xs text-slate-500">Belum dikonfigurasi.</p>
             </div>
             <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                 <p class="text-sm font-bold">Email Support</p>
-                <p class="mt-1 text-xs text-slate-500">support@pos-saas.com</p>
+                <p class="mt-1 text-xs text-slate-500">Belum dikonfigurasi.</p>
             </div>
             <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                 <p class="text-sm font-bold">Telepon Bantuan</p>
-                <p class="mt-1 text-xs text-slate-500">021-500-999</p>
+                <p class="mt-1 text-xs text-slate-500">Belum dikonfigurasi.</p>
             </div>
         </section>
 
         <section class="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div class="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-800">
                 <h3 class="text-sm font-bold text-slate-900 dark:text-white">Riwayat Tiket Bantuan</h3>
-                <select class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-800">
+                <select class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-800" disabled>
                     <option>Semua Status</option>
                     <option>Open</option>
                     <option>Resolved</option>
@@ -88,7 +88,7 @@
         </section>
 
         <section class="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs text-blue-700 dark:border-blue-900/50 dark:bg-blue-900/20 dark:text-blue-300">
-            Lebih dari 80% masalah umum bisa selesai melalui Pusat Bantuan tanpa perlu membuat tiket.
+            Modul tiket bantuan belum memiliki endpoint aktif. Halaman ini tidak lagi menampilkan tiket contoh.
         </section>
     </div>
 
@@ -101,12 +101,6 @@
                 sla: document.getElementById('support-sla'),
                 ticketBody: document.getElementById('support-ticket-body'),
             };
-
-            const fallbackTickets = [
-                { id: '#TKT-240501', subject: 'Gagal integrasi printer Bluetooth', priority: 'Tinggi', status: 'open', updated: '12 menit lalu' },
-                { id: '#TKT-240488', subject: 'Pertanyaan outlet baru', priority: 'Sedang', status: 'resolved', updated: 'Kemarin 14:20' },
-                { id: '#TKT-240452', subject: 'Kesalahan stok opname di dashboard', priority: 'Sedang', status: 'resolved', updated: '3 hari lalu' },
-            ];
 
             const renderTickets = (tickets) => {
                 if (!tickets.length) {
@@ -129,20 +123,18 @@
             };
 
             const load = async () => {
-                // Endpoint tiket support belum tersedia; gunakan fallback terstruktur.
-                renderTickets(fallbackTickets);
+                renderTickets([]);
 
-                const bootstrap = await fetch('/api/v1/bootstrap', { headers });
-                if (bootstrap.ok) {
-                    const payload = await bootstrap.json();
+                const payload = await window.PosUi.getBootstrap({ headers, ttlMs: 20000 });
+                if (payload) {
                     const plan = String(payload?.tenant?.plan || '').toUpperCase();
                     if (plan === 'P') {
-                        el.sla.textContent = 'Rata-rata respon support: < 15 menit';
+                        el.sla.textContent = 'Dukungan prioritas aktif untuk paket Pro.';
                     }
                 }
             };
 
-            load().catch(() => renderTickets(fallbackTickets));
+            load().catch(() => renderTickets([]));
         })();
     </script>
 @endsection

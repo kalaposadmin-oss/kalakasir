@@ -31,7 +31,7 @@
 @section('page_title', 'Alert Stok dan Reorder')
 @section('body_class', 'bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display')
 @section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-background-light dark:bg-background-dark shadow-2xl')
-@section('main_class', 'flex-1 overflow-hidden p-0')
+@section('main_class', 'flex-1 overflow-hidden p-0 app-bottom-safe-space')
 
 @push('head')
         <style>
@@ -60,7 +60,7 @@
             <span class="material-symbols-outlined text-amber-600 dark:text-amber-500 text-sm">warning</span>
             <p class="text-[11px] font-medium text-amber-800 dark:text-amber-400" id="alert-summary">0 produk mencapai batas stok minimum hari ini.</p>
         </div>
-        <div class="flex-1 overflow-y-auto pb-32">
+        <div class="flex-1 overflow-y-auto pb-32 app-bottom-safe-space">
             <div class="p-4">
                 <button class="w-full bg-primary text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-primary/20 active:scale-[0.98] transition-transform">
                     <span class="material-symbols-outlined">add_shopping_cart</span>
@@ -75,7 +75,7 @@
                 <div id="alert-list" class="space-y-4"></div>
             </div>
         </div>
-        <div id="selection-bar" class="fixed bottom-28 left-1/2 -translate-x-1/2 w-[calc(100%-48px)] max-w-[380px] bg-slate-900/90 text-white p-3 rounded-xl flex items-center justify-between shadow-2xl backdrop-blur-md hidden">
+        <div id="selection-bar" class="fixed bottom-28 left-1/2 -translate-x-1/2 w-[calc(100%-48px)] max-w-[380px] bg-slate-900/90 text-white p-3 rounded-xl flex items-center justify-between shadow-2xl backdrop-blur-md hidden app-bottom-safe-space">
             <div class="flex items-center gap-2">
                 <span class="material-symbols-outlined text-primary">info</span>
                 <span class="text-xs" id="selection-count">0 produk terpilih untuk PO massal</span>

@@ -2,24 +2,19 @@
 
 @section('page_title', 'Tutup Shift')
 @section('body_class', 'bg-background-light dark:bg-background-dark font-display')
-@section('main_class', 'flex-1 overflow-hidden p-0')
+@section('main_class', 'flex-1 overflow-hidden p-0 app-bottom-safe-space')
 
 @section('header')
-        <x-page-header title="Tutup Shift" backUrl="/pos/dashboard" />
+        <x-page-header title="Tutup Shift" :backUrl="pos_default_url()" />
 @endsection
 
 @section('content')
         <div class="relative flex h-full flex-col">
-            <div class="flex-1 overflow-y-auto pb-20">
+            <div class="flex-1 overflow-y-auto pb-20 app-bottom-safe-space">
                 <div class="px-4 pt-6 pb-4">
                     <h3 class="text-slate-900 dark:text-slate-100 text-xl font-bold leading-tight">Konfirmasi Kas Akhir</h3>
                     <p class="text-slate-500 dark:text-slate-400 text-sm mt-1">Pastikan jumlah uang tunai di laci sesuai dengan catatan sistem.</p>
                     <p class="text-xs text-slate-500 mt-2" id="shift-info">Shift: -</p>
-                </div>
-                <div class="px-4 pb-4">
-                    @include('partials.owner-pos-panel', [
-                        'subtitle' => 'Selesaikan tutup shift, lalu gunakan jalur cepat ke katalog, stok, atau pengaturan toko.',
-                    ])
                 </div>
                 <div id="shift-closed-banner" class="mx-4 mb-4 hidden rounded-xl border border-amber-200 bg-amber-50 p-4">
                     <p class="text-sm font-semibold text-amber-800">Shift belum dibuka atau sudah ditutup.</p>
@@ -307,4 +302,3 @@
             })();
         </script>
     @endsection
-

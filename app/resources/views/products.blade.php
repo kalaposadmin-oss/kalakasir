@@ -22,20 +22,24 @@
     abort_unless(in_array($productsRole, ['warehouse', 'supervisor', 'admin', 'owner', 'superadmin'], true), 403);
 
     $canManageProducts = in_array($productsRole, ['admin', 'owner', 'superadmin'], true);
+    $productsPortalPrefix = request()->is('pos/*') ? '/pos' : '/backoffice';
     $productsFrom = trim((string) request()->query('from', ''));
-    $productsCurrentPath = '/backoffice/products';
+    $productsCurrentPath = $productsPortalPrefix.'/products';
     if ($productsFrom !== '') {
         $productsCurrentPath .= '?from='.rawurlencode($productsFrom);
     }
 
-    $productsBackUrl = '/backoffice/dashboard';
+    $productsBackUrl = $productsPortalPrefix === '/pos' ? pos_default_url() : '/backoffice/dashboard';
     if ($productsFrom !== '') {
-        if (str_starts_with($productsFrom, '/pos/')) {
-            $productsBackUrl = '/portal/switch/pos?next='.rawurlencode($productsFrom);
-        } elseif (str_starts_with($productsFrom, '/backoffice/')) {
+        if (str_starts_with($productsFrom, $productsPortalPrefix.'/')) {
             $productsBackUrl = $productsFrom;
+        } elseif ($productsPortalPrefix === '/backoffice' && str_starts_with($productsFrom, '/pos/')) {
+            $productsBackUrl = '/portal/switch/pos?next='.rawurlencode($productsFrom);
+        } elseif ($productsPortalPrefix === '/pos' && str_starts_with($productsFrom, '/backoffice/')) {
+            $productsBackUrl = '/portal/switch/backoffice?next='.rawurlencode($productsFrom);
         }
     }
+    $productsBackUrl = normalize_pos_home_url($productsBackUrl);
 @endphp
 
 @section('page_title', 'Daftar Produk')
@@ -55,7 +59,7 @@
     <x-page-header title="Daftar Produk" :backUrl="$productsBackUrl" :showMenuButton="true">
         <x-slot:actions>
             @if ($canManageProducts)
-                <a class="flex items-center justify-center size-9 rounded-full bg-primary text-white" href="{{ '/backoffice/products/new?from='.rawurlencode($productsCurrentPath) }}" aria-label="Tambah produk">
+                <a class="flex items-center justify-center size-9 rounded-full bg-primary text-white" href="{{ $productsPortalPrefix.'/products/new?from='.rawurlencode($productsCurrentPath) }}" aria-label="Tambah produk">
                     <span class="material-symbols-outlined">add</span>
                 </a>
             @endif
@@ -67,12 +71,17 @@
     <div class="px-4 py-4 space-y-4">
         <div class="relative">
             <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">search</span>
-            <input id="search-input" class="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-900 border-none rounded-xl shadow-sm ring-1 ring-slate-200 dark:ring-slate-800 focus:ring-2 focus:ring-primary text-sm" placeholder="Cari nama produk atau SKU..." type="text" />
+            <input id="search-input" class="app-search-control pl-10 pr-4 py-3" placeholder="Cari nama produk atau SKU..." type="text" />
         </div>
         <div id="category-filters" class="flex gap-2 overflow-x-auto pb-1 no-scrollbar"></div>
     </div>
 
     <div class="px-4 space-y-3" id="product-list"></div>
+
+    <div id="product-success-toast" class="fixed bottom-6 left-1/2 z-50 hidden w-[calc(100%-2rem)] max-w-[390px] -translate-x-1/2 rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-sm text-emerald-700 shadow-xl">
+        <p class="font-semibold">Berhasil</p>
+        <p class="mt-1 text-xs text-emerald-600" data-toast-message></p>
+    </div>
 @endsection
 
 @push('scripts')
@@ -81,11 +90,41 @@
         const tenantId = document.querySelector('meta[name="tenant-id"]').content;
         const headers = tenantId ? { 'X-Tenant-Id': tenantId } : {};
         const currentPath = @json($productsCurrentPath);
+        const portalPrefix = @json($productsPortalPrefix);
+        const successFlashKey = 'kalakasir:product-create-success';
 
         const el = {
             list: document.getElementById('product-list'),
             filters: document.getElementById('category-filters'),
             search: document.getElementById('search-input'),
+            successToast: document.getElementById('product-success-toast'),
+            successMessage: document.querySelector('#product-success-toast [data-toast-message]'),
+        };
+
+        let successToastTimeoutId = null;
+
+        const showSuccessToast = (message) => {
+            if (!el.successToast || !el.successMessage) {
+                return;
+            }
+
+            if (!message) {
+                el.successToast.classList.add('hidden');
+                el.successMessage.textContent = '';
+                return;
+            }
+
+            el.successMessage.textContent = message;
+            el.successToast.classList.remove('hidden');
+
+            if (successToastTimeoutId) {
+                window.clearTimeout(successToastTimeoutId);
+            }
+
+            successToastTimeoutId = window.setTimeout(() => {
+                el.successToast.classList.add('hidden');
+                el.successMessage.textContent = '';
+            }, 4000);
         };
 
         const state = {
@@ -111,7 +150,7 @@
 
             state.categories.forEach((category) => {
                 const button = document.createElement('button');
-                button.className = 'flex h-9 items-center justify-center gap-2 rounded-full bg-white dark:bg-slate-900 ring-1 ring-slate-200 dark:ring-slate-800 px-4 text-slate-600 dark:text-slate-400 text-sm font-medium';
+                button.className = 'flex h-9 items-center justify-center gap-2 rounded-full bg-white px-4 text-sm font-bold text-slate-600 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:ring-slate-800';
                 button.textContent = category.name;
                 button.dataset.category = category.id;
                 el.filters.appendChild(button);
@@ -142,27 +181,31 @@
             el.list.innerHTML = '';
 
             if (!products.length) {
-                el.list.innerHTML = '<div class="text-sm text-slate-400">Belum ada produk.</div>';
+                el.list.innerHTML = '<div class="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-8 text-center text-sm font-semibold text-slate-400">Belum ada produk.</div>';
                 return;
             }
 
             products.forEach((product) => {
                 const card = document.createElement('div');
-                card.className = 'bg-white dark:bg-slate-900 p-3 rounded-xl shadow-sm ring-1 ring-slate-200 dark:ring-slate-800 flex items-center justify-between';
-                const image = product.image_url || 'https://placehold.co/120x120?text=Produk';
+                card.className = 'app-card flex items-center justify-between gap-3 p-4';
+                    const image = product.image_url || '/images/placeholders/product.svg';
+                const hppLabel = Number(product.hpp_average || 0) > 0
+                    ? formatCurrency(product.hpp_average)
+                    : 'Belum terbentuk';
                 card.innerHTML = `
-                    <div class="flex items-center gap-4">
-                        <div class="size-16 rounded-lg bg-cover bg-center shrink-0 border border-slate-100 dark:border-slate-800" style="background-image: url('${image}')"></div>
+                    <div class="flex min-w-0 items-center gap-3">
+                        <div class="size-14 shrink-0 rounded-xl border border-slate-100 bg-cover bg-center dark:border-slate-800" style="background-image: url('${image}')"></div>
                         <div class="flex flex-col">
-                            <h3 class="font-bold text-slate-900 dark:text-white">${product.name}</h3>
+                            <h3 class="truncate text-sm font-black text-slate-950 dark:text-white">${product.name}</h3>
                             <p class="text-sm text-slate-500">SKU: ${product.sku || '-'} • <span class="font-semibold text-slate-700 dark:text-slate-300">${formatCurrency(product.price)}</span></p>
+                            <p class="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">HPP ${hppLabel}</p>
                         </div>
                     </div>
                     <div class="flex items-center gap-2">
-                        <a class="flex items-center justify-center size-9 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors" href="/backoffice/products/${product.id}/edit?from=${encodeURIComponent(currentPath)}" aria-label="Edit produk" title="Edit produk">
+                        <a class="flex items-center justify-center size-9 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors" href="${portalPrefix}/products/${product.id}/edit?from=${encodeURIComponent(currentPath)}" aria-label="Edit produk" title="Edit produk">
                             <span class="material-symbols-outlined text-[20px]">edit</span>
                         </a>
-                        <a class="flex items-center justify-center size-9 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors" href="/backoffice/products/${product.id}?from=${encodeURIComponent(currentPath)}" aria-label="Detail produk" title="Detail produk">
+                        <a class="flex items-center justify-center size-9 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors" href="${portalPrefix}/products/${product.id}?from=${encodeURIComponent(currentPath)}" aria-label="Detail produk" title="Detail produk">
                             <span class="material-symbols-outlined text-[20px]">info</span>
                         </a>
                     </div>
@@ -205,6 +248,12 @@
         });
 
         (async () => {
+            const flashMessage = sessionStorage.getItem(successFlashKey);
+            if (flashMessage) {
+                sessionStorage.removeItem(successFlashKey);
+                showSuccessToast(flashMessage);
+            }
+
             const [products, categories] = await Promise.all([loadProducts(), loadCategories()]);
             state.products = products;
             state.categories = categories;
@@ -216,6 +265,3 @@
     })();
 </script>
 @endpush
-
-
-

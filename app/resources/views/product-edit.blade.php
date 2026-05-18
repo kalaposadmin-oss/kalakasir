@@ -23,15 +23,25 @@
 @endphp
 
 @php
+    $productEditPortalPrefix = request()->is('pos/*') ? '/pos' : '/backoffice';
+    $isProductEditPosPortal = $productEditPortalPrefix === '/pos';
     $productEditFrom = trim((string) request()->query('from', ''));
-    $productEditBackUrl = '/backoffice/products';
+    $productEditBackUrl = $productEditPortalPrefix.'/products';
+    $productEditCanManageRecipe = $productEditTenant
+        ? app(\App\Services\SubscriptionService::class)->canAccessFeature($productEditTenant, 'product.recipe_management')
+        : false;
     if ($productEditFrom !== '') {
         if (str_starts_with($productEditFrom, '/pos/')) {
-            $productEditBackUrl = '/portal/switch/pos?next='.rawurlencode($productEditFrom);
+            $productEditBackUrl = $isProductEditPosPortal
+                ? $productEditFrom
+                : '/portal/switch/pos?next='.rawurlencode($productEditFrom);
         } elseif (str_starts_with($productEditFrom, '/backoffice/')) {
-            $productEditBackUrl = $productEditFrom;
+            $productEditBackUrl = $isProductEditPosPortal
+                ? '/portal/switch/backoffice?next='.rawurlencode($productEditFrom)
+                : $productEditFrom;
         }
     }
+    $productEditBackUrl = normalize_pos_home_url($productEditBackUrl);
 @endphp
 
 @section('page_title', 'Ubah Produk')
@@ -69,6 +79,57 @@
                         <label class="text-xs font-bold text-slate-500 uppercase">Kategori</label>
                         <select id="edit-category" class="w-full px-4 py-3 rounded-lg border-slate-200 focus:ring-primary focus:border-primary appearance-none"></select>
                     </div>
+                    <div class="space-y-1.5">
+                        <label class="text-xs font-bold text-slate-500 uppercase">Tipe Produk</label>
+                        <select id="edit-type" class="w-full px-4 py-3 rounded-lg border-slate-200 focus:ring-primary focus:border-primary appearance-none">
+                            <option value="finished_good">Barang Jual</option>
+                            <option value="raw_material">Bahan Baku</option>
+                            <option value="service">Jasa / Service</option>
+                        </select>
+                        <div id="edit-type-note" class="rounded-xl bg-slate-50 px-3 py-3 text-xs leading-relaxed text-slate-500">
+                            Barang jual tampil di kasir. Bahan baku dipakai untuk recipe dan tidak dijual langsung di POS.
+                        </div>
+                    </div>
+                    <div id="edit-raw-material-meta" class="hidden rounded-xl border border-slate-100 bg-slate-50/60 p-4 space-y-3">
+                        <div>
+                            <p class="text-sm font-bold text-slate-800">Metadata Bahan Baku</p>
+                            <p class="text-xs text-slate-500">Satuan bahan dipilih dari daftar agar konsisten. Jika belum ada, pilih satuan lain lalu isi manual.</p>
+                        </div>
+                        <div class="space-y-4">
+                            <div class="space-y-1.5">
+                                <label class="text-xs font-bold text-slate-500 uppercase">Satuan Bahan</label>
+                                <select id="edit-unit-select" class="w-full px-4 py-3 rounded-lg border-slate-200 focus:ring-primary focus:border-primary appearance-none"></select>
+                            </div>
+                            <div id="edit-unit-custom-wrap" class="hidden space-y-1.5">
+                                <label class="text-xs font-bold text-slate-500 uppercase">Satuan Baru</label>
+                                <input id="edit-unit-custom" class="w-full px-4 py-3 rounded-lg border-slate-200 focus:ring-primary focus:border-primary" type="text" placeholder="Contoh: pack, dus, bungkus" value="" />
+                            </div>
+                        </div>
+                    </div>
+                    <div class="rounded-xl border border-slate-100 bg-white/80 p-4 space-y-3">
+                        <div class="flex items-center justify-between gap-4">
+                            <div>
+                                <p class="text-sm font-bold text-slate-800">Status Produk</p>
+                                <p class="text-xs text-slate-500">Status aktif dan stok memengaruhi kelayakan batch secara live.</p>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input id="edit-is-active" type="checkbox" class="sr-only peer" checked />
+                                <div class="w-11 h-6 rounded-full bg-slate-200 peer-checked:bg-primary"></div>
+                                <div class="absolute left-1 top-1 size-4 rounded-full bg-white transition-transform peer-checked:translate-x-5"></div>
+                            </label>
+                        </div>
+                        <div class="flex items-center justify-between gap-4 border-t border-slate-100 pt-3">
+                            <div>
+                                <p class="text-sm font-bold text-slate-800">Gunakan Stok</p>
+                                <p class="text-xs text-slate-500">Matikan jika item ini tidak perlu stok manual.</p>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input id="edit-track-stock" type="checkbox" class="sr-only peer" checked />
+                                <div class="w-11 h-6 rounded-full bg-slate-200 peer-checked:bg-primary"></div>
+                                <div class="absolute left-1 top-1 size-4 rounded-full bg-white transition-transform peer-checked:translate-x-5"></div>
+                            </label>
+                        </div>
+                    </div>
                     <div id="edit-stock-section" class="space-y-1.5 hidden">
                         <label class="text-xs font-bold text-slate-500 uppercase">Tambah Stok Awal</label>
                         <div class="flex items-center gap-3">
@@ -88,6 +149,30 @@
                         </div>
                         <div id="edit-variant-stock-line-list" class="space-y-3"></div>
                     </div>
+                    <div id="edit-production-readiness" class="hidden rounded-xl border border-teal-200 bg-teal-50 p-4 space-y-3">
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <div class="flex items-center gap-2">
+                                    <p class="text-sm font-bold text-teal-900">Checklist Batch Produksi</p>
+                                    <span id="edit-production-readiness-progress" class="rounded-full bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-teal-700 ring-1 ring-teal-200">0%</span>
+                                </div>
+                                <p id="edit-production-readiness-message" class="text-xs text-teal-700">Memeriksa apakah produk ini siap masuk batch produksi.</p>
+                                <p id="edit-production-readiness-collapsed-summary" class="hidden mt-1 text-[11px] font-semibold text-teal-700"></p>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span id="edit-production-readiness-badge" class="rounded-full bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-teal-700 ring-1 ring-teal-200">Menunggu</span>
+                                <button id="edit-production-readiness-toggle" class="inline-flex size-9 items-center justify-center rounded-full bg-white text-teal-700 ring-1 ring-teal-200 transition hover:bg-teal-100" type="button" aria-expanded="true" aria-controls="edit-production-readiness-body" title="Minimalkan checklist batch">
+                                    <span id="edit-production-readiness-toggle-icon" class="material-symbols-outlined text-[18px]">expand_less</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div id="edit-production-readiness-body" class="space-y-3">
+                            <div id="edit-production-readiness-summary" class="flex flex-wrap gap-2"></div>
+                            <div id="edit-production-readiness-checklist" class="space-y-2 text-xs text-teal-900"></div>
+                            <p class="text-[11px] text-teal-700">Kalau BOM disimpan, stok aktif akan dipaksa menyala otomatis agar produk langsung siap diproduksi.</p>
+                            <p class="text-[11px] font-semibold text-teal-800">Checklist ini mengikuti perubahan di form saat ini. Status di modul batch baru ikut berubah setelah Anda menekan Simpan Perubahan.</p>
+                        </div>
+                    </div>
                     <div id="edit-bom-card" class="rounded-xl border border-slate-100 bg-slate-50/60 p-4 space-y-4 hidden">
                         <div class="flex items-center justify-between gap-4">
                             <div>
@@ -104,15 +189,24 @@
                             <div class="rounded-xl bg-amber-50 px-3 py-3 text-xs leading-relaxed text-amber-900">
                                 Untuk raw material non-variant, payload akan mengirim <span class="font-semibold">product_variant_id = null</span>. Untuk raw material variant-capable, variant wajib dipilih.
                             </div>
+                            <label class="block space-y-1.5">
+                                <span class="text-sm font-bold text-slate-800">Hasil Standar per 1 Resep</span>
+                                <input id="edit-recipe-output-qty" class="w-full rounded-xl border-slate-200 text-sm text-slate-900" type="number" min="0.0001" step="0.0001" placeholder="Contoh: 10" />
+                                <span class="block text-xs text-slate-500">Isi hasil jadi normal dari 1 resep. Angka ini dipakai untuk output harapan batch.</span>
+                            </label>
                             <div class="flex items-center justify-between">
                                 <p id="edit-bom-hint" class="text-xs text-slate-500">Belum ada line BOM.</p>
                                 <button id="edit-add-bom-line" class="text-xs font-semibold text-primary" type="button">Tambah Bahan Baku</button>
                             </div>
+                            <p id="edit-bom-inline-error" class="hidden rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-600"></p>
                             <div id="edit-bom-line-list" class="space-y-3"></div>
                         </div>
                     </div>
                     <div id="edit-bom-unavailable" class="hidden rounded-xl border border-slate-100 bg-slate-50/60 p-4 text-xs leading-relaxed text-slate-500">
                         Editor BOM hanya tersedia untuk produk finished good di layar ini. Produk raw material atau service tetap mempertahankan kontrak lamanya.
+                    </div>
+                    <div id="edit-bom-locked" class="hidden rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs leading-relaxed text-amber-900">
+                        Fitur BOM / recipe tersedia mulai paket Medium. Tenant paket Starter tidak bisa mengubah konfigurasi recipe atau produksi.
                     </div>
                     <p id="form-error" class="text-sm text-red-500 font-semibold hidden"></p>
                     <div class="flex gap-3 pt-2">
@@ -127,8 +221,11 @@
         <script>
             (() => {
                 const tenantId = document.querySelector('meta[name="tenant-id"]')?.content;
-                const productId = document.querySelector('meta[name="product-id"]')?.content;
+                const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+                const productId = @json((string) ($productId ?? request()->query('product_id', '')));
+                const initialProduct = @json($initialProduct ?? null);
                 const headers = tenantId ? { 'X-Tenant-Id': tenantId } : {};
+                const canManageRecipe = @json($productEditCanManageRecipe);
 
                 const el = {
                     editId: document.getElementById('edit-id'),
@@ -136,6 +233,14 @@
                     editSku: document.getElementById('edit-sku'),
                     editPrice: document.getElementById('edit-price'),
                     editCategory: document.getElementById('edit-category'),
+                    editType: document.getElementById('edit-type'),
+                    editTypeNote: document.getElementById('edit-type-note'),
+                    rawMaterialMeta: document.getElementById('edit-raw-material-meta'),
+                    editUnitSelect: document.getElementById('edit-unit-select'),
+                    editUnitCustomWrap: document.getElementById('edit-unit-custom-wrap'),
+                    editUnitCustom: document.getElementById('edit-unit-custom'),
+                    isActive: document.getElementById('edit-is-active'),
+                    trackStock: document.getElementById('edit-track-stock'),
                     stockSection: document.getElementById('edit-stock-section'),
                     stock: document.getElementById('edit-stock'),
                     stockMinus: document.getElementById('edit-stock-minus'),
@@ -143,11 +248,24 @@
                     variantStockSection: document.getElementById('edit-variant-stock-section'),
                     variantStockHint: document.getElementById('edit-variant-stock-hint'),
                     variantStockLineList: document.getElementById('edit-variant-stock-line-list'),
+                    productionReadiness: document.getElementById('edit-production-readiness'),
+                    productionReadinessMessage: document.getElementById('edit-production-readiness-message'),
+                    productionReadinessProgress: document.getElementById('edit-production-readiness-progress'),
+                    productionReadinessCollapsedSummary: document.getElementById('edit-production-readiness-collapsed-summary'),
+                    productionReadinessBadge: document.getElementById('edit-production-readiness-badge'),
+                    productionReadinessToggle: document.getElementById('edit-production-readiness-toggle'),
+                    productionReadinessToggleIcon: document.getElementById('edit-production-readiness-toggle-icon'),
+                    productionReadinessBody: document.getElementById('edit-production-readiness-body'),
+                    productionReadinessSummary: document.getElementById('edit-production-readiness-summary'),
+                    productionReadinessChecklist: document.getElementById('edit-production-readiness-checklist'),
                     enableBom: document.getElementById('edit-enable-bom'),
                     bomCard: document.getElementById('edit-bom-card'),
                     bomUnavailable: document.getElementById('edit-bom-unavailable'),
+                    bomLocked: document.getElementById('edit-bom-locked'),
                     bomEditor: document.getElementById('edit-bom-editor'),
+                    recipeOutputQty: document.getElementById('edit-recipe-output-qty'),
                     bomHint: document.getElementById('edit-bom-hint'),
+                    bomInlineError: document.getElementById('edit-bom-inline-error'),
                     bomLineList: document.getElementById('edit-bom-line-list'),
                     addBomLine: document.getElementById('edit-add-bom-line'),
                     form: document.getElementById('edit-form'),
@@ -155,10 +273,93 @@
                     error: document.getElementById('form-error'),
                     deleteProduct: document.getElementById('delete-product'),
                 };
+                const submitButton = el.form.querySelector('button[type="submit"]');
+                const readinessUiState = {
+                    collapsed: false,
+                };
 
                 let currentProduct = null;
                 let rawMaterialProducts = [];
                 const productDetailCache = new Map();
+                const rawMaterialUnitOptions = ['gram', 'kg', 'mg', 'liter', 'ml', 'pcs', 'box', 'pack', 'roll', 'meter', 'cm', 'dozen', 'lusin', 'sachet', 'bungkus'];
+
+                const getSelectedProductType = () => String(el.editType?.value || 'finished_good');
+
+                const normalizeRecipeOutputQtyValue = (value) => {
+                    const parsed = Number(value ?? 0);
+                    return Number.isFinite(parsed) && parsed > 0 ? String(parsed) : '';
+                };
+
+                const updateTypeNote = () => {
+                    const productType = getSelectedProductType();
+
+                    if (productType === 'raw_material') {
+                        el.editTypeNote.textContent = 'Bahan baku dipakai untuk recipe atau produksi batch dan tidak tampil di katalog kasir.';
+                        return;
+                    }
+
+                    if (productType === 'service') {
+                        el.editTypeNote.textContent = 'Jasa tidak memakai stok dan tidak dipakai sebagai bahan baku recipe.';
+                        return;
+                    }
+
+                    el.editTypeNote.textContent = 'Barang jual tampil di kasir. Anda bisa mengaktifkan BOM jika produk ini dibuat dari bahan baku.';
+                };
+
+                const updateRawMaterialMetaVisibility = () => {
+                    el.rawMaterialMeta.classList.toggle('hidden', getSelectedProductType() !== 'raw_material');
+                };
+
+                const setToggleDisabled = (input, disabled) => {
+                    if (!input) {
+                        return;
+                    }
+
+                    input.disabled = disabled;
+                    const wrapper = input.closest('label');
+                    if (wrapper) {
+                        wrapper.classList.toggle('opacity-50', disabled);
+                        wrapper.classList.toggle('cursor-not-allowed', disabled);
+                    }
+                };
+
+                const renderCategoryOptions = (categories, selectedCategoryId = '', selectedCategoryName = '') => {
+                    el.editCategory.innerHTML = '<option value="">Pilih kategori</option>';
+
+                    const normalizedSelectedId = String(selectedCategoryId || '');
+                    const existingCategory = categories.find((category) => String(category.id) === normalizedSelectedId);
+                    const label = String(selectedCategoryName || existingCategory?.name || '').trim();
+
+                    if (normalizedSelectedId && label) {
+                        const selectedOption = document.createElement('option');
+                        selectedOption.value = normalizedSelectedId;
+                        selectedOption.textContent = label;
+                        selectedOption.selected = true;
+                        el.editCategory.appendChild(selectedOption);
+                    }
+
+                    categories.forEach((category) => {
+                        if (String(category.id) === normalizedSelectedId) {
+                            return;
+                        }
+
+                        const option = document.createElement('option');
+                        option.value = category.id;
+                        option.textContent = category.name;
+                        el.editCategory.appendChild(option);
+                    });
+
+                    if (!normalizedSelectedId) {
+                        el.editCategory.value = '';
+                    }
+                };
+
+                const productUsesRecipeManagement = (product) => {
+                    const bomItems = Array.isArray(product?.bom_items) ? product.bom_items : [];
+                    return String(product?.product_mode || '') === 'bom'
+                        || bomItems.length > 0
+                        || ['auto_consume_on_sell', 'batch_production'].includes(String(product?.production_mode || ''));
+                };
 
                 const showError = (message) => {
                     if (!message) {
@@ -183,6 +384,45 @@
                     return data.categories || [];
                 };
 
+                const renderRawMaterialUnits = (selectedUnit = '') => {
+                    el.editUnitSelect.innerHTML = '';
+
+                    const normalizedSelected = String(selectedUnit || '').trim().toLowerCase();
+                    const hasKnownUnit = rawMaterialUnitOptions.includes(normalizedSelected);
+
+                    rawMaterialUnitOptions.forEach((unit) => {
+                        const option = document.createElement('option');
+                        option.value = unit;
+                        option.textContent = unit;
+                        el.editUnitSelect.appendChild(option);
+                    });
+
+                    const customOption = document.createElement('option');
+                    customOption.value = '__custom__';
+                    customOption.textContent = 'Satuan lain...';
+                    el.editUnitSelect.appendChild(customOption);
+
+                    if (hasKnownUnit) {
+                        el.editUnitSelect.value = normalizedSelected;
+                        el.editUnitCustomWrap.classList.add('hidden');
+                        el.editUnitCustom.value = '';
+                        return;
+                    }
+
+                    el.editUnitSelect.value = '__custom__';
+                    el.editUnitCustomWrap.classList.remove('hidden');
+                    el.editUnitCustom.value = selectedUnit || '';
+                };
+
+                const resolveRawMaterialUnit = () => {
+                    const selectedUnit = String(el.editUnitSelect.value || '').trim();
+                    if (selectedUnit === '__custom__') {
+                        return String(el.editUnitCustom.value || '').trim();
+                    }
+
+                    return selectedUnit;
+                };
+
                 const loadRawMaterialProducts = async () => {
                     const response = await fetch('/api/v1/products', { headers });
                     if (!response.ok) {
@@ -191,7 +431,17 @@
 
                     const data = await response.json();
                     return (data.products || [])
-                        .filter((product) => String(product.item_type || '') === 'raw_material')
+                        .filter((product) => {
+                            const mode = String(product.product_mode || '').toLowerCase();
+                            const itemType = String(product.item_type || '').toLowerCase();
+
+                            // Keep backward compatibility while matching backend BOM contract.
+                            if (mode === 'add_on' && itemType !== 'service') {
+                                return true;
+                            }
+
+                            return itemType === 'raw_material';
+                        })
                         .sort((left, right) => String(left.name || '').localeCompare(String(right.name || '')));
                 };
 
@@ -230,6 +480,41 @@
 
                 const setBomHint = (message) => {
                     el.bomHint.textContent = message;
+                };
+
+                const setBomInlineError = (message) => {
+                    if (!el.bomInlineError) {
+                        return;
+                    }
+
+                    if (!message) {
+                        el.bomInlineError.classList.add('hidden');
+                        el.bomInlineError.textContent = '';
+                        return;
+                    }
+
+                    el.bomInlineError.textContent = message;
+                    el.bomInlineError.classList.remove('hidden');
+                };
+
+                const setBomRowConflictTip = (row, message) => {
+                    if (!row) {
+                        return;
+                    }
+
+                    const tip = row.querySelector('[data-bom-conflict-tip]');
+                    if (!tip) {
+                        return;
+                    }
+
+                    if (!message) {
+                        tip.classList.add('hidden');
+                        tip.textContent = '';
+                        return;
+                    }
+
+                    tip.textContent = message;
+                    tip.classList.remove('hidden');
                 };
 
                 const setVariantStockHint = (message) => {
@@ -274,7 +559,23 @@
                 };
 
                 const updateInitialStockEditors = (product) => {
-                    const trackStock = Boolean(product?.track_stock);
+                    const productType = getSelectedProductType();
+                    const trackStockEnabled = Boolean(el.trackStock?.checked);
+
+                    setToggleDisabled(el.trackStock, productType === 'service');
+                    if (productType === 'service') {
+                        el.trackStock.checked = false;
+                    }
+
+                    if (productType === 'service') {
+                        el.stockSection.classList.add('hidden');
+                        el.variantStockSection.classList.add('hidden');
+                        el.stock.value = '0';
+                        el.variantStockLineList.innerHTML = '';
+                        return;
+                    }
+
+                    const trackStock = trackStockEnabled;
                     const hasVariants = Boolean(product?.has_variants);
 
                     el.stockSection.classList.toggle('hidden', !trackStock || hasVariants);
@@ -289,6 +590,165 @@
                     if (hasVariants) {
                         renderVariantStockLines(product);
                     }
+                };
+
+                const resolveBomProductDraft = (productId) => {
+                    const targetId = String(productId || '').trim();
+
+                    if (!targetId) {
+                        return null;
+                    }
+
+                    const listMatch = rawMaterialProducts.find((product) => String(product.id || '') === targetId);
+                    if (listMatch) {
+                        return listMatch;
+                    }
+
+                    return productDetailCache.get(targetId) || null;
+                };
+
+                const inspectBomItems = () => {
+                    return Array.from(el.bomLineList.children).map((row, index) => {
+                        const productId = row.querySelector('[data-bom-product]')?.value || '';
+                        const product = resolveBomProductDraft(productId);
+                        const variantWrap = row.querySelector('[data-bom-variant-wrap]');
+                        const variantRequired = Boolean(variantWrap && !variantWrap.classList.contains('hidden'));
+                        const variantId = row.querySelector('[data-bom-variant]')?.value || '';
+                        const qty = Number(row.querySelector('[data-bom-qty]')?.value || 0);
+
+                        return {
+                            product_id: productId || null,
+                            product_name: product?.name || `Line ${index + 1}`,
+                            product_item_type: String(product?.item_type || '').trim(),
+                            product_mode: String(product?.product_mode || '').trim(),
+                            product_variant_id: variantRequired ? variantId || null : null,
+                            variant_required: variantRequired,
+                            qty,
+                        };
+                    });
+                };
+
+                const buildProductionDraft = () => {
+                    const productType = getSelectedProductType();
+                    const useBom = Boolean(canManageRecipe && productType === 'finished_good' && el.enableBom.checked);
+                    const trackStock = productType === 'service' ? false : Boolean(el.trackStock?.checked || useBom);
+
+                    return {
+                        is_active: Boolean(el.isActive?.checked),
+                        item_type: productType,
+                        product_mode: productType === 'raw_material'
+                            ? 'add_on'
+                            : (productType === 'service'
+                                ? 'default'
+                                : (useBom ? 'bom' : 'default')),
+                        production_mode: productType === 'service' || productType === 'raw_material'
+                            ? 'none'
+                            : (useBom ? 'batch_production' : 'none'),
+                        track_stock: trackStock,
+                        recipe_output_qty: useBom ? Number(el.recipeOutputQty?.value || 0) : 0,
+                        bom_items: useBom ? inspectBomItems() : [],
+                    };
+                };
+
+                const shouldShowProductionReadiness = () => {
+                    return Boolean(
+                        canManageRecipe
+                        && getSelectedProductType() === 'finished_good'
+                        && el.enableBom?.checked
+                    );
+                };
+
+                const applyProductionReadinessCollapseState = () => {
+                    if (!el.productionReadinessBody || !el.productionReadinessToggle || !el.productionReadinessToggleIcon || !el.productionReadinessCollapsedSummary) {
+                        return;
+                    }
+
+                    const collapsed = readinessUiState.collapsed;
+                    el.productionReadinessBody.classList.toggle('hidden', collapsed);
+                    el.productionReadinessCollapsedSummary.classList.toggle('hidden', !collapsed);
+                    el.productionReadinessToggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+                    el.productionReadinessToggle.title = collapsed ? 'Tampilkan checklist batch' : 'Minimalkan checklist batch';
+                    el.productionReadinessToggleIcon.textContent = collapsed ? 'expand_more' : 'expand_less';
+                };
+
+                const renderProductionReadiness = () => {
+                    if (!el.productionReadiness || !el.productionReadinessMessage || !el.productionReadinessBadge || !el.productionReadinessChecklist || !el.productionReadinessSummary || !el.productionReadinessProgress || !el.productionReadinessCollapsedSummary) {
+                        return;
+                    }
+
+                    const visible = shouldShowProductionReadiness();
+                    el.productionReadiness.classList.toggle('hidden', !visible);
+
+                    if (!visible) {
+                        return;
+                    }
+
+                    const eligibility = window.PosUi.getProductionBatchEligibility(buildProductionDraft());
+                    const isEligible = Boolean(eligibility?.eligible);
+                    const checks = Array.isArray(eligibility?.checks) ? eligibility.checks : [];
+                    const summary = eligibility?.summary || {};
+                    const totalChecks = checks.length;
+                    const passedChecks = checks.filter((check) => Boolean(check?.passed)).length;
+                    const failedChecks = Math.max(0, totalChecks - passedChecks);
+                    const progressPct = totalChecks > 0 ? Math.round((passedChecks / totalChecks) * 100) : 0;
+                    const compactSummary = totalChecks === 0
+                        ? 'Checklist belum tersedia.'
+                        : (failedChecks === 0
+                            ? `100% siap. Semua ${totalChecks} syarat terpenuhi.`
+                            : `Kurang ${failedChecks} syarat dari ${totalChecks} syarat.`);
+
+                    el.productionReadiness.className = isEligible
+                        ? 'rounded-xl border border-emerald-200 bg-emerald-50 p-4 space-y-3'
+                        : 'rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-3';
+                    el.productionReadinessBadge.className = isEligible
+                        ? 'rounded-full bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700 ring-1 ring-emerald-200'
+                        : 'rounded-full bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700 ring-1 ring-amber-200';
+                    el.productionReadinessProgress.className = isEligible
+                        ? 'rounded-full bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700 ring-1 ring-emerald-200'
+                        : 'rounded-full bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700 ring-1 ring-amber-200';
+                    el.productionReadinessBadge.textContent = isEligible ? 'Siap diproduksi' : 'Belum siap';
+                    el.productionReadinessProgress.textContent = `${progressPct}%`;
+                    el.productionReadinessMessage.textContent = summary.message || (isEligible
+                        ? 'Produk ini sudah memenuhi syarat batch produksi.'
+                        : 'Lengkapi checklist di bawah untuk membuat produk siap batch produksi.');
+                    el.productionReadinessCollapsedSummary.textContent = compactSummary;
+
+                    const summaryPills = [
+                        { label: summary.is_active ? 'Status: aktif' : 'Status: nonaktif', tone: summary.is_active ? 'emerald' : 'amber' },
+                        { label: `Mode produk: ${summary.product_mode || 'default'}`, tone: summary.product_mode === 'bom' ? 'emerald' : 'slate' },
+                        { label: `Mode produksi: ${summary.production_mode || 'none'}`, tone: summary.production_mode === 'batch_production' ? 'emerald' : 'slate' },
+                        { label: `Track stock: ${summary.track_stock ? 'on' : 'off'}`, tone: summary.track_stock ? 'emerald' : 'slate' },
+                        { label: `Hasil/resep: ${Number(summary.recipe_output_qty || 0) > 0 ? summary.recipe_output_qty : '-'}`, tone: Number(summary.recipe_output_qty || 0) > 0 ? 'emerald' : 'slate' },
+                    ];
+
+                    el.productionReadinessSummary.innerHTML = summaryPills.map((pill) => {
+                        const toneClasses = {
+                            emerald: 'bg-emerald-100 text-emerald-800 ring-emerald-200',
+                            amber: 'bg-amber-100 text-amber-800 ring-amber-200',
+                            slate: 'bg-white text-slate-600 ring-slate-200',
+                        };
+
+                        return `<span class="rounded-full px-3 py-1 text-[11px] font-semibold ring-1 ${toneClasses[pill.tone] || toneClasses.slate}">${pill.label}</span>`;
+                    }).join('');
+
+                    el.productionReadinessChecklist.innerHTML = checks.map((check) => {
+                        const passed = Boolean(check.passed);
+                        return `
+                            <div class="flex items-start gap-2 rounded-xl bg-white px-3 py-2 ring-1 ${passed ? 'ring-emerald-200' : 'ring-amber-200'}">
+                                <span class="mt-0.5 material-symbols-outlined text-[16px] ${passed ? 'text-emerald-600' : 'text-amber-600'}">${passed ? 'check_circle' : 'radio_button_unchecked'}</span>
+                                <div class="min-w-0 flex-1">
+                                    <p class="text-[11px] font-semibold uppercase tracking-[0.16em] ${passed ? 'text-emerald-700' : 'text-amber-700'}">${check.label || 'Checklist'}</p>
+                                    <p class="text-[11px] ${passed ? 'text-emerald-700' : 'text-amber-800'}">${passed ? 'Sudah sesuai.' : (check.reason || 'Belum sesuai.')}</p>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+
+                    applyProductionReadinessCollapseState();
+                };
+
+                const refreshProductionReadiness = () => {
+                    renderProductionReadiness();
                 };
 
                 const collectVariantStockLines = (product) => {
@@ -311,6 +771,139 @@
                     }).filter((line) => line.qty > 0);
                 };
 
+                const buildBomLineKey = (row) => {
+                    const productId = row.querySelector('[data-bom-product]')?.value || '';
+                    if (!productId) {
+                        return null;
+                    }
+
+                    const variantWrap = row.querySelector('[data-bom-variant-wrap]');
+                    const variantRequired = variantWrap && !variantWrap.classList.contains('hidden');
+                    if (!variantRequired) {
+                        return `${productId}|__no_variant__`;
+                    }
+
+                    const variantId = row.querySelector('[data-bom-variant]')?.value || '';
+                    if (!variantId) {
+                        return null;
+                    }
+
+                    return `${productId}|${variantId}`;
+                };
+
+                const duplicateBomSelections = () => {
+                    const firstSeenLineByKey = new Map();
+                    const duplicates = [];
+
+                    Array.from(el.bomLineList.children).forEach((row, index) => {
+                        const key = buildBomLineKey(row);
+                        if (!key) {
+                            return;
+                        }
+
+                        const lineNumber = index + 1;
+                        if (firstSeenLineByKey.has(key)) {
+                            duplicates.push({
+                                line: lineNumber,
+                                duplicateOf: firstSeenLineByKey.get(key),
+                            });
+                            return;
+                        }
+
+                        firstSeenLineByKey.set(key, lineNumber);
+                    });
+
+                    return duplicates;
+                };
+
+                const syncDuplicateBomRowStates = () => {
+                    const firstSeenLineByKey = new Map();
+                    const duplicateRows = new Set();
+                    const duplicateRowMetadata = new Map();
+
+                    Array.from(el.bomLineList.children).forEach((row, index) => {
+                        row.classList.remove('ring-2', 'ring-rose-200', 'bg-rose-50', 'border-rose-300');
+
+                        const duplicateNote = row.querySelector('[data-bom-duplicate-note]');
+                        if (duplicateNote) {
+                            duplicateNote.classList.add('hidden');
+                            duplicateNote.textContent = '';
+                        }
+
+                        const key = buildBomLineKey(row);
+                        if (!key) {
+                            return;
+                        }
+
+                        const lineNumber = index + 1;
+                        if (firstSeenLineByKey.has(key)) {
+                            duplicateRows.add(row);
+                            duplicateRowMetadata.set(row, `Duplikat bahan dari line #${firstSeenLineByKey.get(key)}.`);
+                            return;
+                        }
+
+                        firstSeenLineByKey.set(key, lineNumber);
+                    });
+
+                    duplicateRows.forEach((row) => {
+                        row.classList.add('ring-2', 'ring-rose-200', 'bg-rose-50', 'border-rose-300');
+
+                        const productSelect = row.querySelector('[data-bom-product]');
+                        if (productSelect) {
+                            productSelect.classList.add('border-rose-300', 'focus:border-rose-400', 'focus:ring-rose-200');
+                        }
+
+                        const variantSelect = row.querySelector('[data-bom-variant]');
+                        if (variantSelect) {
+                            variantSelect.classList.add('border-rose-300', 'focus:border-rose-400', 'focus:ring-rose-200');
+                        }
+
+                        const duplicateNote = row.querySelector('[data-bom-duplicate-note]');
+                        if (duplicateNote) {
+                            duplicateNote.textContent = duplicateRowMetadata.get(row) || 'Duplikat bahan. Gabungkan qty pada line sebelumnya.';
+                            duplicateNote.classList.remove('hidden');
+                        }
+                    });
+
+                    return duplicateRows.size > 0;
+                };
+
+                const findDuplicateBomConflict = (changedRow) => {
+                    const key = buildBomLineKey(changedRow);
+                    if (!key) {
+                        return null;
+                    }
+
+                    return Array.from(el.bomLineList.children)
+                        .find((row) => row !== changedRow && buildBomLineKey(row) === key) || null;
+                };
+
+                const clearDuplicateBomErrorIfPresent = () => {
+                    const currentError = String(el.error.textContent || '').toLowerCase();
+                    if (currentError.includes('bahan baku duplikat')) {
+                        showError('');
+                    }
+
+                    setBomInlineError('');
+                };
+
+                const validateBomDuplicatesRealtime = () => {
+                    const duplicates = duplicateBomSelections();
+                    if (!duplicates.length) {
+                        syncDuplicateBomRowStates();
+                        clearDuplicateBomErrorIfPresent();
+                        updateBomLineCountHint();
+                        return true;
+                    }
+
+                    syncDuplicateBomRowStates();
+                    const firstDuplicate = duplicates[0];
+                    setBomHint(`Duplikat bahan terdeteksi pada line #${firstDuplicate.line}.`);
+                    setBomInlineError(`Line #${firstDuplicate.line} duplikat dengan line #${firstDuplicate.duplicateOf}. Gabungkan qty pada satu line.`);
+                    showError(`Line BOM #${firstDuplicate.line}: bahan baku duplikat dengan line #${firstDuplicate.duplicateOf}. Gabungkan qty pada satu line.`);
+                    return false;
+                };
+
                 const updateBomLineCountHint = () => {
                     if (!el.enableBom.checked) {
                         setBomHint('Belum ada line BOM.');
@@ -328,20 +921,53 @@
                 };
 
                 const updateBomEditorVisibility = () => {
-                    if (!currentProduct || String(currentProduct.item_type || '') !== 'finished_good') {
+                    const productType = getSelectedProductType();
+                    setToggleDisabled(el.enableBom, productType !== 'finished_good' || !canManageRecipe);
+
+                    if (productType !== 'finished_good') {
                         el.bomCard.classList.add('hidden');
                         el.bomUnavailable.classList.remove('hidden');
+                        el.bomLocked.classList.add('hidden');
+                        el.enableBom.checked = false;
+                        if (submitButton) {
+                            submitButton.disabled = false;
+                        }
+                        refreshProductionReadiness();
+                        return;
+                    }
+
+                    if (!canManageRecipe) {
+                        el.bomUnavailable.classList.add('hidden');
+                        el.bomCard.classList.add('hidden');
+                        el.bomLocked.classList.remove('hidden');
+                        el.enableBom.checked = false;
+                        el.bomLineList.innerHTML = '';
+                        setBomHint('Fitur BOM belum tersedia di paket ini.');
+
+                        if (submitButton) {
+                            submitButton.disabled = productUsesRecipeManagement(currentProduct);
+                        }
+
+                        refreshProductionReadiness();
+
                         return;
                     }
 
                     el.bomUnavailable.classList.add('hidden');
+                    el.bomLocked.classList.add('hidden');
                     el.bomCard.classList.remove('hidden');
                     el.bomEditor.classList.toggle('hidden', !el.enableBom.checked);
+                    if (submitButton) {
+                        submitButton.disabled = false;
+                    }
 
                     if (!el.enableBom.checked) {
                         el.bomLineList.innerHTML = '';
                         setBomHint('Belum ada line BOM.');
+                        refreshProductionReadiness();
                     }
+
+                    refreshProductionReadiness();
                 };
 
                 const createBomLineRow = (line = {}) => {
@@ -352,11 +978,13 @@
                             <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Line BOM</p>
                             <button class="text-xs font-semibold text-rose-500" type="button" data-bom-remove>Hapus</button>
                         </div>
+                        <p class="hidden rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-semibold text-rose-600" data-bom-duplicate-note></p>
                         <div class="space-y-1.5">
                             <label class="text-xs font-semibold text-slate-500">Raw Material</label>
                             <select class="w-full rounded-xl border-slate-200 text-sm text-slate-900" data-bom-product>
                                 ${bomProductOptionsHtml(line.product_id || '')}
                             </select>
+                            <p class="hidden text-[11px] font-semibold text-rose-600" data-bom-conflict-tip></p>
                         </div>
                         <div class="space-y-1.5 hidden" data-bom-variant-wrap>
                             <label class="text-xs font-semibold text-slate-500">Variant Raw Material</label>
@@ -366,12 +994,41 @@
                             <p class="text-[11px] text-slate-400" data-bom-variant-hint></p>
                         </div>
                         <div class="space-y-1.5">
-                            <label class="text-xs font-semibold text-slate-500">Qty per 1 output</label>
+                            <label class="text-xs font-semibold text-slate-500">Qty per 1 resep</label>
                             <input class="w-full rounded-xl border-slate-200 text-sm text-slate-900" data-bom-qty type="number" min="0.0001" step="0.0001" value="${line.qty ?? ''}" />
                         </div>
                     `;
 
                     return row;
+                };
+
+                const ensureBomProductOptionExists = async (row, productId) => {
+                    const productSelect = row.querySelector('[data-bom-product]');
+                    if (!productSelect || !productId) {
+                        return;
+                    }
+
+                    const targetId = String(productId);
+                    const hasOption = Array.from(productSelect.options)
+                        .some((option) => String(option.value || '') === targetId);
+
+                    if (hasOption) {
+                        productSelect.value = targetId;
+                        return;
+                    }
+
+                    const productDetail = await loadProductDetailCached(targetId);
+                    if (!productDetail) {
+                        return;
+                    }
+
+                    const option = document.createElement('option');
+                    option.value = targetId;
+                    option.textContent = productDetail.sku
+                        ? `${productDetail.name} (${productDetail.sku})`
+                        : (productDetail.name || 'Raw Material');
+                    productSelect.appendChild(option);
+                    productSelect.value = targetId;
                 };
 
                 const configureBomVariantField = async (row, targetProductId, selectedVariantId = null) => {
@@ -415,8 +1072,10 @@
                 const appendBomLine = async (line = {}) => {
                     const row = createBomLineRow(line);
                     el.bomLineList.appendChild(row);
+                    await ensureBomProductOptionExists(row, line.product_id || '');
                     await configureBomVariantField(row, line.product_id || '', line.product_variant_id || null);
-                    updateBomLineCountHint();
+                    validateBomDuplicatesRealtime();
+                    refreshProductionReadiness();
                 };
 
                 const collectBomItems = () => {
@@ -424,6 +1083,8 @@
                     if (!rows.length) {
                         throw new Error('Minimal satu line BOM wajib diisi saat mode BOM aktif.');
                     }
+
+                    const seenLineKeys = new Set();
 
                     return rows.map((row, index) => {
                         const productId = row.querySelector('[data-bom-product]')?.value || '';
@@ -443,6 +1104,12 @@
                         if (variantRequired && !variantId) {
                             throw new Error(`Line BOM #${index + 1}: variant raw material wajib dipilih.`);
                         }
+
+                        const lineKey = `${productId}|${variantRequired ? variantId : '__no_variant__'}`;
+                        if (seenLineKeys.has(lineKey)) {
+                            throw new Error(`Line BOM #${index + 1}: bahan baku duplikat. Gabungkan qty pada satu line.`);
+                        }
+                        seenLineKeys.add(lineKey);
 
                         return {
                             product_id: productId,
@@ -467,17 +1134,27 @@
                     el.editName.value = product.name || '';
                     el.editSku.value = product.sku || '';
                     el.editPrice.value = product.price || 0;
-                    el.editCategory.value = product.category_id || '';
+                    renderCategoryOptions([], product.category_id || '', product.category_name || '');
+                    el.editType.value = String(product.item_type || 'finished_good');
+                    renderRawMaterialUnits(product.unit || '');
+                    el.isActive.checked = product.is_active !== false;
+                    el.trackStock.checked = product.track_stock !== false;
+                    el.recipeOutputQty.value = normalizeRecipeOutputQtyValue(product.recipe_output_qty);
+                    updateTypeNote();
+                    updateRawMaterialMetaVisibility();
                     el.stock.value = '0';
                     updateInitialStockEditors(product);
 
-                    const isFinishedGood = String(product.item_type || '') === 'finished_good';
+                    const isFinishedGood = getSelectedProductType() === 'finished_good';
                     const isBomMode = isFinishedGood && String(product.product_mode || '') === 'bom';
                     el.enableBom.checked = isBomMode;
                     updateBomEditorVisibility();
+                    el.recipeOutputQty.value = normalizeRecipeOutputQtyValue(product.recipe_output_qty);
+                    refreshProductionReadiness();
 
                     if (!isBomMode) {
                         updateBomLineCountHint();
+                        refreshProductionReadiness();
                         return;
                     }
 
@@ -485,14 +1162,21 @@
                     const bomItems = Array.isArray(product.bom_items) ? product.bom_items : [];
                     if (!bomItems.length) {
                         updateBomLineCountHint();
+                        refreshProductionReadiness();
                         return;
                     }
 
                     bomItems.reduce((promise, line) => {
                         return promise.then(() => appendBomLine(line));
-                    }, Promise.resolve()).catch((error) => {
-                        showError(error.message || 'Gagal memuat BOM produk.');
-                    });
+                    }, Promise.resolve())
+                        .then(() => {
+                            el.recipeOutputQty.value = normalizeRecipeOutputQtyValue(product.recipe_output_qty);
+                            updateBomLineCountHint();
+                            refreshProductionReadiness();
+                        })
+                        .catch((error) => {
+                            showError(error.message || 'Gagal memuat BOM produk.');
+                        });
                 };
 
                 el.cancel.addEventListener('click', goBack);
@@ -508,12 +1192,50 @@
                 });
 
                 el.enableBom.addEventListener('change', () => {
-                    if (!currentProduct || String(currentProduct.item_type || '') !== 'finished_good') {
+                    if (!currentProduct || getSelectedProductType() !== 'finished_good') {
                         return;
+                    }
+
+                    if (el.enableBom.checked) {
+                        el.trackStock.checked = true;
                     }
 
                     updateBomEditorVisibility();
                     updateBomLineCountHint();
+                    refreshProductionReadiness();
+                });
+                el.recipeOutputQty?.addEventListener('input', refreshProductionReadiness);
+
+                el.editType.addEventListener('change', () => {
+                    updateTypeNote();
+                    updateRawMaterialMetaVisibility();
+                    updateInitialStockEditors(currentProduct);
+                    updateBomEditorVisibility();
+                    updateBomLineCountHint();
+                    refreshProductionReadiness();
+                });
+
+                el.productionReadinessToggle?.addEventListener('click', () => {
+                    readinessUiState.collapsed = !readinessUiState.collapsed;
+                    applyProductionReadinessCollapseState();
+                });
+
+                el.isActive.addEventListener('change', refreshProductionReadiness);
+
+                el.trackStock.addEventListener('change', () => {
+                    updateInitialStockEditors(currentProduct);
+                    refreshProductionReadiness();
+                });
+
+                el.editUnitSelect.addEventListener('change', () => {
+                    const isCustom = el.editUnitSelect.value === '__custom__';
+                    el.editUnitCustomWrap.classList.toggle('hidden', !isCustom);
+                    if (isCustom) {
+                        el.editUnitCustom.focus();
+                        return;
+                    }
+
+                    el.editUnitCustom.value = '';
                 });
 
                 el.addBomLine.addEventListener('click', async () => {
@@ -523,6 +1245,7 @@
                     }
 
                     await appendBomLine({});
+                    refreshProductionReadiness();
                 });
 
                 el.bomLineList.addEventListener('click', (event) => {
@@ -532,17 +1255,47 @@
                     }
 
                     removeButton.closest('.rounded-xl')?.remove();
-                    updateBomLineCountHint();
+                    validateBomDuplicatesRealtime();
+                    refreshProductionReadiness();
                 });
 
                 el.bomLineList.addEventListener('change', async (event) => {
                     const productSelect = event.target.closest('[data-bom-product]');
-                    if (!productSelect) {
-                        return;
+                    const variantSelect = event.target.closest('[data-bom-variant]');
+                    const row = productSelect?.closest('.rounded-xl') || variantSelect?.closest('.rounded-xl');
+
+                    if (productSelect) {
+                        await configureBomVariantField(row, productSelect.value || '', null);
                     }
 
-                    const row = productSelect.closest('.rounded-xl');
-                    await configureBomVariantField(row, productSelect.value || '', null);
+                    if (row) {
+                        const duplicateConflict = findDuplicateBomConflict(row);
+                        if (duplicateConflict) {
+                            const productField = row.querySelector('[data-bom-product]');
+                            const variantField = row.querySelector('[data-bom-variant]');
+
+                            if (productField) {
+                                productField.value = '';
+                                productField.focus();
+                            }
+
+                            if (variantField) {
+                                variantField.value = '';
+                            }
+
+                            await configureBomVariantField(row, '', null);
+                            setBomRowConflictTip(row, 'Bahan ini sudah dipakai di line lain. Pilih bahan yang berbeda.');
+                            setBomInlineError('');
+                        }
+
+                        validateBomDuplicatesRealtime();
+                        refreshProductionReadiness();
+                    }
+                });
+
+                el.bomLineList.addEventListener('input', () => {
+                    validateBomDuplicatesRealtime();
+                    refreshProductionReadiness();
                 });
 
                 el.form.addEventListener('submit', async (event) => {
@@ -560,33 +1313,90 @@
                         price: Number(el.editPrice.value || 0),
                         category_id: el.editCategory.value || null,
                         hpp_average: currentProduct.hpp_average || 0,
-                        initial_stock: currentProduct?.has_variants ? 0 : Number(el.stock.value || 0),
+                        unit: currentProduct.unit || null,
+                        supplier_id: currentProduct.supplier_id || null,
+                        initial_stock: currentProduct?.has_variants || getSelectedProductType() === 'service' ? 0 : Number(el.stock.value || 0),
+                        track_stock: el.trackStock.checked,
+                        is_active: el.isActive.checked,
                     };
+                    const productType = getSelectedProductType();
 
                     if (!payload.name || !payload.sku) {
                         showError('Nama produk dan SKU wajib diisi.');
                         return;
                     }
 
-                    if (payload.price <= 0) {
+                    if (productType !== 'raw_material' && payload.price <= 0) {
                         showError('Harga harus lebih dari 0.');
                         return;
                     }
 
-                    if (currentProduct?.has_variants) {
-                        payload.initial_stock_lines = collectVariantStockLines(currentProduct);
+                    if (productType === 'raw_material') {
+                        payload.price = Math.max(0, Number(payload.price || 0));
                     }
 
-                    if (String(currentProduct.item_type || '') === 'finished_good') {
+                    if (currentProduct?.has_variants && productType !== 'service') {
+                        payload.initial_stock_lines = el.trackStock.checked ? collectVariantStockLines(currentProduct) : [];
+                    }
+
+                    if (productType === 'raw_material') {
+                        payload.unit = resolveRawMaterialUnit();
+                        payload.recipe_output_qty = null;
+
+                        if (!payload.unit) {
+                            showError('Satuan bahan baku wajib diisi.');
+                            return;
+                        }
+
+                        payload.product_mode = 'add_on';
+                        payload.item_type = 'raw_material';
+                        payload.production_mode = 'none';
+                        payload.bom_items = [];
+                    } else if (productType === 'service') {
+                        payload.recipe_output_qty = null;
+                        payload.product_mode = 'default';
+                        payload.item_type = 'service';
+                        payload.production_mode = 'none';
+                        payload.track_stock = false;
+                        payload.initial_stock = 0;
+                        payload.initial_stock_lines = [];
+                        payload.bom_items = [];
+                    } else if (canManageRecipe) {
                         if (el.enableBom.checked) {
+                            if (!validateBomDuplicatesRealtime()) {
+                                return;
+                            }
+
+                            payload.recipe_output_qty = Number(el.recipeOutputQty?.value || 0);
+                            if (!(payload.recipe_output_qty > 0)) {
+                                showError('Hasil standar per 1 resep wajib lebih dari 0 saat BOM aktif.');
+                                return;
+                            }
                             payload.product_mode = 'bom';
                             payload.item_type = 'finished_good';
+                            payload.production_mode = 'batch_production';
                             payload.bom_items = collectBomItems();
                         } else if (String(currentProduct.product_mode || '') === 'bom') {
+                            payload.recipe_output_qty = null;
                             payload.product_mode = 'default';
                             payload.item_type = 'finished_good';
+                            payload.production_mode = 'none';
                             payload.bom_items = [];
+                        } else {
+                            payload.recipe_output_qty = null;
+                            payload.product_mode = 'default';
+                            payload.item_type = 'finished_good';
+                            payload.production_mode = 'none';
                         }
+                    } else {
+                        payload.recipe_output_qty = null;
+                        payload.product_mode = 'default';
+                        payload.item_type = 'finished_good';
+                        payload.production_mode = 'none';
+                    }
+
+                    if (payload.product_mode === 'bom') {
+                        payload.track_stock = true;
                     }
 
                     try {
@@ -594,6 +1404,7 @@
                             method: 'PUT',
                             headers: {
                                 ...headers,
+                                ...(csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}),
                                 'Content-Type': 'application/json',
                             },
                             body: JSON.stringify(payload),
@@ -601,7 +1412,10 @@
 
                         if (!response.ok) {
                             const error = await response.json();
-                            throw new Error(error?.message || 'Gagal menyimpan perubahan.');
+                            const detailMessage = Object.values(error?.details || {})
+                                .flat()
+                                .find((message) => typeof message === 'string' && message.trim() !== '');
+                            throw new Error(detailMessage || error?.message || 'Gagal menyimpan perubahan.');
                         }
 
                         goBack();
@@ -626,7 +1440,10 @@
                     try {
                         const response = await fetch(`/api/v1/products/${currentProduct.id}`, {
                             method: 'DELETE',
-                            headers,
+                            headers: {
+                                ...headers,
+                                ...(csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}),
+                            },
                         });
 
                         if (!response.ok) {
@@ -641,19 +1458,44 @@
                 });
 
                 (async () => {
-                    const [categories, product, rawMaterials] = await Promise.all([loadCategories(), loadProduct(), loadRawMaterialProducts()]);
+                    const loadedProduct = productId
+                        ? await loadProduct().catch(() => null)
+                        : null;
+                    const resolvedProduct = loadedProduct
+                        ? { ...(initialProduct || {}), ...loadedProduct }
+                        : initialProduct;
 
-                    rawMaterialProducts = rawMaterials;
+                    if (!resolvedProduct) {
+                        throw new Error('Produk tidak ditemukan.');
+                    }
 
-                    el.editCategory.innerHTML = '<option value="">Pilih kategori</option>';
-                    categories.forEach((category) => {
-                        const option = document.createElement('option');
-                        option.value = category.id;
-                        option.textContent = category.name;
-                        el.editCategory.appendChild(option);
-                    });
+                    renderProduct(resolvedProduct);
 
-                    renderProduct(product);
+                    if (!canManageRecipe && productUsesRecipeManagement(resolvedProduct)) {
+                        showError('Produk ini memakai recipe/produksi dan hanya bisa diubah mulai paket Medium.');
+                    }
+
+                    const [categoriesResult, rawMaterialsResult] = await Promise.allSettled([
+                        loadCategories(),
+                        loadRawMaterialProducts(),
+                    ]);
+
+                    const categories = categoriesResult.status === 'fulfilled'
+                        ? categoriesResult.value
+                        : [];
+                    rawMaterialProducts = rawMaterialsResult.status === 'fulfilled'
+                        ? rawMaterialsResult.value
+                        : [];
+
+                    renderCategoryOptions(
+                        categories,
+                        currentProduct?.category_id || resolvedProduct.category_id || '',
+                        currentProduct?.category_name || resolvedProduct.category_name || ''
+                    );
+
+                    if (rawMaterialsResult.status === 'rejected' && el.enableBom?.checked) {
+                        setBomHint('Daftar raw material gagal dimuat. Detail produk tetap tampil, tetapi editor BOM perlu dimuat ulang.');
+                    }
                 })().catch((error) => {
                     showError(error.message || 'Gagal memuat data produk.');
                 });

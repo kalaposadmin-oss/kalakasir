@@ -16,6 +16,7 @@ class BranchTenantScopingTest extends TestCase
     public function test_branch_read_and_update_paths_are_tenant_scoped(): void
     {
         [$tenant, $user] = $this->bootApiActor('admin', 'branch-scope@example.test', 'Branch Scope');
+        $tenant->forceFill(['plan' => 'M'])->save();
         $fixture = $this->seedCheckoutFixture($tenant->id, $user->id);
 
         $localLocationId = (string) Str::uuid();
@@ -28,6 +29,7 @@ class BranchTenantScopingTest extends TestCase
         ]);
 
         [$otherTenant, $otherUser] = $this->bootApiActor('admin', 'branch-scope-other@example.test', 'Branch Scope Other');
+        $otherTenant->forceFill(['plan' => 'M'])->save();
         $otherFixture = $this->seedCheckoutFixture($otherTenant->id, $otherUser->id);
         $this->actingAs($user, 'sanctum');
 

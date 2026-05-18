@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
@@ -22,6 +23,7 @@ class AnomalyObservabilityApiTest extends TestCase
     public function test_cashier_cannot_access_anomaly_observability_endpoints(): void
     {
         [$tenant, $user] = $this->bootApiActor('cashier', 'cashier-anomaly@example.com', 'Cashier Anomaly');
+        $this->setTenantPlan($tenant, 'P');
 
         $anomalyId = (string) Str::uuid();
         \DB::table('anomalies')->insert([
@@ -51,9 +53,49 @@ class AnomalyObservabilityApiTest extends TestCase
             ->assertJson(['code' => 'FORBIDDEN']);
     }
 
-    public function test_admin_can_list_and_resolve_anomaly_for_own_tenant(): void
+    public function test_admin_on_plan_s_and_m_cannot_access_anomaly_observability_endpoints(): void
+    {
+        foreach (['S', 'M'] as $plan) {
+            [$tenant] = $this->bootApiActor('admin', 'admin-anomaly-'.$plan.'@example.com', 'Admin Anomaly '.$plan);
+            $this->setTenantPlan($tenant, $plan);
+
+            $anomalyId = (string) Str::uuid();
+            \DB::table('anomalies')->insert([
+                'id' => $anomalyId,
+                'tenant_id' => $tenant->id,
+                'severity' => 'high',
+                'type' => 'void_spike',
+                'reference_id' => null,
+                'payload_json' => json_encode(['foo' => 'bar'], JSON_UNESCAPED_SLASHES),
+                'detected_at' => now('UTC'),
+                'resolved_at' => null,
+                'resolved_by' => null,
+            ]);
+
+            $headers = $this->tenantHeaders($tenant->id);
+
+            $this->withHeaders($headers)
+                ->getJson('/api/v1/anomalies?resolved=0&limit=10')
+                ->assertStatus(403)
+                ->assertJsonPath('code', 'FEATURE_NOT_ALLOWED')
+                ->assertJsonPath('details.feature', 'settings.observability')
+                ->assertJsonPath('details.plan', $plan);
+
+            $this->withHeaders($headers)
+                ->postJson('/api/v1/anomalies/'.$anomalyId.'/resolve', [
+                    'note' => 'should be blocked',
+                ])
+                ->assertStatus(403)
+                ->assertJsonPath('code', 'FEATURE_NOT_ALLOWED')
+                ->assertJsonPath('details.feature', 'settings.observability')
+                ->assertJsonPath('details.plan', $plan);
+        }
+    }
+
+    public function test_admin_on_plan_p_can_list_and_resolve_anomaly_for_own_tenant(): void
     {
         [$tenant, $user] = $this->bootApiActor('admin', 'admin-anomaly@example.com', 'Admin Anomaly');
+        $this->setTenantPlan($tenant, 'P');
 
         $anomalyId = (string) Str::uuid();
         \DB::table('anomalies')->insert([
@@ -113,6 +155,7 @@ class AnomalyObservabilityApiTest extends TestCase
     public function test_admin_can_filter_production_batch_variance_anomaly_by_type(): void
     {
         [$tenant] = $this->bootApiActor('admin', 'admin-batch-variance-observability@example.com', 'Admin Batch Variance');
+        $this->setTenantPlan($tenant, 'P');
 
         \DB::table('anomalies')->insert([
             [
@@ -157,6 +200,7 @@ class AnomalyObservabilityApiTest extends TestCase
     public function test_admin_can_filter_production_batch_variance_anomaly_by_reference_id(): void
     {
         [$tenant] = $this->bootApiActor('admin', 'admin-batch-variance-reference@example.com', 'Admin Batch Variance Reference');
+        $this->setTenantPlan($tenant, 'P');
 
         \DB::table('anomalies')->insert([
             [
@@ -193,6 +237,7 @@ class AnomalyObservabilityApiTest extends TestCase
     public function test_admin_can_filter_anomaly_by_branch_and_location_payload(): void
     {
         [$tenant] = $this->bootApiActor('admin', 'admin-batch-variance-scope@example.com', 'Admin Batch Variance Scope');
+        $this->setTenantPlan($tenant, 'P');
 
         $branchA = (string) Str::uuid();
         $branchB = (string) Str::uuid();
@@ -239,5 +284,12 @@ class AnomalyObservabilityApiTest extends TestCase
             ->assertStatus(200)
             ->assertJsonPath('count', 1)
             ->assertJsonPath('anomalies.0.reference_id', 'batch-variance-scope-a');
+    }
+
+    private function setTenantPlan(Tenant $tenant, string $plan): void
+    {
+        DB::table('tenants')
+            ->where('id', $tenant->id)
+            ->update(['plan' => $plan]);
     }
 }

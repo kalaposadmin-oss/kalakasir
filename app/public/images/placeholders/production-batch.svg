@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720" role="img" aria-label="Ilustrasi produksi lokal">
+  <rect width="1200" height="720" fill="#0f766e"/>
+  <path d="M0 470c164-90 317-112 459-66 142 46 272 46 391 0 119-46 236-36 350 30v286H0V470Z" fill="#134e4a"/>
+  <path d="M124 466h952v94H124z" fill="#f8fafc" opacity=".92"/>
+  <path d="M198 307h160v159H198zM420 245h156v221H420zM640 334h154v132H640zM856 286h148v180H856z" fill="#ccfbf1"/>
+  <path d="M244 250h68v57h-68zM466 186h64v59h-64zM691 279h54v55h-54zM897 231h66v55h-66z" fill="#99f6e4"/>
+  <path d="M122 560h956" stroke="#0f766e" stroke-width="10" stroke-linecap="round"/>
+  <circle cx="292" cy="608" r="42" fill="#e2e8f0"/>
+  <circle cx="908" cy="608" r="42" fill="#e2e8f0"/>
+  <path d="M186 402h850" stroke="#115e59" stroke-width="16" stroke-linecap="round"/>
+</svg>

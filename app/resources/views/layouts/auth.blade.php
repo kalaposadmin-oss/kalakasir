@@ -4,11 +4,11 @@
         <meta charset="utf-8" />
         <meta content="width=device-width, initial-scale=1.0" name="viewport" />
         <title>@yield('page_title', 'Autentikasi')</title>
-        <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+        <meta http-equiv="x-dns-prefetch-control" content="off" />
+        @vite(['resources/css/app.css', 'resources/js/app.js'])
         <style>
             body {
-                font-family: "Inter", sans-serif;
+                font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
                 min-height: 100dvh;
             }
         </style>

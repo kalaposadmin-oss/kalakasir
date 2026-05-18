@@ -8,6 +8,7 @@ use App\Services\AuditLogger;
 use App\Support\TenantContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class AnomalyController extends Controller
 {
@@ -161,59 +162,62 @@ class AnomalyController extends Controller
             'note' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $row = Anomaly::query()
-            ->where('tenant_id', $tenantId)
-            ->where('id', $anomaly)
-            ->first();
+        return DB::transaction(function () use ($tenantId, $anomaly, $validated, $request) {
+            $row = Anomaly::query()
+                ->where('tenant_id', $tenantId)
+                ->where('id', $anomaly)
+                ->lockForUpdate()
+                ->first();
 
-        if (! $row) {
-            return response()->json([
-                'code' => 'ANOMALY_NOT_FOUND',
-                'message' => 'Anomali tidak ditemukan.',
-                'details' => [],
-            ], 404);
-        }
+            if (! $row) {
+                return response()->json([
+                    'code' => 'ANOMALY_NOT_FOUND',
+                    'message' => 'Anomali tidak ditemukan.',
+                    'details' => [],
+                ], 404);
+            }
 
-        if ($row->resolved_at) {
-            return response()->json([
-                'status' => 'already_resolved',
+            if ($row->resolved_at) {
+                return response()->json([
+                    'status' => 'already_resolved',
+                ]);
+            }
+
+            $payload = is_array($row->payload_json) ? $row->payload_json : [];
+            if (! empty($validated['note'])) {
+                $payload['resolved_note'] = $validated['note'];
+            }
+
+            $resolvedAt = CarbonImmutable::now('UTC');
+
+            $row->update([
+                'payload_json' => $payload,
+                'resolved_at' => $resolvedAt,
+                'resolved_by' => $request->user()?->id,
             ]);
-        }
 
-        $payload = is_array($row->payload_json) ? $row->payload_json : [];
-        if (! empty($validated['note'])) {
-            $payload['resolved_note'] = $validated['note'];
-        }
+            app(AuditLogger::class)->log(
+                event: 'anomaly_resolved',
+                actorId: $request->user()?->id,
+                referenceType: 'anomaly',
+                referenceId: (string) $row->id,
+                payload: [
+                    'type' => (string) $row->type,
+                    'severity' => (string) $row->severity,
+                    'reference_id' => $row->reference_id,
+                    'branch_id' => $payload['branch_id'] ?? null,
+                    'location_id' => $payload['location_id'] ?? null,
+                    'resolved_note' => $payload['resolved_note'] ?? null,
+                ],
+                ipAddress: $request->ip(),
+                userAgent: $request->userAgent(),
+                tenantId: $tenantId,
+                occurredAt: $resolvedAt,
+            );
 
-        $resolvedAt = CarbonImmutable::now('UTC');
-
-        $row->update([
-            'payload_json' => $payload,
-            'resolved_at' => $resolvedAt,
-            'resolved_by' => $request->user()?->id,
-        ]);
-
-        app(AuditLogger::class)->log(
-            event: 'anomaly_resolved',
-            actorId: $request->user()?->id,
-            referenceType: 'anomaly',
-            referenceId: (string) $row->id,
-            payload: [
-                'type' => (string) $row->type,
-                'severity' => (string) $row->severity,
-                'reference_id' => $row->reference_id,
-                'branch_id' => $payload['branch_id'] ?? null,
-                'location_id' => $payload['location_id'] ?? null,
-                'resolved_note' => $payload['resolved_note'] ?? null,
-            ],
-            ipAddress: $request->ip(),
-            userAgent: $request->userAgent(),
-            tenantId: $tenantId,
-            occurredAt: $resolvedAt,
-        );
-
-        return response()->json([
-            'status' => 'resolved',
-        ]);
+            return response()->json([
+                'status' => 'resolved',
+            ]);
+        });
     }
 }

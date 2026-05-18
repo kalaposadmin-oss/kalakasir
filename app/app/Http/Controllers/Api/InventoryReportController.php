@@ -17,6 +17,7 @@ use App\Support\TenantContext;
 use App\Services\SubscriptionService;
 use App\Support\FeatureGateConfig;
 use App\Support\ApiResponse;
+use App\Support\SaleChannel;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -70,6 +71,17 @@ class InventoryReportController extends Controller
         );
 
         $locationId = $validated['location_id'] ?? null;
+        $summaryCacheKey = sprintf(
+            'reports:inventory:summary:%s:%s:%s:%s:%s',
+            $tenantId,
+            $rangeMeta['start_date'] ?? 'na',
+            $rangeMeta['end_date'] ?? 'na',
+            $locationId ?: 'all',
+            $validated['audit_category'] ?? 'inventory'
+        );
+        if (! $request->boolean('fresh') && is_array($cached = Cache::get($summaryCacheKey))) {
+            return response()->json($cached);
+        }
 
         $inventorySub = InventoryBalance::query()
             ->where('tenant_id', $tenantId)
@@ -156,12 +168,12 @@ class InventoryReportController extends Controller
             ->first();
 
         $movementRangeQuery = StockLedger::query()
-            ->where('tenant_id', $tenantId)
-            ->where('created_at', '>=', $startUtc)
-            ->where('created_at', '<', $endExclusiveUtc);
+            ->where('stock_ledger.tenant_id', $tenantId)
+            ->where('stock_ledger.created_at', '>=', $startUtc)
+            ->where('stock_ledger.created_at', '<', $endExclusiveUtc);
 
         if ($locationId) {
-            $movementRangeQuery->where('location_id', $locationId);
+            $movementRangeQuery->where('stock_ledger.location_id', $locationId);
         }
 
         $movementRange = (clone $movementRangeQuery)
@@ -169,17 +181,29 @@ class InventoryReportController extends Controller
             ->first();
 
         $movementByType = (clone $movementRangeQuery)
-            ->select('reference_type')
-            ->selectRaw('sum(qty_in) as qty_in')
-            ->selectRaw('sum(qty_out) as qty_out')
-            ->groupBy('reference_type')
+            ->leftJoin('sales as movement_sales', function ($join) {
+                $join->on('stock_ledger.reference_id', '=', 'movement_sales.id')
+                    ->on('stock_ledger.tenant_id', '=', 'movement_sales.tenant_id')
+                    ->whereIn('stock_ledger.reference_type', ['sale', 'sale_recipe_input']);
+            })
+            ->select('stock_ledger.reference_type')
+            ->selectRaw("CASE WHEN stock_ledger.reference_type = 'online_order' THEN 'online' WHEN stock_ledger.reference_type IN ('sale', 'sale_recipe_input') AND movement_sales.idempotency_key LIKE 'online-order:%' THEN 'online' WHEN stock_ledger.reference_type IN ('sale', 'sale_recipe_input') THEN 'offline' ELSE NULL END as sales_channel")
+            ->selectRaw('sum(stock_ledger.qty_in) as qty_in')
+            ->selectRaw('sum(stock_ledger.qty_out) as qty_out')
+            ->groupBy('stock_ledger.reference_type', 'sales_channel')
             ->orderByRaw('(sum(qty_in) + sum(qty_out)) desc')
             ->limit(8)
             ->get()
             ->map(function ($row) {
+                $saleChannel = in_array((string) $row->reference_type, ['sale', 'sale_recipe_input', 'online_order'], true)
+                    ? SaleChannel::fromIdempotencyKey($row->sales_channel === 'online' ? 'online-order:summary' : null)
+                    : null;
+
                 return [
                     'reference_type' => $row->reference_type,
-                    'label' => $this->movementTypeLabel((string) $row->reference_type),
+                    'sales_channel' => $saleChannel['channel'] ?? null,
+                    'sales_channel_label' => $saleChannel['label'] ?? null,
+                    'label' => $saleChannel['stock_label'] ?? $this->movementTypeLabel((string) $row->reference_type),
                     'qty_in' => (float) $row->qty_in,
                     'qty_out' => (float) $row->qty_out,
                     'net' => (float) $row->qty_in - (float) $row->qty_out,
@@ -195,6 +219,11 @@ class InventoryReportController extends Controller
             ->join('locations', function ($join) {
                 $join->on('stock_ledger.location_id', '=', 'locations.id')
                     ->on('stock_ledger.tenant_id', '=', 'locations.tenant_id');
+            })
+            ->leftJoin('sales as recent_sales', function ($join) {
+                $join->on('stock_ledger.reference_id', '=', 'recent_sales.id')
+                    ->on('stock_ledger.tenant_id', '=', 'recent_sales.tenant_id')
+                    ->whereIn('stock_ledger.reference_type', ['sale', 'sale_recipe_input']);
             })
             ->where('stock_ledger.tenant_id', $tenantId)
             ->where('stock_ledger.created_at', '>=', $startUtc)
@@ -214,14 +243,21 @@ class InventoryReportController extends Controller
                 'stock_ledger.qty_out',
                 'stock_ledger.balance_after',
                 'stock_ledger.created_at',
+                'recent_sales.idempotency_key as sale_idempotency_key',
                 'products.name as product_name',
                 'products.sku as product_sku',
                 'locations.name as location_name',
             ])
             ->map(function ($row) {
+                $saleChannel = in_array((string) $row->reference_type, ['sale', 'sale_recipe_input', 'online_order'], true)
+                    ? SaleChannel::fromIdempotencyKey((string) $row->reference_type === 'online_order' ? 'online-order:legacy' : $row->sale_idempotency_key)
+                    : null;
+
                 return [
                     'reference_type' => $row->reference_type,
-                    'label' => $this->movementTypeLabel((string) $row->reference_type),
+                    'sales_channel' => $saleChannel['channel'] ?? null,
+                    'sales_channel_label' => $saleChannel['label'] ?? null,
+                    'label' => $saleChannel['stock_label'] ?? $this->movementTypeLabel((string) $row->reference_type),
                     'reference_id' => $row->reference_id,
                     'qty_in' => (float) $row->qty_in,
                     'qty_out' => (float) $row->qty_out,
@@ -268,7 +304,7 @@ class InventoryReportController extends Controller
             })
             ->values();
 
-        return response()->json([
+        $payload = [
             'sku_count' => (int) $skuCount,
             'low_stock_count' => (int) $lowStockCount,
             'out_of_stock_count' => (int) $outOfStockCount,
@@ -290,7 +326,11 @@ class InventoryReportController extends Controller
             'location_id' => $locationId,
             'range' => $rangeMeta,
             'low_stock_items' => $lowStockItems,
-        ]);
+        ];
+
+        Cache::put($summaryCacheKey, $payload, now('UTC')->addSeconds(60));
+
+        return response()->json($payload);
     }
 
     public function exportCsv(Request $request)
@@ -656,8 +696,10 @@ class InventoryReportController extends Controller
     {
         return match (strtolower($type)) {
             'purchase', 'purchase_receive' => 'Pembelian',
+            'online_order' => 'Penjualan Online',
             'sale', 'sales' => 'Penjualan',
             'stock_adjustment' => 'Penyesuaian',
+            'stock_opname' => 'Stock Opname',
             'stock_transfer_in' => 'Mutasi Masuk',
             'stock_transfer_out' => 'Mutasi Keluar',
             'opening_balance' => 'Stok Awal',

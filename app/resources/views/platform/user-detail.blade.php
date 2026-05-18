@@ -12,7 +12,7 @@
     $lastLoginLabel = 'never';
     if ($lastLoginAt) {
         $lastLoginTime = \Carbon\CarbonImmutable::parse($lastLoginAt, 'UTC');
-        $lastLoginLabel = $lastLoginTime->diffForHumans().' · '.$lastLoginTime->format('d M Y, H:i');
+        $lastLoginLabel = $lastLoginTime->diffForHumans().' - '.$lastLoginTime->format('d M Y, H:i');
     }
     $statusClass = $userStatus === 'active'
         ? 'bg-emerald-100 text-emerald-700'
@@ -56,7 +56,7 @@
             <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Tenant</p>
             <div class="mt-2 space-y-1 text-sm text-slate-900">
                 @forelse ($tenants as $tenant)
-                    <a class="font-semibold text-primary" href="/platform/tenants/{{ $tenant['tenant_id'] ?? '' }}">
+                    <a class="font-semibold text-primary" href="/superadmin/tenants/{{ $tenant['tenant_id'] ?? '' }}">
                         {{ $tenant['name'] ?? '-' }}
                     </a>
                 @empty
@@ -84,7 +84,7 @@
                         <p class="text-sm font-semibold text-slate-900">{{ $log['event_type'] ?? '-' }}</p>
                         <p class="text-xs text-slate-400">{{ $log['created_at'] ?? '-' }}</p>
                     </div>
-                    <span class="text-xs text-slate-500">{{ $log['reference_type'] ?? '-' }} · {{ $log['reference_id'] ?? '-' }}</span>
+                    <span class="text-xs text-slate-500">{{ $log['reference_type'] ?? '-' }} - {{ $log['reference_id'] ?? '-' }}</span>
                 </div>
             @empty
                 <div class="px-6 py-4 text-sm text-slate-500">Belum ada log.</div>

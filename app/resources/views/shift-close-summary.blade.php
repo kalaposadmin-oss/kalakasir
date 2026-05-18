@@ -1,7 +1,18 @@
 @php
+    $shiftSummaryTenant = \App\Support\TenantContext::get();
+    $shiftSummaryUser = auth()->user();
+
+    if (! $shiftSummaryTenant && filled($shiftSummaryUser?->tenant_id)) {
+        $shiftSummaryTenant = \App\Models\Tenant::query()->find($shiftSummaryUser->tenant_id);
+    }
+
+    $canPrintShiftSummary = $shiftSummaryTenant
+        ? app(\App\Services\SubscriptionService::class)->canAccessFeature($shiftSummaryTenant, 'shift.print_summary')
+        : false;
+
     $resolvedShiftId = (string) ($shiftId ?? request()->query('shift_id', ''));
     $shiftSummaryCurrentPath = $currentPath ?? ($resolvedShiftId !== '' ? '/pos/shifts/'.$resolvedShiftId.'/summary' : '/pos/shifts/summary');
-    $shiftSummaryBackUrl = $backUrl ?? ($resolvedShiftId !== '' ? '/pos/shifts/summary' : '/pos/dashboard');
+    $shiftSummaryBackUrl = normalize_pos_home_url($backUrl ?? ($resolvedShiftId !== '' ? '/pos/shifts/summary' : pos_default_url()));
 @endphp
 
 @extends('layouts.app')
@@ -9,7 +20,7 @@
 @section('page_title', 'Ringkasan Tutup Shift Kasir')
 @section('body_class', 'font-display text-slate-900')
 @section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-slate-50 shadow-2xl')
-@section('main_class', 'flex-1 overflow-hidden p-0')
+@section('main_class', 'flex-1 min-h-0 overflow-hidden p-0')
 
 @push('head')
         <style>
@@ -27,12 +38,9 @@
 @endsection
 
 @section('content')
-        <div class="relative flex h-full flex-col">
-            <div class="flex-1 overflow-y-auto pb-32">
+        <div class="relative flex h-full min-h-0 flex-col">
+            <div class="flex-1 min-h-0 overflow-y-auto pb-6">
                 <div class="px-4 py-6">
-                    @include('partials.owner-pos-panel', [
-                        'subtitle' => 'Audit shift tetap di POS, dengan akses cepat ke alat manajemen saat dibutuhkan.',
-                    ])
                     <div id="history-view" class="hidden">
                         <h2 class="text-base font-bold text-slate-800 mb-3">Riwayat Shift</h2>
                         <div id="history-list" class="space-y-3"></div>
@@ -98,17 +106,22 @@
                     </div>
                 </div>
             </div>
-            <section class="absolute bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-4 pb-8 space-y-3">
-                <div class="flex gap-3">
-                    <button class="w-14 h-14 rounded-2xl border border-slate-200 flex items-center justify-center text-slate-600 active:bg-slate-100">
-                        <span class="material-symbols-outlined">print</span>
-                    </button>
-                    <button class="flex-1 h-14 bg-primary text-white font-bold rounded-2xl shadow-lg shadow-primary/30 flex items-center justify-center gap-2 active:scale-[0.98] transition-transform" onclick="location.href=@js($shiftSummaryBackUrl)">
-                        <span class="material-symbols-outlined font-bold">done</span>
-                        SELESAI
-                    </button>
-                </div>
-            </section>
+            @if ($resolvedShiftId !== '')
+                <section class="shrink-0 bg-white border-t border-slate-200 p-4 space-y-3 app-bottom-safe-footer">
+                    <p id="shift-print-summary-notice" class="text-[11px] text-slate-500 {{ $canPrintShiftSummary ? '' : 'font-semibold text-amber-700' }}">
+                        {{ $canPrintShiftSummary ? 'Cetak ringkasan shift tersedia untuk dokumentasi operasional.' : 'Cetak ringkasan shift tersedia mulai paket Medium.' }}
+                    </p>
+                    <div class="flex gap-3">
+                        <button id="shift-print-summary-button" data-feature-enabled="{{ $canPrintShiftSummary ? 'true' : 'false' }}" class="w-14 h-14 rounded-2xl border border-slate-200 flex items-center justify-center {{ $canPrintShiftSummary ? 'text-slate-600 active:bg-slate-100' : 'cursor-not-allowed bg-slate-100 text-slate-300' }}" {{ $canPrintShiftSummary ? '' : 'disabled' }}>
+                            <span class="material-symbols-outlined">print</span>
+                        </button>
+                        <button class="flex-1 h-14 bg-primary text-white font-bold rounded-2xl shadow-lg shadow-primary/30 flex items-center justify-center gap-2 active:scale-[0.98] transition-transform" onclick="location.href=@js($shiftSummaryBackUrl)">
+                            <span class="material-symbols-outlined font-bold">done</span>
+                            SELESAI
+                        </button>
+                    </div>
+                </section>
+            @endif
         </div>
         <script>
             (() => {
@@ -137,7 +150,12 @@
                     paymentList: document.getElementById('payment-list'),
                     paymentTotal: document.getElementById('payment-total'),
                     findingsList: document.getElementById('findings-list'),
+                    printButton: document.getElementById('shift-print-summary-button'),
                 };
+
+                if (el.printButton && el.printButton.dataset.featureEnabled === 'true') {
+                    el.printButton.addEventListener('click', () => window.print());
+                }
 
                 const formatCurrency = (value) => new Intl.NumberFormat('id-ID', {
                     style: 'currency',
@@ -343,4 +361,3 @@
             })();
         </script>
     @endsection
-

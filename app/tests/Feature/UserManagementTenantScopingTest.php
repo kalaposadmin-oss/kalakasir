@@ -19,6 +19,9 @@ class UserManagementTenantScopingTest extends TestCase
         [$tenant, $user] = $this->bootApiActor('owner', 'owner+staff-primary@example.test');
         [$foreignTenant, $foreignUser] = $this->bootApiActor('owner', 'owner+staff-foreign@example.test');
 
+        $tenant->forceFill(['plan' => 'M'])->save();
+        $foreignTenant->forceFill(['plan' => 'M'])->save();
+
         $this->actingAs($user, 'sanctum');
 
         $primaryBranchId = $this->createBranch($tenant, 'Cabang Utama');
@@ -65,6 +68,9 @@ class UserManagementTenantScopingTest extends TestCase
     {
         [$tenant, $user] = $this->bootApiActor('owner', 'owner+update-primary@example.test');
         [$foreignTenant, $foreignUser] = $this->bootApiActor('owner', 'owner+update-foreign@example.test');
+
+        $tenant->forceFill(['plan' => 'M'])->save();
+        $foreignTenant->forceFill(['plan' => 'M'])->save();
 
         $this->actingAs($user, 'sanctum');
 

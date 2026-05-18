@@ -2,13 +2,17 @@
 
 @section('page_title', 'Input Produk Pertama')
 @section('body_class', 'bg-background-light dark:bg-background-dark font-display')
-@section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-x-hidden overflow-y-auto bg-white dark:bg-slate-900 shadow-xl')
-@section('main_class', 'flex-1 overflow-y-auto p-0')
+@section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-x-hidden overflow-y-auto bg-white dark:bg-slate-900 shadow-xl app-bottom-safe-space')
+@section('main_class', 'flex-1 overflow-y-auto p-0 app-bottom-safe-space')
 
 @section('content')
     @php
         $categorySuggestions = ['Minuman', 'Makanan', 'Snack', 'Sembako', 'Bumbu', 'Layanan', 'Lainnya'];
-        $selectedCategory = old('category', '');
+        $stepFourProduct = session('onboarding.step4.product', []);
+        $selectedCategory = old('category', $stepFourProduct['category'] ?? '');
+        $inputBaseClass = 'w-full rounded-xl border bg-slate-50 dark:bg-slate-800 p-4 placeholder:text-slate-400';
+        $inputErrorClass = 'border-red-300 bg-red-50/70 dark:border-red-500/60 dark:bg-red-950/20';
+        $inputDefaultClass = 'border-slate-200 dark:border-slate-700';
     @endphp
 
     <div class="flex items-center bg-white dark:bg-slate-900 p-4 pb-2 justify-between sticky top-0 z-10 border-b border-slate-100 dark:border-slate-800">
@@ -18,11 +22,18 @@
         <h2 class="text-slate-900 dark:text-slate-100 text-lg font-bold leading-tight tracking-tight flex-1 text-center pr-12">Input Produk</h2>
     </div>
 
-    <div class="flex w-full flex-row items-center justify-center gap-3 py-6">
-        <div class="h-1.5 w-6 rounded-full bg-primary/20"></div>
-        <div class="h-1.5 w-6 rounded-full bg-primary/20"></div>
-        <div class="h-1.5 w-6 rounded-full bg-primary/20"></div>
-        <div class="h-1.5 w-10 rounded-full bg-primary"></div>
+    <div class="bg-white px-6 py-5 dark:bg-slate-900">
+        <div class="flex items-center justify-between gap-4">
+            <p class="text-base font-medium leading-normal text-slate-900 dark:text-slate-100">Langkah 4: Produk Awal</p>
+            <p class="text-sm font-normal leading-normal text-slate-500 dark:text-slate-400">4 dari 5</p>
+        </div>
+        <div class="mt-4 flex w-full flex-row items-center justify-center gap-2.5">
+            <div class="h-2 w-8 rounded-full bg-primary"></div>
+            <div class="h-2 w-8 rounded-full bg-primary"></div>
+            <div class="h-2 w-8 rounded-full bg-primary"></div>
+            <div class="h-2 w-8 rounded-full bg-primary"></div>
+            <div class="h-2 w-8 rounded-full bg-primary/20"></div>
+        </div>
     </div>
 
     <div class="px-6">
@@ -32,21 +43,27 @@
 
     @if ($errors->any())
         <div class="mx-6 mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-            {{ $errors->first() }}
+            Silakan lengkapi field wajib dan perbaiki input yang masih invalid.
         </div>
     @endif
 
     <form id="onboarding-step-4-form" method="POST" action="/register/step-4" class="flex flex-col gap-5 px-6 pb-8">
         @csrf
         <div class="flex flex-col gap-1.5">
-            <label class="text-sm font-semibold">Nama Produk</label>
-            <input name="name" value="{{ old('name') }}" class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-4 placeholder:text-slate-400" placeholder="Contoh: Kopi Susu Gula Aren" type="text" />
+            <label class="text-sm font-semibold">Nama Produk <span class="text-rose-500">*</span></label>
+            <input name="name" value="{{ old('name', $stepFourProduct['name'] ?? '') }}" class="{{ $inputBaseClass }} {{ $errors->has('name') ? $inputErrorClass : $inputDefaultClass }}" placeholder="Contoh: Kopi Susu Gula Aren" type="text" required aria-invalid="{{ $errors->has('name') ? 'true' : 'false' }}" />
+            @error('name')
+                <p class="text-xs text-rose-600">{{ $message }}</p>
+            @enderror
         </div>
 
         <div class="grid grid-cols-2 gap-4">
             <div class="flex flex-col gap-1.5">
                 <label class="text-sm font-semibold">SKU / Kode</label>
-                <input name="sku" value="{{ old('sku') }}" class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-4 placeholder:text-slate-400" placeholder="KS-001" type="text" />
+                <input name="sku" value="{{ old('sku', $stepFourProduct['sku'] ?? '') }}" class="{{ $inputBaseClass }} {{ $errors->has('sku') ? $inputErrorClass : $inputDefaultClass }}" placeholder="KS-001" type="text" aria-invalid="{{ $errors->has('sku') ? 'true' : 'false' }}" />
+                @error('sku')
+                    <p class="text-xs text-rose-600">{{ $message }}</p>
+                @enderror
             </div>
         </div>
 
@@ -55,7 +72,7 @@
                 <label class="text-sm font-semibold">Kategori</label>
                 <span class="text-[11px] text-slate-400">Bisa ketik kategori baru</span>
             </div>
-            <input id="product-category" name="category" value="{{ $selectedCategory }}" list="product-category-suggestions" class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-4 placeholder:text-slate-400" placeholder="Contoh: Beras, Kopi, Frozen Food, Jasa Cuci" type="text" />
+            <input id="product-category" name="category" value="{{ $selectedCategory }}" list="product-category-suggestions" class="{{ $inputBaseClass }} {{ $errors->has('category') ? $inputErrorClass : $inputDefaultClass }}" placeholder="Contoh: Beras, Kopi, Frozen Food, Jasa Cuci" type="text" aria-invalid="{{ $errors->has('category') ? 'true' : 'false' }}" />
             <datalist id="product-category-suggestions">
                 @foreach ($categorySuggestions as $suggestion)
                     <option value="{{ $suggestion }}"></option>
@@ -67,22 +84,33 @@
                 @endforeach
             </div>
             <p class="text-[11px] leading-relaxed text-slate-500">Pilih salah satu saran atau langsung ketik kategori Anda sendiri. Sistem akan membuat kategori baru otomatis jika belum ada.</p>
+            @error('category')
+                <p class="text-xs text-rose-600">{{ $message }}</p>
+            @enderror
         </div>
 
         <div class="flex flex-col gap-1.5">
             <label class="text-sm font-semibold">Harga Pokok (HPP)</label>
             <div class="relative">
                 <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-medium">Rp</span>
-                <input name="hpp_average" value="{{ old('hpp_average') }}" class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-4 pl-12 placeholder:text-slate-400" placeholder="10.000" type="number" step="0.01" min="0" />
+                <input name="hpp_average" value="{{ old('hpp_average', $stepFourProduct['hpp_average'] ?? '') }}" class="{{ $inputBaseClass }} {{ $errors->has('hpp_average') ? $inputErrorClass : $inputDefaultClass }} pl-12" placeholder="Kosongkan jika HPP akan terbentuk dari pembelian/produksi" type="number" step="0.01" min="0" aria-invalid="{{ $errors->has('hpp_average') ? 'true' : 'false' }}" />
             </div>
+            <p class="text-[11px] leading-relaxed text-slate-500">Opsional. Boleh dikosongkan jika HPP baru akan terbentuk saat pembelian atau produksi pertama.</p>
+            @error('hpp_average')
+                <p class="text-xs text-rose-600">{{ $message }}</p>
+            @enderror
         </div>
 
         <div class="flex flex-col gap-1.5">
             <label class="text-sm font-semibold">Harga Jual</label>
             <div class="relative">
                 <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-medium">Rp</span>
-                <input name="price" value="{{ old('price') }}" class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-4 pl-12 placeholder:text-slate-400" placeholder="18.000" type="number" step="0.01" min="0" />
+                <input name="price" value="{{ old('price', $stepFourProduct['price'] ?? '') }}" class="{{ $inputBaseClass }} {{ $errors->has('price') ? $inputErrorClass : $inputDefaultClass }} pl-12" placeholder="Kosongkan jika harga jual akan diatur nanti" type="number" step="0.01" min="0" aria-invalid="{{ $errors->has('price') ? 'true' : 'false' }}" />
             </div>
+            <p class="text-[11px] leading-relaxed text-slate-500">Opsional. Boleh dikosongkan jika harga jual akan ditentukan setelah onboarding.</p>
+            @error('price')
+                <p class="text-xs text-rose-600">{{ $message }}</p>
+            @enderror
         </div>
 
         <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-4 space-y-4">
@@ -110,16 +138,19 @@
         </div>
 
         <div id="stock-scalar-section" class="flex flex-col gap-1.5">
-            <label class="text-sm font-semibold">Stok Awal</label>
+            <label class="text-sm font-semibold">Stok Awal <span class="text-rose-500">*</span></label>
             <div class="flex items-center gap-4">
                 <button id="initial-stock-minus" class="size-12 flex items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100" type="button">
                     <span class="material-symbols-outlined">remove</span>
                 </button>
-                <input id="initial-stock" name="initial_stock" class="flex-1 text-center rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-4 font-bold" type="number" step="0.01" min="0" value="{{ old('initial_stock', '0') }}" />
+                <input id="initial-stock" name="initial_stock" class="flex-1 text-center rounded-xl border bg-slate-50 dark:bg-slate-800 p-4 font-bold {{ $errors->has('initial_stock') ? $inputErrorClass : $inputDefaultClass }}" type="number" step="0.01" min="0" value="{{ old('initial_stock', $stepFourProduct['initial_stock'] ?? '0') }}" required aria-invalid="{{ $errors->has('initial_stock') ? 'true' : 'false' }}" />
                 <button id="initial-stock-plus" class="size-12 flex items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100" type="button">
                     <span class="material-symbols-outlined">add</span>
                 </button>
             </div>
+            @error('initial_stock')
+                <p class="text-xs text-rose-600">{{ $message }}</p>
+            @enderror
         </div>
 
         <div id="variant-stock-section" class="hidden flex flex-col gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-4">
@@ -133,12 +164,12 @@
         <div id="variant-hidden-inputs"></div>
     </form>
 
-    <div class="sticky bottom-0 mt-auto w-full p-6 bg-white/95 dark:bg-slate-900/95 backdrop-blur border-t border-slate-100 dark:border-slate-800 flex flex-col gap-3">
-        <button form="onboarding-step-4-form" type="submit" class="w-full py-4 bg-primary text-white rounded-xl font-bold text-base shadow-lg shadow-primary/20 text-center">Simpan dan Selesai</button>
-        <form method="POST" action="/register/step-4">
+    <div class="sticky bottom-0 mt-auto w-full p-6 bg-white/95 dark:bg-slate-900/95 backdrop-blur border-t border-slate-100 dark:border-slate-800 flex flex-col gap-3 app-bottom-safe-footer">
+        <button form="onboarding-step-4-form" type="submit" data-submit-button class="w-full py-4 bg-primary text-white rounded-xl font-bold text-base shadow-lg shadow-primary/20 text-center disabled:cursor-not-allowed disabled:opacity-70">Lanjut ke Rekap</button>
+        <form id="onboarding-step-4-skip-form" method="POST" action="/register/step-4">
             @csrf
             <input type="hidden" name="skip_product" value="1" />
-            <button type="submit" class="w-full py-4 bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 rounded-xl font-medium text-base text-center">Lewati dan Selesai</button>
+            <button type="submit" data-skip-button class="w-full py-4 bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 rounded-xl font-medium text-base text-center disabled:cursor-not-allowed disabled:opacity-70">Lewati dan Lanjut ke Rekap</button>
         </form>
     </div>
 
@@ -147,6 +178,7 @@
             const categoryInput = document.getElementById('product-category');
             const quickPicks = document.querySelectorAll('[data-category-value]');
             const form = document.getElementById('onboarding-step-4-form');
+            const skipForm = document.getElementById('onboarding-step-4-skip-form');
             const enableVariants = document.getElementById('enable-variants');
             const variantEditor = document.getElementById('variant-editor');
             const variantEditorHint = document.getElementById('variant-editor-hint');
@@ -160,12 +192,34 @@
             const variantStockHint = document.getElementById('variant-stock-hint');
             const variantStockLineList = document.getElementById('variant-stock-line-list');
             const hiddenInputs = document.getElementById('variant-hidden-inputs');
-            const oldVariants = @json(old('variants', []));
-            const oldInitialStockLines = @json(old('initial_stock_lines', []));
+            const oldVariants = @json(old('variants', $stepFourProduct['variants'] ?? []));
+            const oldInitialStockLines = @json(old('initial_stock_lines', $stepFourProduct['initial_stock_lines'] ?? []));
+            const submitButtons = document.querySelectorAll('[data-submit-button], [data-skip-button]');
+            let submitLocked = false;
 
             if (!categoryInput || !quickPicks.length || !form || !enableVariants) {
                 return;
             }
+
+            const lockSubmission = () => {
+                if (submitLocked) {
+                    return false;
+                }
+
+                submitLocked = true;
+                submitButtons.forEach((button) => {
+                    button.disabled = true;
+                });
+
+                return true;
+            };
+
+            const unlockSubmission = () => {
+                submitLocked = false;
+                submitButtons.forEach((button) => {
+                    button.disabled = false;
+                });
+            };
 
             const generateUuid = () => {
                 if (window.crypto?.randomUUID) {
@@ -382,6 +436,11 @@
             });
 
             form.addEventListener('submit', (event) => {
+                if (!lockSubmission()) {
+                    event.preventDefault();
+                    return;
+                }
+
                 hiddenInputs.innerHTML = '';
 
                 if (!enableVariants.checked) {
@@ -407,8 +466,15 @@
                         }
                     });
                 } catch (error) {
+                    unlockSubmission();
                     event.preventDefault();
                     alert(error.message || 'Payload variant onboarding tidak valid.');
+                }
+            });
+
+            skipForm?.addEventListener('submit', (event) => {
+                if (!lockSubmission()) {
+                    event.preventDefault();
                 }
             });
 

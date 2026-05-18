@@ -32,7 +32,7 @@
 @push('head')
         <style>
             .toggle-checkbox:checked + .toggle-label {
-                background-color: #135bec;
+                background-color: rgb(var(--primary-500));
             }
             .toggle-checkbox:checked + .toggle-label .toggle-dot {
                 transform: translateX(1.25rem);

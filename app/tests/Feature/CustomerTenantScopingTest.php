@@ -18,13 +18,14 @@ class CustomerTenantScopingTest extends TestCase
     {
         [$tenant, $user] = $this->bootApiActor('admin', 'admin+customer-primary@example.test');
         [$foreignTenant] = $this->bootApiActor('admin', 'admin+customer-foreign@example.test');
+        $tenant->forceFill(['plan' => 'M'])->save();
 
         $this->actingAs($user, 'sanctum');
 
         $ownBranchId = $this->createBranch($tenant, 'Cabang Aktif');
         $foreignBranchId = $this->createBranch($foreignTenant, 'Cabang Asing');
 
-        $ownCustomerId = $this->createCustomer($tenant, 'Customer Aktif');
+        $ownCustomerId = $this->createCustomer($tenant, 'Customer Aktif', 'Jl. Utama 1');
         $foreignCustomerId = $this->createCustomer($foreignTenant, 'Customer Asing');
 
         $ownSaleId = $this->createSale(
@@ -52,13 +53,15 @@ class CustomerTenantScopingTest extends TestCase
             ->assertJsonPath('customers.0.recent_sales.0.id', $ownSaleId)
             ->assertJsonPath('customers.0.recent_sales.0.total', 50000)
             ->assertJsonPath('customers.0.order_count', 1)
-            ->assertJsonPath('customers.0.total_spent', 50000);
+            ->assertJsonPath('customers.0.total_spent', 50000)
+            ->assertJsonPath('customers.0.address', 'Jl. Utama 1');
     }
 
     public function test_lite_index_returns_minimal_scoped_customer_options(): void
     {
         [$tenant, $user] = $this->bootApiActor('admin', 'admin+customer-lite@example.test');
         [$foreignTenant] = $this->bootApiActor('admin', 'admin+customer-lite-foreign@example.test');
+        $tenant->forceFill(['plan' => 'M'])->save();
 
         $this->actingAs($user, 'sanctum');
 
@@ -79,6 +82,32 @@ class CustomerTenantScopingTest extends TestCase
         $this->assertStringNotContainsString('total_spent', $payload);
     }
 
+    public function test_pos_customer_store_creates_scoped_customer_with_contact_fields(): void
+    {
+        [$tenant, $user] = $this->bootApiActor('cashier', 'cashier+customer-store@example.test');
+        $tenant->forceFill(['plan' => 'M'])->save();
+
+        $this->actingAs($user, 'sanctum');
+
+        $response = $this->postJson('/api/v1/pos/customers', [
+            'name' => 'Pelanggan Baru',
+            'phone' => '08123456789',
+            'address' => 'Jl. Mawar No. 10',
+        ], $this->tenantHeaders($tenant->id));
+
+        $response->assertCreated()
+            ->assertJsonPath('customer.name', 'Pelanggan Baru')
+            ->assertJsonPath('customer.phone', '08123456789')
+            ->assertJsonPath('customer.address', 'Jl. Mawar No. 10');
+
+        $this->assertDatabaseHas('customers', [
+            'tenant_id' => $tenant->id,
+            'name' => 'Pelanggan Baru',
+            'phone' => '08123456789',
+            'address' => 'Jl. Mawar No. 10',
+        ]);
+    }
+
     private function createBranch(Tenant $tenant, string $name): string
     {
         $branchId = (string) Str::uuid();
@@ -92,7 +121,7 @@ class CustomerTenantScopingTest extends TestCase
         return $branchId;
     }
 
-    private function createCustomer(Tenant $tenant, string $name): string
+    private function createCustomer(Tenant $tenant, string $name, ?string $address = null): string
     {
         $customerId = (string) Str::uuid();
 
@@ -102,7 +131,7 @@ class CustomerTenantScopingTest extends TestCase
             'name' => $name,
             'phone' => null,
             'email' => null,
-            'address' => null,
+            'address' => $address,
             'created_at' => now('UTC'),
         ]);
 

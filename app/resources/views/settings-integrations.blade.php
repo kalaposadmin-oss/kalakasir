@@ -126,12 +126,12 @@
 
             const load = async () => {
                 const [bootstrapRes, entRes] = await Promise.all([
-                    fetch('/api/v1/bootstrap', { headers }),
+                    window.PosUi.getBootstrap({ headers, ttlMs: 20000 }),
                     fetch('/api/v1/subscription/entitlements', { headers }),
                 ]);
 
-                if (bootstrapRes.ok) {
-                    const bootstrap = await bootstrapRes.json();
+                if (bootstrapRes) {
+                    const bootstrap = bootstrapRes;
                     const tenantName = bootstrap?.tenant?.name || 'Tenant';
                     el.detailTitle.textContent = `Detail Koneksi: Xendit (${tenantName})`;
                 }

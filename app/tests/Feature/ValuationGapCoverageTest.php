@@ -33,6 +33,7 @@ class ValuationGapCoverageTest extends TestCase
         $fixture = $this->seedCheckoutFixture($tenant->id, $user->id);
 
         $saleId = (string) Str::uuid();
+        $saleItemId = (string) Str::uuid();
         $eventId = (string) Str::uuid();
 
         \DB::table('sales')->insert([
@@ -51,10 +52,11 @@ class ValuationGapCoverageTest extends TestCase
             'voided_by' => null,
             'created_at' => now('UTC'),
             'transaction_date' => '2026-02-27',
+            'cogs_total' => 5000,
         ]);
 
         \DB::table('sale_items')->insert([
-            'id' => (string) Str::uuid(),
+            'id' => $saleItemId,
             'tenant_id' => $tenant->id,
             'sale_id' => $saleId,
             'product_id' => $fixture['product_id'],
@@ -62,6 +64,25 @@ class ValuationGapCoverageTest extends TestCase
             'price' => 10000,
             'discount' => 0,
             'hpp_snapshot' => 5000,
+        ]);
+
+        \DB::table('sale_cost_components')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $tenant->id,
+            'sale_id' => $saleId,
+            'sale_item_id' => $saleItemId,
+            'component_type' => 'sale_item',
+            'product_id' => $fixture['product_id'],
+            'product_variant_id' => null,
+            'qty' => 1,
+            'unit_cost' => 5000,
+            'total_cost' => 5000,
+            'source_reference_type' => 'sale',
+            'source_reference_id' => $saleId,
+            'source_reference_item_id' => $saleItemId,
+            'source' => 'repair',
+            'created_at' => now('UTC'),
+            'updated_at' => now('UTC'),
         ]);
 
         $event = new SaleCompleted(

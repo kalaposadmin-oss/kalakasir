@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\Platform\TenantController as PlatformTenantControll
 use App\Http\Controllers\Api\Platform\UserController as PlatformUserController;
 use App\Http\Controllers\Api\Platform\PaymentController as PlatformPaymentController;
 use App\Http\Controllers\Api\Platform\SettingsController as PlatformSettingsController;
+use App\Http\Controllers\Api\Platform\SystemHealthController as PlatformSystemHealthController;
 use App\Http\Controllers\Api\SubscriptionController;
 use App\Services\Platform\PlatformHealthService;
 use App\Support\ApiResponse;
@@ -50,6 +51,10 @@ $registerPlatformRoutes = static function (string $prefix): void {
         Route::get('audit-logs/export', [PlatformAuditLogController::class, 'export']);
         Route::get('anomalies', [PlatformAnomalyController::class, 'index']);
         Route::post('anomalies/{anomalyId}/resolve', [PlatformAnomalyController::class, 'resolve']);
+        Route::get('system-health/events', [PlatformSystemHealthController::class, 'index']);
+        Route::get('system-health/summary', [PlatformSystemHealthController::class, 'summary']);
+        Route::post('system-health/events/{eventId}/resolve', [PlatformSystemHealthController::class, 'resolve']);
+        Route::post('system-health/events/{eventId}/ignore', [PlatformSystemHealthController::class, 'ignore']);
         Route::get('support/actions', [PlatformSupportController::class, 'actions']);
         Route::get('support/search', [PlatformSupportController::class, 'search']);
         Route::get('settings/feature-flags', [PlatformSettingsController::class, 'featureFlags']);

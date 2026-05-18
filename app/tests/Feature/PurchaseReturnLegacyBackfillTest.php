@@ -30,6 +30,7 @@ class PurchaseReturnLegacyBackfillTest extends TestCase
         parent::setUp();
 
         [$this->tenant, $this->user] = $this->bootApiActor('admin', 'admin+purchase-return-backfill@example.test', 'Admin Purchase Return Backfill');
+        $this->tenant->forceFill(['plan' => 'M'])->save();
         $this->fixture = $this->seedCheckoutFixture($this->tenant->id, $this->user->id);
 
         TenantContext::set($this->tenant);

@@ -24,18 +24,18 @@ class WebEntityFlowContext
     {
         $from = $this->sanitizeFrom((string) $request->query('from', ''));
         if ($from === null) {
-            return $fallback;
+            return $portal === 'pos' ? normalize_pos_home_url($fallback) : $fallback;
         }
 
         if (! str_starts_with($from, '/'.$portal.'/')) {
-            return $fallback;
+            return $portal === 'pos' ? normalize_pos_home_url($fallback) : $fallback;
         }
 
         if ($allowedPrefixes !== [] && ! $this->matchesAllowedPrefixes($from, $allowedPrefixes)) {
-            return $fallback;
+            return $portal === 'pos' ? normalize_pos_home_url($fallback) : $fallback;
         }
 
-        return $from;
+        return $portal === 'pos' ? normalize_pos_home_url($from) : $from;
     }
 
     public function detailContext(
@@ -77,9 +77,16 @@ class WebEntityFlowContext
 
     private function matchesAllowedPrefixes(string $path, array $allowedPrefixes): bool
     {
+        $pathOnly = (string) (parse_url($path, PHP_URL_PATH) ?? '');
+        $normalizedPath = rtrim($pathOnly !== '' ? $pathOnly : $path, '/');
+
         foreach ($allowedPrefixes as $prefix) {
-            $normalizedPrefix = '/'.ltrim((string) $prefix, '/');
-            if (str_starts_with($path, $normalizedPrefix)) {
+            $normalizedPrefix = rtrim('/'.ltrim((string) $prefix, '/'), '/');
+            if ($normalizedPrefix === '') {
+                continue;
+            }
+
+            if ($normalizedPath === $normalizedPrefix || str_starts_with($normalizedPath, $normalizedPrefix.'/')) {
                 return true;
             }
         }

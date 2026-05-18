@@ -11,17 +11,80 @@ use App\Models\PurchaseItem;
 use App\Models\StockLedger;
 use App\Services\LockPeriodService;
 use App\Services\InventoryValuationService;
+use App\Support\PurchaseMode;
+use App\Support\PurchaseFlowResolver;
+use App\Support\PurchaseStatus;
 use App\Support\Decimal;
 use App\Support\TenantContext;
 use App\Events\PurchaseReceived;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use RuntimeException;
 
 class PurchaseService
 {
+    private function flowResolver(): PurchaseFlowResolver
+    {
+        return app(PurchaseFlowResolver::class);
+    }
+
+    public function createDraftPurchase(array $payload, ?string $userId): array
+    {
+        $purchaseMode = $this->flowResolver()->resolveMode($payload['purchase_mode'] ?? null, TenantContext::get()?->purchase_mode);
+        $purchase = $this->persistPurchase($payload, PurchaseStatus::DRAFT, $purchaseMode);
+
+        return [
+            'purchase_id' => $purchase->id,
+            'status' => $purchase->status,
+            'purchase_mode' => $purchase->purchase_mode,
+        ];
+    }
+
+    public function createDirectPurchase(array $payload, ?string $userId): array
+    {
+        $tenantId = TenantContext::id();
+        $now = CarbonImmutable::now('UTC');
+        $transactionDate = (new TransactionDateService())->resolve(Arr::get($payload, 'transaction_date'));
+        $lockService = new LockPeriodService();
+
+        return DB::transaction(function () use ($payload, $userId, $tenantId, $now, $lockService, $transactionDate): array {
+            $purchase = $this->persistPurchase($payload, PurchaseStatus::DRAFT, PurchaseMode::SIMPLE);
+            $receiveResult = $this->performReceive((string) $purchase->id, $payload, $tenantId, $userId, $now, $lockService, $transactionDate, true);
+
+            return [
+                'purchase_id' => $purchase->id,
+                'status' => $receiveResult['status'],
+                'purchase_mode' => $purchase->purchase_mode,
+                'received_total' => $receiveResult['received_total'],
+            ];
+        });
+    }
+
+    public function createShortPO(array $payload, ?string $userId): array
+    {
+        $purchase = $this->persistPurchase($payload, PurchaseStatus::SUBMITTED, PurchaseMode::PO_SHORT);
+
+        return [
+            'purchase_id' => $purchase->id,
+            'status' => $purchase->status,
+            'purchase_mode' => $purchase->purchase_mode,
+        ];
+    }
+
+    public function createControlledPO(array $payload, ?string $userId): array
+    {
+        $purchase = $this->persistPurchase($payload, PurchaseStatus::SUBMITTED, PurchaseMode::CONTROLLED);
+
+        return [
+            'purchase_id' => $purchase->id,
+            'status' => $purchase->status,
+            'purchase_mode' => $purchase->purchase_mode,
+        ];
+    }
+
     public function approve(string $purchaseId, ?string $userId): void
     {
         $tenantId = TenantContext::id();
@@ -34,12 +97,18 @@ class PurchaseService
             ->where('id', $purchaseId)
             ->firstOrFail();
 
-        if ($purchase->status !== 'draft') {
-            throw new RuntimeException('Hanya purchase draft yang bisa di-approve.');
+        $purchaseMode = $this->flowResolver()->resolveMode($purchase->purchase_mode ?? null, TenantContext::get()?->purchase_mode);
+
+        if (! $this->flowResolver()->canApprove((string) $purchase->status, $purchaseMode)) {
+            if ($purchaseMode !== PurchaseMode::CONTROLLED) {
+                throw new RuntimeException('Approval hanya aktif pada mode controlled.');
+            }
+
+            throw new RuntimeException('PO harus berstatus submitted sebelum disetujui.');
         }
 
         $purchase->update([
-            'status' => 'approved',
+            'status' => PurchaseStatus::APPROVED,
             'approved_at' => CarbonImmutable::now('UTC'),
             'approved_by' => $userId,
         ]);
@@ -57,12 +126,12 @@ class PurchaseService
             ->where('id', $purchaseId)
             ->firstOrFail();
 
-        if (! in_array($purchase->status, ['draft', 'approved'], true)) {
+        if (! PurchaseStatus::canCancel((string) $purchase->status)) {
             throw new RuntimeException('Purchase tidak bisa dibatalkan.');
         }
 
         $purchase->update([
-            'status' => 'cancelled',
+            'status' => PurchaseStatus::CANCELLED,
             'cancelled_at' => CarbonImmutable::now('UTC'),
             'cancelled_by' => $userId,
         ]);
@@ -80,15 +149,129 @@ class PurchaseService
             ->where('id', $purchaseId)
             ->firstOrFail();
 
-        if ($purchase->status !== 'received') {
+        $purchaseMode = $this->flowResolver()->resolveMode($purchase->purchase_mode ?? null, TenantContext::get()?->purchase_mode);
+
+        if (! PurchaseStatus::canClose((string) $purchase->status, $purchaseMode)) {
             throw new RuntimeException('Hanya purchase received yang bisa di-close.');
         }
 
         $purchase->update([
-            'status' => 'closed',
+            'status' => PurchaseStatus::CLOSED,
             'closed_at' => CarbonImmutable::now('UTC'),
             'closed_by' => $userId,
         ]);
+    }
+
+    public function updatePayment(string $purchaseId, array $payload, ?string $userId = null): array
+    {
+        $tenantId = TenantContext::id();
+        if (! $tenantId) {
+            throw new RuntimeException('Tenant tidak ditemukan.');
+        }
+
+        return DB::transaction(function () use ($tenantId, $purchaseId, $payload, $userId): array {
+            $purchase = Purchase::query()
+                ->where('tenant_id', $tenantId)
+                ->where('id', $purchaseId)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $normalizedStatus = PurchaseStatus::normalize((string) $purchase->status);
+            if (in_array($normalizedStatus, [PurchaseStatus::CLOSED, PurchaseStatus::CANCELLED], true)) {
+                throw new RuntimeException('Pembelian yang sudah ditutup atau dibatalkan tidak bisa diedit.');
+            }
+
+            $paymentMethod = $payload['payment_method'] ?? (string) ($purchase->payment_method ?? 'tempo');
+            $paymentMethod = in_array($paymentMethod, ['tunai', 'tempo'], true) ? $paymentMethod : 'tempo';
+
+            $dueDate = $payload['due_date'] ?? null;
+            $cashAccountId = $payload['cash_account_id'] ?? null;
+
+            if ($paymentMethod === 'tempo') {
+                $dueDate = $dueDate ?: ($purchase->due_date ?: CarbonImmutable::now('UTC')->addDays(14)->toDateString());
+                $cashAccountId = null;
+            } else {
+                $cashAccountId = $cashAccountId ?: ($purchase->cash_account_id ?: $this->resolveDefaultCashAccountId($tenantId));
+                $dueDate = null;
+
+                if (! $cashAccountId) {
+                    throw new RuntimeException('Akun kas belum diatur. Lengkapi mapping akun kas terlebih dahulu.');
+                }
+            }
+
+            $purchase->update([
+                'payment_method' => $paymentMethod,
+                'due_date' => $dueDate,
+                'cash_account_id' => $cashAccountId,
+            ]);
+
+            app(PurchasePaymentCorrectionService::class)->sync(
+                $tenantId,
+                (string) $purchase->id,
+                $userId,
+                'live'
+            );
+
+            $freshPurchase = $purchase->fresh();
+
+            return [
+                'id' => (string) $freshPurchase->id,
+                'payment_method' => (string) $freshPurchase->payment_method,
+                'due_date' => $freshPurchase->due_date,
+                'cash_account_id' => $freshPurchase->cash_account_id ? (string) $freshPurchase->cash_account_id : null,
+            ];
+        });
+    }
+
+    public function updateItemPrice(string $purchaseId, string $purchaseItemId, float $price): array
+    {
+        $tenantId = TenantContext::id();
+        if (! $tenantId) {
+            throw new RuntimeException('Tenant tidak ditemukan.');
+        }
+
+        return DB::transaction(function () use ($tenantId, $purchaseId, $purchaseItemId, $price): array {
+            $purchase = Purchase::query()
+                ->where('tenant_id', $tenantId)
+                ->where('id', $purchaseId)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $normalizedStatus = PurchaseStatus::normalize((string) $purchase->status);
+            if (in_array($normalizedStatus, [PurchaseStatus::RECEIVED, PurchaseStatus::PARTIALLY_RECEIVED, PurchaseStatus::CLOSED, PurchaseStatus::CANCELLED], true)) {
+                throw new RuntimeException('Harga hanya bisa diubah sebelum penerimaan barang dimulai.');
+            }
+
+            $item = PurchaseItem::query()
+                ->where('tenant_id', $tenantId)
+                ->where('purchase_id', $purchase->id)
+                ->where('id', $purchaseItemId)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ((float) ($item->received_qty ?? 0) > 0) {
+                throw new RuntimeException('Harga hanya bisa diubah sebelum penerimaan barang dimulai.');
+            }
+
+            $item->update([
+                'price' => $price,
+            ]);
+
+            $purchaseTotal = (float) (PurchaseItem::query()
+                ->where('tenant_id', $tenantId)
+                ->where('purchase_id', $purchase->id)
+                ->selectRaw('COALESCE(SUM(qty * price), 0) as total')
+                ->value('total') ?? 0);
+
+            $purchase->update([
+                'total' => $purchaseTotal,
+            ]);
+
+            return [
+                'purchase' => $purchase->fresh(),
+                'item' => $item->fresh(),
+            ];
+        });
     }
 
     public function receive(string $purchaseId, array $payload, ?string $userId): array
@@ -104,173 +287,241 @@ class PurchaseService
         $lockService = new LockPeriodService();
 
         return app(DatabaseTransactionService::class)->run(function () use ($purchaseId, $payload, $tenantId, $userId, $now, $lockService, $transactionDate): array {
-            $valuationService = app(InventoryValuationService::class);
+            return $this->performReceive($purchaseId, $payload, $tenantId, $userId, $now, $lockService, $transactionDate, false);
+        });
+    }
 
-            $purchase = Purchase::query()
-                ->where('tenant_id', $tenantId)
-                ->where('id', $purchaseId)
-                ->lockForUpdate()
-                ->firstOrFail();
+    private function persistPurchase(array $payload, string $status, string $purchaseMode): Purchase
+    {
+        $tenantId = TenantContext::id();
+        if (! $tenantId) {
+            throw new RuntimeException('Tenant tidak ditemukan.');
+        }
 
-            if (! in_array($purchase->status, ['approved', 'partially_received'], true)) {
-                throw new RuntimeException('Purchase tidak bisa diterima pada status ini.');
+        $purchaseId = (string) Str::uuid();
+        Purchase::query()->create([
+            'id' => $purchaseId,
+            'tenant_id' => $tenantId,
+            'supplier_id' => $payload['supplier_id'],
+            'location_id' => $payload['location_id'] ?? null,
+            'total' => $payload['total'],
+            'status' => $status,
+            'payment_method' => $payload['payment_method'] ?? 'tempo',
+            'due_date' => $payload['due_date'] ?? null,
+            'cash_account_id' => $payload['cash_account_id'] ?? null,
+            'notes' => $payload['notes'] ?? null,
+            'created_at' => CarbonImmutable::now('UTC'),
+            'transaction_date' => $payload['transaction_date'] ?? CarbonImmutable::now('UTC')->toDateString(),
+        ] + (Schema::hasColumn('purchases', 'purchase_mode') ? ['purchase_mode' => $purchaseMode] : []));
+
+        $items = collect($payload['items'] ?? [])->map(function ($item) use ($tenantId, $purchaseId) {
+            return [
+                'id' => (string) Str::uuid(),
+                'tenant_id' => $tenantId,
+                'purchase_id' => $purchaseId,
+                'product_id' => $item['product_id'],
+                'qty' => (float) $item['qty'],
+                'price' => (float) $item['price'],
+            ];
+        })->all();
+
+        PurchaseItem::query()->insert($items);
+
+        return Purchase::query()->where('tenant_id', $tenantId)->where('id', $purchaseId)->firstOrFail();
+    }
+
+    private function performReceive(
+        string $purchaseId,
+        array $payload,
+        string $tenantId,
+        ?string $userId,
+        CarbonImmutable $now,
+        LockPeriodService $lockService,
+        CarbonImmutable $transactionDate,
+        bool $bypassStatusCheck
+    ): array {
+        $valuationService = app(InventoryValuationService::class);
+
+        $purchase = Purchase::query()
+            ->where('tenant_id', $tenantId)
+            ->where('id', $purchaseId)
+            ->lockForUpdate()
+            ->firstOrFail();
+
+        $purchaseMode = $this->flowResolver()->resolveMode($purchase->purchase_mode ?? null, TenantContext::get()?->purchase_mode);
+
+        if (! $bypassStatusCheck && ! $this->flowResolver()->canReceive((string) $purchase->status, $purchaseMode)) {
+            throw new RuntimeException($this->flowResolver()->receiveBlockMessage((string) $purchase->status, $purchaseMode));
+        }
+
+        if (! $purchase->location_id) {
+            throw new RuntimeException('Lokasi purchase belum ditentukan.');
+        }
+
+        $lockService->ensureNotLocked($transactionDate, $tenantId);
+
+        $items = PurchaseItem::query()
+            ->where('tenant_id', $tenantId)
+            ->where('purchase_id', $purchase->id)
+            ->get();
+
+        if ($items->isEmpty()) {
+            throw new RuntimeException('Item purchase tidak ditemukan.');
+        }
+
+        $requested = collect(Arr::get($payload, 'items', []))
+            ->filter(fn ($item) => filled($item['product_id'] ?? null))
+            ->keyBy('product_id');
+
+        if ($requested->count() !== $items->count()) {
+            throw new RuntimeException('Semua item purchase harus dikirim saat penerimaan.');
+        }
+
+        $ledgerRows = [];
+        $totalReceivedValue = Decimal::money(0);
+        $receivedCount = 0;
+
+        foreach ($items as $item) {
+            $remaining = Decimal::subtract($item->qty, $item->received_qty ?? 0, Decimal::QTY_SCALE);
+            if (Decimal::compare($remaining, 0) <= 0) {
+                continue;
             }
 
-            if (! $purchase->location_id) {
-                throw new RuntimeException('Lokasi purchase belum ditentukan.');
+            $receiveQty = Decimal::qty($requested->get($item->product_id)['qty'] ?? 0);
+
+            if (Decimal::compare($receiveQty, 0) <= 0) {
+                continue;
             }
 
-            $lockService->ensureNotLocked($transactionDate, $tenantId);
-
-            $items = PurchaseItem::query()
-                ->where('tenant_id', $tenantId)
-                ->where('purchase_id', $purchase->id)
-                ->get();
-
-            if ($items->isEmpty()) {
-                throw new RuntimeException('Item purchase tidak ditemukan.');
+            if (Decimal::compare($receiveQty, $remaining) > 0) {
+                throw new RuntimeException('Qty received melebihi sisa untuk produk tertentu.');
             }
 
-            $requested = collect(Arr::get($payload, 'items', []))
-                ->keyBy('product_id');
-
-            $ledgerRows = [];
-            $totalReceivedValue = Decimal::money(0);
-            $receivedCount = 0;
-
-            foreach ($items as $item) {
-                $remaining = Decimal::subtract($item->qty, $item->received_qty ?? 0, Decimal::QTY_SCALE);
-                if (Decimal::compare($remaining, 0) <= 0) {
-                    continue;
-                }
-
-                $receiveQty = $remaining;
-                if ($requested->has($item->product_id)) {
-                    $receiveQty = Decimal::qty($requested->get($item->product_id)['qty']);
-                }
-
-                if (Decimal::compare($receiveQty, 0) <= 0) {
-                    continue;
-                }
-
-                if (Decimal::compare($receiveQty, $remaining) > 0) {
-                    throw new RuntimeException('Qty received melebihi sisa untuk produk tertentu.');
-                }
-
-                $item->update([
-                    'received_qty' => Decimal::add($item->received_qty ?? 0, $receiveQty, Decimal::QTY_SCALE),
-                ]);
-
-                InventoryBalance::query()->firstOrCreate(
-                    [
-                        'tenant_id' => $tenantId,
-                        'product_id' => $item->product_id,
-                        'location_id' => $purchase->location_id,
-                    ],
-                    [
-                        'qty_on_hand' => 0,
-                    ]
-                );
-
-                DB::update(
-                    'UPDATE inventory_balances SET qty_on_hand = qty_on_hand + ? WHERE tenant_id = ? AND product_id = ? AND location_id = ?',
-                    [$receiveQty, $tenantId, $item->product_id, $purchase->location_id]
-                );
-
-                $balanceAfter = Decimal::qty(InventoryBalance::query()
-                    ->where('tenant_id', $tenantId)
-                    ->where('product_id', $item->product_id)
-                    ->where('location_id', $purchase->location_id)
-                    ->when($item->product_variant_id, function ($query) use ($item) {
-                        $query->where('product_variant_id', $item->product_variant_id);
-                    }, function ($query) {
-                        $query->whereNull('product_variant_id');
-                    })
-                    ->value('qty_on_hand'));
-
-                $ledgerRows[] = [
-                    'id' => (string) Str::uuid(),
-                    'tenant_id' => $tenantId,
-                    'product_id' => $item->product_id,
-                    'product_variant_id' => $item->product_variant_id,
-                    'location_id' => $purchase->location_id,
-                    'reference_type' => 'purchase',
-                    'reference_id' => $purchase->id,
-                    'reference_item_id' => $item->id,
-                    'qty_in' => $receiveQty,
-                    'qty_out' => 0,
-                    'balance_after' => $balanceAfter,
-                    'created_at' => $now,
-                    'created_by' => $userId,
-                ];
-
-                $valuationService->receive(
-                    tenantId: $tenantId,
-                    productId: $item->product_id,
-                    productVariantId: $item->product_variant_id,
-                    locationId: $purchase->location_id,
-                    qty: $receiveQty,
-                    unitCost: Decimal::float($item->price, Decimal::COST_SCALE),
-                    sourceType: 'purchase',
-                    sourceId: $purchase->id,
-                    sourceItemId: $item->id,
-                    at: $now
-                );
-
-                $totalReceivedValue = Decimal::add(
-                    $totalReceivedValue,
-                    Decimal::multiply($receiveQty, $item->price, Decimal::MONEY_SCALE),
-                    Decimal::MONEY_SCALE
-                );
-                $receivedCount++;
-            }
-
-            if ($receivedCount === 0) {
-                throw new RuntimeException('Tidak ada item yang diterima.');
-            }
-
-            StockLedger::query()->insert($ledgerRows);
-
-            $this->createJournalEntries(
-                tenantId: $tenantId,
-                purchaseId: $purchase->id,
-                total: Decimal::float($totalReceivedValue, Decimal::MONEY_SCALE),
-                userId: $userId,
-                now: $now,
-                transactionDate: $transactionDate
-            );
-
-            $hasRemaining = PurchaseItem::query()
-                ->where('tenant_id', $tenantId)
-                ->where('purchase_id', $purchase->id)
-                ->whereRaw('qty > received_qty')
-                ->exists();
-
-            $purchase->update([
-                'status' => $hasRemaining ? 'partially_received' : 'received',
-                'received_at' => $now,
-                'received_by' => $userId,
-                'transaction_date' => $transactionDate->toDateString(),
+            $item->update([
+                'received_qty' => Decimal::add($item->received_qty ?? 0, $receiveQty, Decimal::QTY_SCALE),
             ]);
 
-            event(new PurchaseReceived(
-                purchaseId: $purchase->id,
-                tenantId: $tenantId,
-                total: Decimal::float($totalReceivedValue, Decimal::MONEY_SCALE),
-                actorId: $userId,
-                occurredAt: $now->toIso8601String()
-            ));
+            InventoryBalance::query()->firstOrCreate(
+                [
+                    'tenant_id' => $tenantId,
+                    'product_id' => $item->product_id,
+                    'location_id' => $purchase->location_id,
+                    'product_variant_id' => $item->product_variant_id,
+                ],
+                [
+                    'qty_on_hand' => 0,
+                ]
+            );
 
-            return [
-                'status' => $purchase->status,
-                'received_total' => Decimal::float($totalReceivedValue, Decimal::MONEY_SCALE),
+            $balanceQuery = InventoryBalance::query()
+                ->where('tenant_id', $tenantId)
+                ->where('product_id', $item->product_id)
+                ->where('location_id', $purchase->location_id)
+                ->when($item->product_variant_id, function ($query) use ($item) {
+                    $query->where('product_variant_id', $item->product_variant_id);
+                }, function ($query) {
+                    $query->whereNull('product_variant_id');
+                });
+
+            $balanceQuery->increment('qty_on_hand', $receiveQty);
+
+            $balanceAfter = Decimal::qty($balanceQuery->value('qty_on_hand'));
+
+            $ledgerRows[] = [
+                'id' => (string) Str::uuid(),
+                'tenant_id' => $tenantId,
+                'product_id' => $item->product_id,
+                'product_variant_id' => $item->product_variant_id,
+                'location_id' => $purchase->location_id,
+                'reference_type' => 'purchase',
+                'reference_id' => $purchase->id,
+                'reference_item_id' => $item->id,
+                'qty_in' => $receiveQty,
+                'qty_out' => 0,
+                'balance_after' => $balanceAfter,
+                'created_at' => $now,
+                'created_by' => $userId,
             ];
-        });
+
+            $valuationService->receive(
+                tenantId: $tenantId,
+                productId: $item->product_id,
+                productVariantId: $item->product_variant_id,
+                locationId: $purchase->location_id,
+                qty: $receiveQty,
+                unitCost: Decimal::float($item->price, Decimal::COST_SCALE),
+                sourceType: 'purchase',
+                sourceId: $purchase->id,
+                sourceItemId: $item->id,
+                at: $now
+            );
+
+            $totalReceivedValue = Decimal::add(
+                $totalReceivedValue,
+                Decimal::multiply($receiveQty, $item->price, Decimal::MONEY_SCALE),
+                Decimal::MONEY_SCALE
+            );
+            $receivedCount++;
+        }
+
+        if ($receivedCount === 0) {
+            throw new RuntimeException('Tidak ada item yang diterima.');
+        }
+
+        StockLedger::query()->insert($ledgerRows);
+
+        $this->createJournalEntries(
+            tenantId: $tenantId,
+            purchaseId: $purchase->id,
+            paymentMethod: (string) ($purchase->payment_method ?? 'tempo'),
+            cashAccountId: $purchase->cash_account_id ? (string) $purchase->cash_account_id : null,
+            total: Decimal::float($totalReceivedValue, Decimal::MONEY_SCALE),
+            userId: $userId,
+            now: $now,
+            transactionDate: $transactionDate
+        );
+
+        $hasRemaining = PurchaseItem::query()
+            ->where('tenant_id', $tenantId)
+            ->where('purchase_id', $purchase->id)
+            ->whereRaw('qty > received_qty')
+            ->exists();
+
+        $purchase->update([
+            'status' => $hasRemaining ? PurchaseStatus::PARTIALLY_RECEIVED : PurchaseStatus::RECEIVED,
+            'received_at' => $now,
+            'received_by' => $userId,
+            'transaction_date' => $transactionDate->toDateString(),
+        ]);
+
+        event(new PurchaseReceived(
+            purchaseId: $purchase->id,
+            tenantId: $tenantId,
+            total: Decimal::float($totalReceivedValue, Decimal::MONEY_SCALE),
+            actorId: $userId,
+            occurredAt: $now->toIso8601String()
+        ));
+
+        return [
+            'status' => $purchase->status,
+            'received_total' => Decimal::float($totalReceivedValue, Decimal::MONEY_SCALE),
+        ];
+    }
+
+    private function resolveDefaultCashAccountId(string $tenantId): ?string
+    {
+        $mapping = AccountMapping::query()
+            ->where('tenant_id', $tenantId)
+            ->first(['cash_account_id']);
+
+        return $mapping?->cash_account_id ? (string) $mapping->cash_account_id : null;
     }
 
     private function createJournalEntries(
         string $tenantId,
         string $purchaseId,
+        string $paymentMethod,
+        ?string $cashAccountId,
         float $total,
         ?string $userId,
         CarbonImmutable $now,
@@ -295,6 +546,15 @@ class PurchaseService
             'created_at' => $now,
         ]);
 
+        $creditAccountId = $mapping->payable_account_id;
+        if (strtolower($paymentMethod) === 'tunai') {
+            $creditAccountId = $cashAccountId ?: $mapping->cash_account_id;
+        }
+
+        if (! $creditAccountId) {
+            throw new RuntimeException('Akun kredit purchase belum ditentukan.');
+        }
+
         $journalItems = [
             [
                 'id' => (string) Str::uuid(),
@@ -309,7 +569,7 @@ class PurchaseService
                 'id' => (string) Str::uuid(),
                 'journal_entry_id' => $journalEntryId,
                 'tenant_id' => $tenantId,
-                'account_id' => $mapping->payable_account_id,
+                'account_id' => $creditAccountId,
                 'debit' => 0,
                 'credit' => $total,
                 'is_reversal' => false,

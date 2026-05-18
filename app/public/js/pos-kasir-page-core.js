@@ -3,6 +3,7 @@ if (!window.__posKasirPageInitialized) {
 
     (() => {
         const tenantId = document.querySelector('meta[name="tenant-id"]')?.content || '';
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
         const headers = tenantId ? { 'X-Tenant-Id': tenantId } : {};
 
         const el = {
@@ -12,9 +13,35 @@ if (!window.__posKasirPageInitialized) {
             shiftOpened: document.getElementById('shift-opened-time'),
             quickClose: document.getElementById('quick-close-shift'),
             search: document.getElementById('search-input'),
+            customerQuickTrigger: document.getElementById('customer-quick-trigger'),
+            customerCurrentLabel: document.getElementById('customer-current-label'),
+            editingSaleBanner: document.getElementById('editing-sale-banner'),
+            editingSaleInvoice: document.getElementById('editing-sale-invoice'),
+            editingSaleBadge: document.getElementById('editing-sale-badge'),
+            editingSaleBadgeText: document.getElementById('editing-sale-badge-text'),
+            customerSheet: document.getElementById('customer-sheet'),
+            customerSheetClose: document.getElementById('customer-sheet-close'),
+            customerSheetOverlay: document.getElementById('customer-sheet-overlay'),
             customer: document.getElementById('customer-select'),
+            customerCreateTrigger: document.getElementById('customer-create-trigger'),
+            customerModal: document.getElementById('customer-modal'),
+            customerModalClose: document.getElementById('customer-modal-close'),
+            customerModalCancel: document.getElementById('customer-modal-cancel'),
+            customerNameInput: document.getElementById('customer-name-input'),
+            customerPhoneInput: document.getElementById('customer-phone-input'),
+            customerAddressInput: document.getElementById('customer-address-input'),
+            customerSaveButton: document.getElementById('customer-save-button'),
+            customerModalFeedback: document.getElementById('customer-modal-feedback'),
+            savedOrderQuickTrigger: document.getElementById('saved-order-quick-trigger'),
+            savedOrderCountLabel: document.getElementById('saved-order-count-label'),
+            savedOrderSheet: document.getElementById('saved-order-sheet'),
+            savedOrderSheetClose: document.getElementById('saved-order-sheet-close'),
+            savedOrderSheetOverlay: document.getElementById('saved-order-sheet-overlay'),
+            savedOrderSheetCount: document.getElementById('saved-order-sheet-count'),
             categoryFilters: document.getElementById('category-filters'),
             productGrid: document.getElementById('product-grid'),
+            productViewList: document.getElementById('product-view-list'),
+            productViewGrid: document.getElementById('product-view-grid'),
             cartList: document.getElementById('cart-list'),
             clearCart: document.getElementById('clear-cart'),
             itemCount: document.getElementById('item-count'),
@@ -50,6 +77,25 @@ if (!window.__posKasirPageInitialized) {
             summaryCaption: document.getElementById('summary-caption'),
             bottomNav: document.getElementById('bottom-nav'),
             shiftGuard: document.getElementById('shift-guard'),
+            customerFeatureNotice: document.getElementById('customer-feature-notice'),
+            saveOrder: document.getElementById('save-order'),
+            saveOrderLabel: document.getElementById('save-order-label'),
+            saveOrderModeBadge: document.getElementById('save-order-mode-badge'),
+            orderHolderName: document.getElementById('order-holder-name'),
+            orderNote: document.getElementById('order-note'),
+            savedOrderList: document.getElementById('saved-order-list'),
+            savedOrderEmpty: document.getElementById('saved-order-empty'),
+        };
+
+        const canUseCustomerFeature = Boolean(el.customer) && el.customer.dataset.featureEnabled !== 'false';
+        const productViewStorageKey = 'pos_product_view_mode';
+        const normalizeProductViewMode = (value) => value === 'grid' ? 'grid' : 'list';
+        const readStoredProductViewMode = () => {
+            try {
+                return normalizeProductViewMode(window.localStorage.getItem(productViewStorageKey));
+            } catch (_) {
+                return 'list';
+            }
         };
 
         const state = {
@@ -80,9 +126,19 @@ if (!window.__posKasirPageInitialized) {
             transactionDiscounts: [],
             fees: [],
             activeItemDiscountEditor: null,
+            productViewMode: readStoredProductViewMode(),
+            pendingShiftReconciliation: null,
+            savedOrders: [],
+            activeSavedOrderId: null,
+            replacingSaleId: null,
+            replacingTransactionDate: null,
+            pendingDraftRestore: false,
         };
 
         const cartStorageKey = 'pos_cart_draft';
+        const savedOrdersStorageKey = 'pos_saved_orders_v1';
+
+        const createLocalId = () => crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
 
         const formatCurrency = (value) => new Intl.NumberFormat('id-ID', {
             style: 'currency',
@@ -98,11 +154,59 @@ if (!window.__posKasirPageInitialized) {
             return Number.isInteger(numeric) ? String(numeric) : numeric.toFixed(2).replace(/\.00$/, '');
         };
 
+        const formatNumber = (value) => {
+            const numeric = Number(value || 0);
+            if (!Number.isFinite(numeric)) {
+                return '0';
+            }
+            return Number.isInteger(numeric) ? String(numeric) : numeric.toFixed(2).replace(/\.00$/, '');
+        };
+
         const setText = (target, value) => {
             if (target) {
                 target.textContent = value;
             }
         };
+
+        const syncEditingSaleBanner = () => {
+            const isEditingSale = Boolean(state.replacingSaleId);
+            el.editingSaleBanner?.classList.toggle('hidden', !isEditingSale);
+            el.editingSaleBadge?.classList.toggle('hidden', !isEditingSale);
+            if (!isEditingSale) {
+                return;
+            }
+
+            const saleLabel = state.replacingSaleId
+                ? `#${String(state.replacingSaleId).slice(0, 8).toUpperCase()}`
+                : '-';
+            setText(el.editingSaleInvoice, saleLabel);
+            setText(el.editingSaleBadgeText, 'Keranjang lama sudah dimuat dan siap diedit.');
+        };
+
+        const updateSaveOrderModeUi = () => {
+            const editing = Boolean(state.activeSavedOrderId);
+            setText(el.saveOrderLabel, editing ? 'Update Pesanan' : 'Simpan');
+            el.saveOrderModeBadge?.classList.toggle('hidden', !editing);
+
+            if (!el.saveOrder) {
+                return;
+            }
+
+            el.saveOrder.classList.toggle('bg-white', !editing);
+            el.saveOrder.classList.toggle('bg-amber-50', editing);
+            el.saveOrder.classList.toggle('text-slate-700', !editing);
+            el.saveOrder.classList.toggle('text-amber-800', editing);
+            el.saveOrder.classList.toggle('border', editing);
+            el.saveOrder.classList.toggle('border-amber-200', editing);
+            el.saveOrder.classList.toggle('shadow-sm', !editing);
+        };
+
+        const escapeHtml = (value) => String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/\"/g, '&quot;')
+            .replace(/'/g, '&#39;');
 
         const formatDateOnly = (value) => {
             if (!value) {
@@ -133,22 +237,145 @@ if (!window.__posKasirPageInitialized) {
             return price;
         };
 
+        const getProductInitials = (name) => {
+            const words = String(name || '')
+                .trim()
+                .split(/\s+/)
+                .filter(Boolean)
+                .slice(0, 2);
+            if (!words.length) {
+                return 'PR';
+            }
+            return words.map((word) => word.charAt(0).toUpperCase()).join('');
+        };
+
+        const getProductMeta = (product) => {
+            const parts = [];
+            if (product?.category_name) {
+                parts.push(product.category_name);
+            } else if (product?.product_type === 'raw_material') {
+                parts.push('Bahan');
+            } else if (product?.product_type === 'finished_good') {
+                parts.push('Produk');
+            }
+            if (product?.unit) {
+                parts.push(product.unit);
+            }
+            return parts.join(' / ') || 'Produk aktif';
+        };
+
+        const getProductStockText = (product, stock, isOut) => {
+            if (!product?.track_stock || stock === null) {
+                return 'Non stok';
+            }
+            if (isOut) {
+                return 'Stok habis';
+            }
+            return `Stok ${formatNumber(stock)}${product?.unit ? ` ${product.unit}` : ''}`;
+        };
+
+        const getProductVisualMarkup = (product, isOut) => {
+            if (product?.image_url) {
+                return `
+                    <div class="relative aspect-[4/3] overflow-hidden rounded-2xl bg-slate-100">
+                        <img alt="${product.name}" class="h-full w-full object-cover" src="${product.image_url}" />
+                        ${isOut ? `
+                            <div class="absolute inset-0 flex items-center justify-center bg-slate-950/25">
+                                <span class="rounded-full bg-white/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-rose-600">Habis</span>
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }
+
+            return `
+                <div class="flex aspect-[4/3] items-center justify-center rounded-2xl border border-dashed ${isOut ? 'border-rose-200 bg-rose-50 text-rose-500' : 'border-primary/15 bg-primary/5 text-primary'}">
+                    <div class="text-center">
+                        <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-sm font-black shadow-sm">${getProductInitials(product?.name)}</div>
+                        <p class="mt-2 text-[10px] font-bold uppercase tracking-[0.18em]">${isOut ? 'Stok habis' : 'Mode ringkas'}</p>
+                    </div>
+                </div>
+            `;
+        };
+
+        const getCartProductMedia = (product) => {
+            if (product?.image_url) {
+                return `
+                    <div class="h-14 w-14 overflow-hidden rounded-xl bg-slate-100">
+                        <img alt="${product.name}" class="h-full w-full object-cover" src="${product.image_url}" />
+                    </div>
+                `;
+            }
+
+            return `
+                <div class="flex h-14 w-14 items-center justify-center rounded-xl border border-dashed border-primary/15 bg-primary/5 text-sm font-black text-primary">
+                    ${getProductInitials(product?.name)}
+                </div>
+            `;
+        };
+
+        const syncProductViewControls = () => {
+            [
+                { node: el.productViewList, mode: 'list' },
+                { node: el.productViewGrid, mode: 'grid' },
+            ].forEach(({ node, mode }) => {
+                if (!node) {
+                    return;
+                }
+                const active = state.productViewMode === mode;
+                node.classList.toggle('bg-white', active);
+                node.classList.toggle('text-slate-900', active);
+                node.classList.toggle('shadow-sm', active);
+                node.classList.toggle('text-slate-500', !active);
+                node.setAttribute('aria-pressed', active ? 'true' : 'false');
+            });
+        };
+
+        const syncProductGridLayout = () => {
+            if (!el.productGrid) {
+                return;
+            }
+            el.productGrid.className = state.productViewMode === 'grid'
+                ? 'grid grid-cols-2 gap-3'
+                : 'grid grid-cols-1 gap-2';
+        };
+
+        const setProductViewMode = (mode) => {
+            state.productViewMode = normalizeProductViewMode(mode);
+            try {
+                window.localStorage.setItem(productViewStorageKey, state.productViewMode);
+            } catch (_) {
+                // ignore storage failures
+            }
+            syncProductViewControls();
+            syncProductGridLayout();
+            renderProducts();
+        };
+
         const saveCartDraft = () => {
             const items = [...state.cart.values()].map((item) => ({
                 product_id: item.product.id,
                 qty: item.qty,
                 discounts: Array.isArray(item.discounts) ? item.discounts : [],
+                note: String(item.note || '').trim(),
             }));
             if (!items.length) {
+                if (state.pendingDraftRestore) {
+                    return;
+                }
                 sessionStorage.removeItem(cartStorageKey);
                 return;
             }
             sessionStorage.setItem(cartStorageKey, JSON.stringify({
                 items,
-                customer_id: el.customer.value || null,
+                customer_id: el.customer ? (el.customer.value || null) : null,
                 fees: state.fees,
                 selected_promos: [...state.selectedPromos],
                 transaction_discounts: state.transactionDiscounts,
+                order_holder_name: el.orderHolderName ? String(el.orderHolderName.value || '').trim() : '',
+                order_note: el.orderNote ? String(el.orderNote.value || '').trim() : '',
+                replace_sale_id: state.replacingSaleId || null,
+                transaction_date: state.replacingTransactionDate || null,
                 updated_at: new Date().toISOString(),
             }));
         };
@@ -159,6 +386,107 @@ if (!window.__posKasirPageInitialized) {
                 return raw ? JSON.parse(raw) : null;
             } catch (_) {
                 return null;
+            }
+        };
+
+        const loadSavedOrders = () => {
+            try {
+                const raw = localStorage.getItem(savedOrdersStorageKey);
+                const parsed = raw ? JSON.parse(raw) : [];
+                if (!Array.isArray(parsed)) {
+                    return [];
+                }
+                return parsed
+                    .map((entry) => ({
+                        id: String(entry?.id || createLocalId()),
+                        holder_name: String(entry?.holder_name || '').trim(),
+                        note: String(entry?.note || '').trim(),
+                        items: Array.isArray(entry?.items) ? entry.items : [],
+                        fees: Array.isArray(entry?.fees) ? entry.fees : [],
+                        selected_promos: Array.isArray(entry?.selected_promos) ? entry.selected_promos : [],
+                        transaction_discounts: Array.isArray(entry?.transaction_discounts) ? entry.transaction_discounts : [],
+                        customer_id: entry?.customer_id || null,
+                        total: Number(entry?.total || 0),
+                        item_count: Number(entry?.item_count || 0),
+                        created_at: entry?.created_at || new Date().toISOString(),
+                    }))
+                    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+            } catch (_) {
+                return [];
+            }
+        };
+
+        const persistSavedOrders = () => {
+            try {
+                localStorage.setItem(savedOrdersStorageKey, JSON.stringify(state.savedOrders));
+            } catch (_) {
+                // ignore storage failures
+            }
+        };
+
+        const upsertSavedOrder = (savedOrder) => {
+            const normalized = {
+                ...savedOrder,
+                id: String(savedOrder?.id || createLocalId()),
+            };
+            state.savedOrders = [normalized, ...state.savedOrders.filter((entry) => String(entry.id) !== normalized.id)];
+            persistSavedOrders();
+            renderSavedOrders();
+        };
+
+        const loadSavedOrdersFromApi = async () => {
+            const response = await fetch('/api/v1/pos/saved-orders?limit=100', { headers });
+            if (!response.ok) {
+                const mapped = await window.PosUi.mapApiError(response, 'Gagal memuat pesanan tersimpan.');
+                throw new Error(mapped.message);
+            }
+            const payload = await response.json().catch(() => ({}));
+            return Array.isArray(payload.saved_orders)
+                ? payload.saved_orders.map((entry) => ({
+                    ...entry,
+                    id: String(entry?.id || createLocalId()),
+                }))
+                : [];
+        };
+
+        const saveOrderToApi = async (payload, savedOrderId = null) => {
+            const response = await fetch(savedOrderId ? `/api/v1/pos/saved-orders/${savedOrderId}` : '/api/v1/pos/saved-orders', {
+                method: savedOrderId ? 'PUT' : 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    ...(csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}),
+                    ...headers,
+                },
+                body: JSON.stringify(payload),
+            });
+
+            if (!response.ok) {
+                const mapped = await window.PosUi.mapApiError(response, 'Gagal menyimpan pesanan.');
+                throw new Error(mapped.message);
+            }
+
+            const data = await response.json().catch(() => ({}));
+            return data.saved_order || null;
+        };
+
+        const deleteSavedOrderFromApi = async (id) => {
+            const response = await fetch(`/api/v1/pos/saved-orders/${id}`, {
+                method: 'DELETE',
+                credentials: 'same-origin',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    ...(csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}),
+                    ...headers,
+                },
+            });
+
+            if (!response.ok && response.status !== 404) {
+                const mapped = await window.PosUi.mapApiError(response, 'Gagal menghapus pesanan.');
+                throw new Error(mapped.message);
             }
         };
 
@@ -288,16 +616,18 @@ if (!window.__posKasirPageInitialized) {
         };
 
         const renderProducts = () => {
+            syncProductViewControls();
+            syncProductGridLayout();
             el.productGrid.innerHTML = '';
             const products = state.products;
 
             if (!products.length && state.productsLoading) {
-                el.productGrid.innerHTML = '<div class="text-sm text-slate-400">Memuat katalog produk...</div>';
+                el.productGrid.innerHTML = '<div class="col-span-full rounded-2xl bg-white px-4 py-5 text-sm text-slate-400 shadow-sm">Memuat katalog produk...</div>';
                 return;
             }
 
             if (!products.length) {
-                el.productGrid.innerHTML = '<div class="text-sm text-slate-400">Produk tidak ditemukan.</div>';
+                el.productGrid.innerHTML = '<div class="col-span-full rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-5 text-sm text-slate-400">Produk tidak ditemukan.</div>';
                 return;
             }
 
@@ -307,27 +637,63 @@ if (!window.__posKasirPageInitialized) {
                 const card = document.createElement('button');
                 card.type = 'button';
                 const isOut = product.track_stock && stock !== null && stock <= 0;
-                card.className = `group relative flex flex-col overflow-hidden rounded-2xl bg-white dark:bg-slate-900 ios-shadow border ${item ? 'border-primary/40' : 'border-slate-100 dark:border-slate-800'} ${isOut ? 'opacity-60 grayscale' : 'active:scale-[0.98] transition-transform'} text-left`;
-                const image = product.image_url || 'https://placehold.co/240x240?text=Produk';
-                card.innerHTML = `
-                    <div class="aspect-square w-full bg-slate-100 dark:bg-slate-800 relative">
-                        <img alt="${product.name}" class="h-full w-full object-cover" src="${image}" />
-                        ${isOut ? `
-                            <div class="absolute inset-0 flex items-center justify-center bg-black/5">
-                                <span class="rounded bg-slate-800/80 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-white">Habis</span>
+                const unitPrice = resolveUnitPrice(product, 1);
+                const metaLine = getProductMeta(product);
+                const stockText = getProductStockText(product, stock, isOut);
+                const isListMode = state.productViewMode === 'list';
+                card.className = isListMode
+                    ? `group relative overflow-hidden rounded-2xl border bg-white px-3 py-3 text-left shadow-sm ${item ? 'border-primary/35 ring-1 ring-primary/10' : 'border-slate-200'} ${isOut ? 'opacity-70' : 'transition-transform active:scale-[0.99]'}` 
+                    : `group relative flex flex-col overflow-hidden rounded-3xl border bg-white p-3 text-left shadow-sm ${item ? 'border-primary/35 ring-1 ring-primary/10' : 'border-slate-200'} ${isOut ? 'opacity-70' : 'transition-transform active:scale-[0.98]'}`;
+
+                if (isListMode) {
+                    card.innerHTML = `
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="min-w-0 flex-1">
+                                <p class="truncate text-sm font-bold text-slate-900">${product.name}</p>
+                                <p class="mt-1 text-[11px] text-slate-500">${metaLine}</p>
                             </div>
-                        ` : ''}
-                    </div>
-                    <div class="p-3">
-                        <p class="text-sm font-semibold text-slate-700 dark:text-slate-200 line-clamp-1">${product.name}</p>
-                        <p class="mt-1 text-sm font-bold text-primary">${formatCurrency(resolveUnitPrice(product, 1))}</p>
-                    </div>
-                    <div class="absolute bottom-2 right-2">
-                        <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                            <span class="material-symbols-outlined text-lg font-bold">add</span>
+                            <div class="shrink-0 text-right">
+                                <p class="text-sm font-black text-slate-900">${formatCurrency(unitPrice)}</p>
+                                <p class="mt-1 text-[10px] font-semibold ${isOut ? 'text-rose-600' : 'text-slate-400'}">${stockText}</p>
+                            </div>
                         </div>
-                    </div>
-                `;
+                        <div class="mt-3 flex items-center justify-between gap-3">
+                            <span class="inline-flex items-center gap-1 rounded-full ${item ? 'bg-primary/10 text-primary' : 'bg-slate-100 text-slate-500'} px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em]">
+                                <span class="material-symbols-outlined text-sm">${item ? 'shopping_bag' : 'sell'}</span>
+                                ${item ? `${item.qty} di keranjang` : 'Siap tambah'}
+                            </span>
+                            <span class="inline-flex h-9 min-w-[92px] items-center justify-center gap-1 rounded-xl ${isOut ? 'bg-slate-100 text-slate-400' : 'bg-primary text-white'} px-3 text-xs font-bold">
+                                <span class="material-symbols-outlined text-base">${isOut ? 'block' : 'add'}</span>
+                                ${isOut ? 'Habis' : 'Tambah'}
+                            </span>
+                        </div>
+                    `;
+                } else {
+                    card.innerHTML = `
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="min-w-0 flex-1">
+                                <p class="line-clamp-2 text-sm font-bold text-slate-900">${product.name}</p>
+                                <p class="mt-1 text-[11px] text-slate-500">${metaLine}</p>
+                            </div>
+                            <span class="inline-flex h-8 min-w-[32px] items-center justify-center rounded-xl ${item ? 'bg-primary text-white' : 'bg-primary/10 text-primary'} px-2 text-xs font-black">
+                                ${item ? item.qty : '+'}
+                            </span>
+                        </div>
+                        <div class="mt-3">
+                            ${getProductVisualMarkup(product, isOut)}
+                        </div>
+                        <div class="mt-3 flex items-end justify-between gap-3">
+                            <div>
+                                <p class="text-sm font-black text-slate-900">${formatCurrency(unitPrice)}</p>
+                                <p class="mt-1 text-[10px] font-semibold ${isOut ? 'text-rose-600' : 'text-slate-400'}">${stockText}</p>
+                            </div>
+                            <span class="inline-flex items-center gap-1 rounded-full ${isOut ? 'bg-slate-100 text-slate-400' : 'bg-slate-100 text-slate-700'} px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em]">
+                                <span class="material-symbols-outlined text-sm">${isOut ? 'block' : 'touch_app'}</span>
+                                ${isOut ? 'Habis' : 'Tap pilih'}
+                            </span>
+                        </div>
+                    `;
+                }
                 card.addEventListener('click', () => addToCart(product));
                 el.productGrid.appendChild(card);
             });
@@ -335,7 +701,7 @@ if (!window.__posKasirPageInitialized) {
             if (state.productPagination.hasMore) {
                 const loadMore = document.createElement('button');
                 loadMore.type = 'button';
-                loadMore.className = 'col-span-full mt-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-primary';
+                loadMore.className = 'col-span-full mt-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-primary shadow-sm';
                 loadMore.textContent = state.productsLoading ? 'Memuat...' : 'Muat produk lainnya';
                 loadMore.disabled = state.productsLoading;
                 loadMore.addEventListener('click', () => loadProducts({ page: state.productPagination.currentPage + 1, append: true }));
@@ -365,6 +731,7 @@ if (!window.__posKasirPageInitialized) {
                 qty,
                 unit_price: unitPrice,
                 discounts: existing?.discounts || [],
+                note: String(existing?.note || '').trim(),
             });
             renderCart();
             renderProducts();
@@ -397,6 +764,7 @@ if (!window.__posKasirPageInitialized) {
                     ...existing,
                     qty: next,
                     unit_price: resolveUnitPrice(existing.product, next),
+                    note: String(existing.note || '').trim(),
                 });
             }
             renderCart();
@@ -467,6 +835,28 @@ if (!window.__posKasirPageInitialized) {
             };
         };
 
+        const getCheckoutBlockReason = (items = [...state.cart.values()]) => {
+            if (state.pendingShiftReconciliation) {
+                return state.pendingShiftReconciliation.message || 'Selesaikan kas akhir shift kemarin terlebih dahulu.';
+            }
+            if (!state.shiftId) {
+                return 'Buka shift dulu sebelum transaksi.';
+            }
+            if (!state.locationId) {
+                return 'Lokasi transaksi belum siap.';
+            }
+            if (!state.registerId) {
+                return 'Register transaksi belum siap.';
+            }
+            if (!state.accountMapping?.cash_account_id) {
+                return 'Akun kas belum siap.';
+            }
+            if (!items.length) {
+                return 'Tambahkan produk ke keranjang.';
+            }
+            return null;
+        };
+
         const updateTotals = (pricing = computeCartPricing()) => {
             const items = [...state.cart.values()];
             const subtotal = pricing.subtotal;
@@ -477,6 +867,9 @@ if (!window.__posKasirPageInitialized) {
             setText(el.cartBadge, itemCount);
             setText(el.cartCountLabel, itemCount);
             setText(el.summaryCount, itemCount);
+            if (el.bottomNav) {
+                el.bottomNav.classList.toggle('hidden', itemCount === 0);
+            }
             setText(el.subtotal, formatCurrency(subtotal));
             setText(el.itemDiscountAmount, formatCurrency(pricing.itemDiscountTotal));
             setText(el.transactionDiscountAmount, formatCurrency(pricing.transactionDiscountTotal));
@@ -485,17 +878,7 @@ if (!window.__posKasirPageInitialized) {
             setText(el.feeTotal, formatCurrency(pricing.feeTotal));
             setText(el.total, formatCurrency(total));
             setText(el.summaryTotal, formatCurrency(total));
-            const checkoutBlockReason = !state.shiftId
-                ? 'Buka shift dulu sebelum transaksi.'
-                : !state.locationId
-                    ? 'Lokasi transaksi belum siap.'
-                    : !state.registerId
-                        ? 'Register transaksi belum siap.'
-                        : !state.accountMapping?.cash_account_id
-                            ? 'Akun kas belum siap.'
-                            : items.length === 0
-                                ? 'Tambahkan produk ke keranjang.'
-                                : null;
+            const checkoutBlockReason = getCheckoutBlockReason(items);
             const isCheckoutDisabled = checkoutBlockReason !== null;
             el.checkout.disabled = isCheckoutDisabled;
             el.checkout.classList.toggle('opacity-60', el.checkout.disabled);
@@ -509,6 +892,16 @@ if (!window.__posKasirPageInitialized) {
                 el.checkoutCompact.classList.toggle('bg-primary', !el.checkout.disabled);
                 el.checkoutCompact.classList.toggle('text-white', !el.checkout.disabled);
                 el.checkoutCompact.innerHTML = `${isCheckoutDisabled ? 'Belum Siap' : 'Lanjut Bayar'} <span class="material-symbols-outlined text-lg">chevron_right</span>`;
+            }
+            if (el.paymentLink) {
+                el.paymentLink.disabled = isCheckoutDisabled;
+                el.paymentLink.classList.toggle('opacity-50', isCheckoutDisabled);
+                el.paymentLink.classList.toggle('cursor-not-allowed', isCheckoutDisabled);
+                el.paymentLink.classList.toggle('border-slate-200', isCheckoutDisabled);
+                el.paymentLink.classList.toggle('text-slate-400', isCheckoutDisabled);
+                el.paymentLink.classList.toggle('border-primary/20', !isCheckoutDisabled);
+                el.paymentLink.classList.toggle('text-primary', !isCheckoutDisabled);
+                el.paymentLink.title = checkoutBlockReason ?? 'Lanjut ke pembayaran';
             }
             const activePromoCount = state.selectedPromos.size + state.transactionDiscounts.filter((discount) => Number(discount.value || 0) > 0).length;
             const activeFeeCount = state.fees.filter((fee) => (fee.name || '').trim() !== '' || Number(fee.value || 0) > 0).length;
@@ -537,18 +930,17 @@ if (!window.__posKasirPageInitialized) {
                     const { item } = line;
                     const itemDiscount = Array.isArray(item.discounts) ? item.discounts[0] : null;
                     const itemDiscountSummary = summarizeDiscount(itemDiscount);
+                    const itemNote = String(item.note || '').trim();
                     const isDiscountEditorOpen = state.activeItemDiscountEditor === item.product.id;
                     const row = document.createElement('div');
-                    const image = item.product.image_url || 'https://placehold.co/120x120?text=Produk';
                     row.className = 'rounded-2xl bg-slate-50 dark:bg-slate-800/50 p-3 border border-slate-100 dark:border-slate-700';
                     row.innerHTML = `
                         <div class="flex items-center gap-4">
-                            <div class="h-14 w-14 overflow-hidden rounded-xl bg-slate-100">
-                                <img alt="${item.product.name}" class="h-full w-full object-cover" src="${image}" />
-                            </div>
+                            ${getCartProductMedia(item.product)}
                             <div class="min-w-0 flex-1">
                                 <h4 class="text-sm font-bold text-slate-800 dark:text-slate-100">${item.product.name}</h4>
                                 <p class="text-[11px] text-slate-500">${formatCurrency(item.unit_price)}</p>
+                                ${itemNote ? `<p class="mt-1 line-clamp-2 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-medium text-amber-800">Catatan: ${escapeHtml(itemNote)}</p>` : ''}
                                 <div class="mt-2 flex flex-wrap items-center gap-2">
                                     <button class="item-discount-toggle inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700" data-id="${item.product.id}" type="button">
                                         <span class="material-symbols-outlined text-sm">sell</span>
@@ -579,6 +971,12 @@ if (!window.__posKasirPageInitialized) {
                                 <span class="text-sm font-bold">${formatCurrency(line.lineNetSubtotal)}</span>
                             </div>
                         </div>
+                        <div class="mt-3 space-y-1">
+                            <label class="block space-y-1">
+                                <span class="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">Catatan item</span>
+                                <textarea class="item-note-input w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 focus:border-primary focus:ring-primary" data-id="${item.product.id}" rows="2" maxlength="500" placeholder="Misal: gula sedikit">${escapeHtml(item.note || '')}</textarea>
+                            </label>
+                        </div>
                         <div class="${isDiscountEditorOpen ? 'mt-3' : 'hidden'}" data-item-discount-editor="${item.product.id}">
                             <div class="flex items-center gap-2 rounded-2xl border border-emerald-100 bg-white p-2">
                                 <select class="item-discount-type w-16 rounded-xl border-slate-200 bg-white px-2 py-2 text-xs" data-id="${item.product.id}">
@@ -599,6 +997,230 @@ if (!window.__posKasirPageInitialized) {
             saveCartDraft();
         };
 
+        const buildSavedOrderCard = (order, options = {}) => {
+            const holderName = escapeHtml(order.holder_name || 'Tanpa nama');
+            const noteText = escapeHtml(order.note || '');
+            const itemNotes = Array.isArray(order.items)
+                ? order.items.map((item) => String(item.note || '').trim()).filter(Boolean)
+                : [];
+            const itemNotePreview = itemNotes.length
+                ? escapeHtml(itemNotes.slice(0, 2).join(' • ') + (itemNotes.length > 2 ? ` • +${itemNotes.length - 2} lagi` : ''))
+                : '';
+            const compact = options.compact === true;
+            const deleteButton = compact ? '' : `
+                <button class="saved-order-delete inline-flex items-center gap-1 rounded-lg bg-rose-50 px-2 py-1 text-[10px] font-bold text-rose-600" data-id="${order.id}" type="button">
+                    <span class="material-symbols-outlined text-sm">delete</span>
+                    Hapus
+                </button>
+            `;
+
+            return `
+                <div class="flex items-start justify-between gap-2">
+                    <div class="min-w-0 flex-1">
+                        <p class="truncate text-xs font-bold text-slate-900">${holderName}</p>
+                        <p class="mt-0.5 text-[11px] text-slate-500">${order.item_count} item • ${formatCurrency(order.total)}</p>
+                        ${order.note ? `<p class="mt-1 line-clamp-2 text-[11px] text-slate-500">${noteText}</p>` : ''}
+                        ${itemNotePreview ? `<p class="mt-1 line-clamp-2 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-medium text-amber-800">Catatan item: ${itemNotePreview}</p>` : ''}
+                    </div>
+                    <div class="flex shrink-0 items-center gap-1">
+                        <button class="saved-order-load inline-flex items-center gap-1 rounded-lg bg-primary/10 px-2 py-1 text-[10px] font-bold text-primary" data-id="${order.id}" type="button">
+                            <span class="material-symbols-outlined text-sm">restart_alt</span>
+                            Muat
+                        </button>
+                        ${deleteButton}
+                    </div>
+                </div>
+            `;
+        };
+
+        const renderSavedOrders = () => {
+            if (el.savedOrderCountLabel) {
+                el.savedOrderCountLabel.textContent = String(state.savedOrders.length);
+            }
+            if (el.savedOrderSheetCount) {
+                el.savedOrderSheetCount.textContent = String(state.savedOrders.length);
+            }
+            if (!el.savedOrderList || !el.savedOrderEmpty) {
+                return;
+            }
+
+            el.savedOrderList.innerHTML = '';
+            el.savedOrderEmpty.classList.toggle('hidden', state.savedOrders.length > 0);
+
+            state.savedOrders.forEach((order) => {
+                const row = document.createElement('div');
+                row.className = 'rounded-2xl border border-slate-200 bg-white px-3 py-3';
+                row.innerHTML = buildSavedOrderCard(order);
+                el.savedOrderList.appendChild(row);
+            });
+
+        };
+
+        const clearCurrentOrder = () => {
+            state.cart.clear();
+            state.fees = [];
+            state.selectedPromos.clear();
+            state.transactionDiscounts = [];
+            state.activeSavedOrderId = null;
+            state.replacingSaleId = null;
+            state.replacingTransactionDate = null;
+            updateSaveOrderModeUi();
+            syncEditingSaleBanner();
+            if (el.orderHolderName) {
+                el.orderHolderName.value = '';
+            }
+            if (el.orderNote) {
+                el.orderNote.value = '';
+            }
+            sessionStorage.removeItem(cartStorageKey);
+            state.activeItemDiscountEditor = null;
+            renderFeeList();
+            renderTransactionDiscountList();
+            renderPromoList();
+            renderCart();
+            renderProducts();
+        };
+
+        const saveCurrentOrder = () => {
+            if (state.shiftBlocked) {
+                alert('Shift belum aktif. Silakan buka shift terlebih dahulu.');
+                return;
+            }
+
+            const holderName = String(el.orderHolderName?.value || '').trim();
+            if (!holderName) {
+                alert('Isi Atas Nama sebelum menyimpan pesanan.');
+                el.orderHolderName?.focus();
+                return;
+            }
+
+            const items = [...state.cart.values()].map((item) => ({
+                product_id: item.product.id,
+                qty: item.qty,
+                discounts: Array.isArray(item.discounts) ? item.discounts : [],
+                note: String(item.note || '').trim(),
+            }));
+
+            if (!items.length) {
+                alert('Keranjang masih kosong. Tambahkan produk terlebih dahulu.');
+                return;
+            }
+
+            const pricing = computeCartPricing();
+            const orderPayload = {
+                branch_id: state.branchId,
+                location_id: state.locationId,
+                shift_id: state.shiftId,
+                register_id: state.registerId,
+                customer_id: el.customer ? (el.customer.value || null) : null,
+                holder_name: holderName,
+                note: String(el.orderNote?.value || '').trim(),
+                items,
+                fees: state.fees,
+                selected_promos: [...state.selectedPromos],
+                transaction_discounts: state.transactionDiscounts,
+                total: Number(pricing.total || 0),
+                item_count: Number(pricing.itemCount || 0),
+            };
+
+            const savedOrderId = state.activeSavedOrderId;
+
+            const fallbackOrder = {
+                id: String(savedOrderId || createLocalId()),
+                holder_name: orderPayload.holder_name,
+                note: orderPayload.note,
+                items: orderPayload.items,
+                fees: orderPayload.fees,
+                selected_promos: orderPayload.selected_promos,
+                transaction_discounts: orderPayload.transaction_discounts,
+                customer_id: orderPayload.customer_id,
+                total: orderPayload.total,
+                item_count: orderPayload.item_count,
+                created_at: new Date().toISOString(),
+            };
+
+            window.PosUi.runWithSubmitGuard(el.saveOrder, async () => {
+                try {
+                    const savedOrder = await saveOrderToApi(orderPayload, savedOrderId);
+                    upsertSavedOrder(savedOrder || fallbackOrder);
+                    clearCurrentOrder();
+                    alert('Pesanan berhasil disimpan.');
+                } catch (_) {
+                    upsertSavedOrder(fallbackOrder);
+                    clearCurrentOrder();
+                    alert('Pesanan disimpan lokal karena server belum merespons.');
+                }
+            });
+        };
+
+        const applySavedOrder = async (savedOrder) => {
+            if (!savedOrder || !Array.isArray(savedOrder.items) || !savedOrder.items.length) {
+                return;
+            }
+
+            const missingProductIds = [...new Set(savedOrder.items.map((item) => item.product_id))]
+                .filter((productId) => !state.products.some((product) => product.id === productId));
+
+            if (missingProductIds.length) {
+                await loadProducts({ ids: missingProductIds });
+            }
+
+            const productMap = new Map(state.products.map((product) => [product.id, product]));
+
+            state.cart.clear();
+            savedOrder.items.forEach((item) => {
+                const product = productMap.get(item.product_id);
+                if (!product) {
+                    return;
+                }
+                const qty = Math.max(1, Number(item.qty || 1));
+                state.cart.set(product.id, {
+                    product,
+                    qty,
+                    unit_price: resolveUnitPrice(product, qty),
+                    discounts: Array.isArray(item.discounts) ? item.discounts : [],
+                    note: String(item.note || '').trim(),
+                });
+            });
+            state.activeSavedOrderId = savedOrder?.id ? String(savedOrder.id) : null;
+            updateSaveOrderModeUi();
+
+            state.fees = Array.isArray(savedOrder.fees) ? savedOrder.fees.map((fee) => ({
+                id: fee.id || createLocalId(),
+                name: fee.name || '',
+                type: fee.type === 'percent' ? 'percent' : 'amount',
+                value: Number(fee.value || 0),
+                product_id: fee.product_id || null,
+            })) : [];
+            state.selectedPromos = new Set(Array.isArray(savedOrder.selected_promos) ? savedOrder.selected_promos : []);
+            state.transactionDiscounts = Array.isArray(savedOrder.transaction_discounts)
+                ? savedOrder.transaction_discounts.map((discount) => ({
+                    id: discount.id || createLocalId(),
+                    type: discount.type === 'percent' ? 'percent' : 'fixed',
+                    value: Number(discount.value || 0),
+                }))
+                : [];
+
+            if (el.customer) {
+                el.customer.value = savedOrder.customer_id || '';
+                renderCustomers();
+            }
+            if (el.orderHolderName) {
+                el.orderHolderName.value = savedOrder.holder_name || '';
+            }
+            if (el.orderNote) {
+                el.orderNote.value = savedOrder.note || '';
+            }
+
+            state.activeItemDiscountEditor = null;
+            renderFeeList();
+            renderTransactionDiscountList();
+            renderPromoList();
+            renderCart();
+            renderProducts();
+            closeSavedOrderSheet();
+        };
+
         const openCart = () => {
             if (state.shiftBlocked) {
                 alert('Shift belum aktif. Silakan buka shift terlebih dahulu.');
@@ -611,7 +1233,9 @@ if (!window.__posKasirPageInitialized) {
 
         const closeCart = () => {
             el.cartOverlay.classList.add('hidden');
-            el.bottomNav?.classList.remove('hidden');
+            if (el.bottomNav && state.cart.size > 0) {
+                el.bottomNav.classList.remove('hidden');
+            }
         };
 
         const setSellingEnabled = (enabled) => {
@@ -620,7 +1244,9 @@ if (!window.__posKasirPageInitialized) {
 
             el.shiftGuard.classList.toggle('hidden', enabled);
             el.search.disabled = disabled;
-            el.customer.disabled = disabled;
+            if (el.customer) {
+                el.customer.disabled = disabled || !canUseCustomerFeature;
+            }
             el.categoryFilters.classList.toggle('pointer-events-none', disabled);
             el.productGrid.classList.toggle('pointer-events-none', disabled);
             el.categoryFilters.classList.toggle('opacity-60', disabled);
@@ -641,6 +1267,10 @@ if (!window.__posKasirPageInitialized) {
         };
 
         const renderCustomers = () => {
+            if (!el.customer) {
+                return;
+            }
+            const selectedValue = el.customer.value || '';
             el.customer.innerHTML = '<option value="">Pelanggan Umum</option>';
             state.customers.forEach((customer) => {
                 const option = document.createElement('option');
@@ -648,6 +1278,14 @@ if (!window.__posKasirPageInitialized) {
                 option.textContent = customer.name;
                 el.customer.appendChild(option);
             });
+            el.customer.value = state.customers.some((customer) => customer.id === selectedValue)
+                ? selectedValue
+                : '';
+
+            const currentCustomer = state.customers.find((customer) => String(customer.id) === String(el.customer.value || ''));
+            if (el.customerCurrentLabel) {
+                el.customerCurrentLabel.textContent = currentCustomer?.name || 'Pelanggan Umum';
+            }
         };
 
         const loadBootstrap = async () => {
@@ -677,13 +1315,128 @@ if (!window.__posKasirPageInitialized) {
         };
 
         const loadCustomers = async () => {
-            const response = await fetch('/api/v1/customers?lite=1&limit=100', { headers });
+            if (!el.customer || !canUseCustomerFeature) {
+                if (el.customerFeatureNotice) {
+                    el.customerFeatureNotice.textContent = el.customerFeatureNotice.textContent || 'Fitur pelanggan POS belum aktif untuk paket ini.';
+                }
+                return;
+            }
+
+            const response = await fetch('/api/v1/pos/customers?lite=1&limit=100', { headers });
             if (!response.ok) {
                 return;
             }
             const payload = await response.json().catch(() => ({}));
             state.customers = payload.customers || [];
             renderCustomers();
+        };
+
+        const setCustomerModalFeedback = (message = '', tone = 'neutral') => {
+            if (!el.customerModalFeedback) {
+                return;
+            }
+
+            if (!message) {
+                el.customerModalFeedback.className = 'hidden rounded-xl border px-3 py-2 text-xs font-medium';
+                el.customerModalFeedback.textContent = '';
+                return;
+            }
+
+            const toneClass = tone === 'error'
+                ? 'border-rose-200 bg-rose-50 text-rose-700'
+                : 'border-emerald-200 bg-emerald-50 text-emerald-700';
+
+            el.customerModalFeedback.className = `rounded-xl border px-3 py-2 text-xs font-medium ${toneClass}`;
+            el.customerModalFeedback.textContent = message;
+        };
+
+        const resetCustomerModal = () => {
+            if (el.customerNameInput) {
+                el.customerNameInput.value = '';
+            }
+            if (el.customerPhoneInput) {
+                el.customerPhoneInput.value = '';
+            }
+            if (el.customerAddressInput) {
+                el.customerAddressInput.value = '';
+            }
+            setCustomerModalFeedback('');
+        };
+
+        const closeCustomerModal = () => {
+            if (!el.customerModal) {
+                return;
+            }
+            el.customerModal.classList.add('hidden');
+            resetCustomerModal();
+        };
+
+        const openCustomerSheet = () => {
+            if (!el.customerSheet) {
+                return;
+            }
+            el.customerSheet.classList.remove('hidden');
+        };
+
+        const closeCustomerSheet = () => {
+            el.customerSheet?.classList.add('hidden');
+        };
+
+        const openCustomerModal = () => {
+            if (!el.customerModal || !canUseCustomerFeature) {
+                return;
+            }
+            el.customerModal.classList.remove('hidden');
+            closeCustomerSheet();
+            setCustomerModalFeedback('');
+            setTimeout(() => {
+                el.customerNameInput?.focus();
+            }, 50);
+        };
+
+        const openSavedOrderSheet = () => {
+            el.savedOrderSheet?.classList.remove('hidden');
+        };
+
+        const closeSavedOrderSheet = () => {
+            el.savedOrderSheet?.classList.add('hidden');
+        };
+
+        const createCustomer = async () => {
+            const name = String(el.customerNameInput?.value || '').trim();
+            const phone = String(el.customerPhoneInput?.value || '').trim();
+            const address = String(el.customerAddressInput?.value || '').trim();
+
+            if (!name) {
+                setCustomerModalFeedback('Nama pelanggan wajib diisi.', 'error');
+                el.customerNameInput?.focus();
+                return;
+            }
+
+            const response = await fetch('/api/v1/pos/customers', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    ...(csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}),
+                    ...headers,
+                },
+                body: JSON.stringify({
+                    name,
+                    phone,
+                    address,
+                }),
+            });
+
+            if (!response.ok) {
+                const mapped = await window.PosUi.mapApiError(response, 'Gagal menyimpan pelanggan.');
+                throw new Error(mapped.message);
+            }
+
+            const payload = await response.json().catch(() => ({}));
+            return payload.customer || null;
         };
 
         const loadProducts = async ({ page = 1, append = false, ids = [] } = {}) => {
@@ -749,7 +1502,16 @@ if (!window.__posKasirPageInitialized) {
                 await Promise.all([
                     loadCustomers(),
                     loadProducts({ page: 1, append: false }),
+                    (async () => {
+                        try {
+                            state.savedOrders = await loadSavedOrdersFromApi();
+                            persistSavedOrders();
+                        } catch (_) {
+                            // keep latest local snapshot when API is unavailable
+                        }
+                    })(),
                 ]);
+                renderSavedOrders();
             } catch (_) {
                 // keep current state if refresh fails
             }
@@ -924,6 +1686,7 @@ if (!window.__posKasirPageInitialized) {
             state.categories = data.categories || [];
             state.registers = data.registers || [];
             state.accountMapping = data.account_mapping || null;
+            state.pendingShiftReconciliation = data.pending_shift_reconciliation || null;
             if (data.catalog?.default_product_page_size) {
                 state.productPagination.perPage = Number(data.catalog.default_product_page_size) || 24;
             }
@@ -936,7 +1699,16 @@ if (!window.__posKasirPageInitialized) {
                 || branchRegisters[0]?.id
                 || null;
 
-            const shifts = data.shifts || [];
+            const shifts = [...(data.shifts || [])].sort((left, right) => {
+                const leftTime = left?.opened_at ? Date.parse(left.opened_at) : 0;
+                const rightTime = right?.opened_at ? Date.parse(right.opened_at) : 0;
+
+                if (rightTime !== leftTime) {
+                    return rightTime - leftTime;
+                }
+
+                return String(right?.id || '').localeCompare(String(left?.id || ''));
+            });
             const currentUserId = data.user?.id || null;
             let activeShift = null;
 
@@ -953,10 +1725,23 @@ if (!window.__posKasirPageInitialized) {
 
             state.shiftId = activeShift?.id || null;
 
-            if (!state.shiftId) {
+            if (state.pendingShiftReconciliation) {
                 el.shiftIndicator.classList.remove('bg-success');
                 el.shiftIndicator.classList.add('bg-slate-300');
-                el.shiftStatus.textContent = 'Shift Tutup';
+                setText(el.shiftStatus, 'Perlu Rekonsiliasi');
+                if (el.shiftOpened) {
+                    el.shiftOpened.textContent = 'Kas shift kemarin belum disimpan.';
+                }
+                setSellingEnabled(false);
+                setText(el.summaryCaption, state.pendingShiftReconciliation.message || 'Selesaikan kas akhir shift kemarin terlebih dahulu.');
+                if (window.location.pathname === '/pos/checkout') {
+                    window.location.replace('/pos/shifts/open?from=%2Fpos%2Fcheckout');
+                    return;
+                }
+            } else if (!state.shiftId) {
+                el.shiftIndicator.classList.remove('bg-success');
+                el.shiftIndicator.classList.add('bg-slate-300');
+                setText(el.shiftStatus, 'Shift Tutup');
                 if (el.shiftOpened) {
                     el.shiftOpened.textContent = 'Mulai: -';
                 }
@@ -968,7 +1753,7 @@ if (!window.__posKasirPageInitialized) {
             } else {
                 el.shiftIndicator.classList.remove('bg-slate-300');
                 el.shiftIndicator.classList.add('bg-success');
-                el.shiftStatus.textContent = 'Shift Aktif';
+                setText(el.shiftStatus, 'Shift Aktif');
                 const openedAt = activeShift?.opened_at ? new Date(activeShift.opened_at) : null;
                 const tz = data.tenant?.timezone || 'UTC';
                 if (el.shiftOpened) {
@@ -997,6 +1782,7 @@ if (!window.__posKasirPageInitialized) {
         const restoreCartDraft = async () => {
             const draft = loadCartDraft();
             if (!draft || !Array.isArray(draft.items) || !draft.items.length) {
+                state.pendingDraftRestore = false;
                 return;
             }
 
@@ -1019,10 +1805,11 @@ if (!window.__posKasirPageInitialized) {
                     qty,
                     unit_price: resolveUnitPrice(product, qty),
                     discounts: Array.isArray(item.discounts) ? item.discounts : [],
+                    note: String(item.note || '').trim(),
                 });
             });
 
-            if (draft.customer_id) {
+            if (draft.customer_id && el.customer) {
                 el.customer.value = draft.customer_id;
             }
             if (Array.isArray(draft.fees)) {
@@ -1044,10 +1831,32 @@ if (!window.__posKasirPageInitialized) {
                     value: Number(discount.value || 0),
                 }));
             }
+            state.replacingSaleId = draft.replace_sale_id ? String(draft.replace_sale_id) : null;
+            state.replacingTransactionDate = draft.transaction_date ? String(draft.transaction_date) : null;
+            syncEditingSaleBanner();
+            if (el.orderHolderName) {
+                el.orderHolderName.value = String(draft.order_holder_name || '');
+            }
+            if (el.orderNote) {
+                el.orderNote.value = String(draft.order_note || '');
+            }
             renderCustomers();
             renderTransactionDiscountList();
             renderCart();
             renderProducts();
+
+            if (!state.shiftBlocked) {
+                const returnToCart = sessionStorage.getItem('pos_return_to_cart') === '1';
+                if (state.replacingSaleId || returnToCart) {
+                    openCart();
+                    setText(el.summaryCaption, 'Mode edit transaksi aktif. Data awal sudah dimuat.');
+                }
+                if (returnToCart) {
+                    sessionStorage.removeItem('pos_return_to_cart');
+                }
+            }
+
+            state.pendingDraftRestore = false;
         };
 
         const buildPaymentSnapshot = () => {
@@ -1059,6 +1868,7 @@ if (!window.__posKasirPageInitialized) {
                 price: line.item.unit_price,
                 location_id: state.locationId,
                 item_discount_total: line.itemDiscountTotal,
+                note: String(line.item.note || '').trim(),
             }));
             const feeItems = state.fees
                 .filter((fee) => fee.product_id && Number(fee.value || 0) > 0)
@@ -1083,6 +1893,7 @@ if (!window.__posKasirPageInitialized) {
                 price: line.item.unit_price,
                 line_type: 'product',
                 discount: line.itemDiscountTotal,
+                note: String(line.item.note || '').trim(),
                 discounts: getItemDiscountLines(line.item),
             })).concat(feeItems.map((fee) => ({
                 product_id: fee.product_id,
@@ -1098,6 +1909,9 @@ if (!window.__posKasirPageInitialized) {
                 item_discount_total: pricing.itemDiscountTotal,
                 transaction_discount_total: pricing.transactionDiscountTotal,
                 total_discount: pricing.totalDiscount,
+                saved_order_id: state.activeSavedOrderId || null,
+                replace_sale_id: state.replacingSaleId || null,
+                transaction_date: state.replacingTransactionDate || null,
                 transaction_discounts: pricing.transactionDiscounts.map((discount) => ({
                     type: discount.type,
                     value: discount.value,
@@ -1115,6 +1929,10 @@ if (!window.__posKasirPageInitialized) {
                     location_id: fee.location_id,
                 }))),
                 checkout_items: checkoutItems,
+                fees: state.fees,
+                selected_promos: [...state.selectedPromos],
+                order_holder_name: el.orderHolderName ? String(el.orderHolderName.value || '').trim() : '',
+                order_note: el.orderNote ? String(el.orderNote.value || '').trim() : '',
             };
         };
 
@@ -1124,12 +1942,10 @@ if (!window.__posKasirPageInitialized) {
                 return;
             }
 
-            if (!state.shiftId || !state.locationId || !state.registerId || !state.accountMapping?.cash_account_id) {
-                alert('Shift, lokasi, atau akun kas belum siap.');
-                return;
-            }
             const items = [...state.cart.values()];
-            if (!items.length) {
+            const checkoutBlockReason = getCheckoutBlockReason(items);
+            if (checkoutBlockReason) {
+                setText(el.summaryCaption, checkoutBlockReason);
                 return;
             }
 
@@ -1138,7 +1954,7 @@ if (!window.__posKasirPageInitialized) {
             snapshot.shift_id = state.shiftId;
             snapshot.location_id = state.locationId;
             snapshot.register_id = state.registerId;
-            snapshot.customer_id = el.customer.value || null;
+            snapshot.customer_id = el.customer ? (el.customer.value || null) : null;
             snapshot.account_mapping = state.accountMapping || null;
             snapshot.idempotency_key = crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
             snapshot.cashier = el.cashierName.textContent || null;
@@ -1229,6 +2045,19 @@ if (!window.__posKasirPageInitialized) {
         });
 
         el.cartList.addEventListener('input', (event) => {
+            const noteInput = event.target.closest('.item-note-input');
+            if (noteInput) {
+                const productId = noteInput.dataset.id;
+                const existing = state.cart.get(productId);
+                if (!existing) {
+                    return;
+                }
+                state.cart.set(productId, {
+                    ...existing,
+                    note: String(noteInput.value || '').trim(),
+                });
+                return;
+            }
             const valueInput = event.target.closest('.item-discount-value');
             if (!valueInput) {
                 return;
@@ -1271,17 +2100,7 @@ if (!window.__posKasirPageInitialized) {
         });
 
         el.clearCart.addEventListener('click', () => {
-            state.cart.clear();
-            state.fees = [];
-            state.selectedPromos.clear();
-            state.transactionDiscounts = [];
-            sessionStorage.removeItem(cartStorageKey);
-            renderCart();
-            renderProducts();
-            renderFeeList();
-            renderTransactionDiscountList();
-            renderPromoList();
-            updateTotals();
+            clearCurrentOrder();
         });
 
         el.cartToggle.addEventListener('click', openCart);
@@ -1296,10 +2115,102 @@ if (!window.__posKasirPageInitialized) {
         if (el.checkoutCompact) {
             el.checkoutCompact.addEventListener('click', goToPayment);
         }
-        el.paymentLink.addEventListener('click', (event) => {
+        el.paymentLink?.addEventListener('click', (event) => {
             event.preventDefault();
             goToPayment();
         });
+        el.saveOrder?.addEventListener('click', saveCurrentOrder);
+        el.orderHolderName?.addEventListener('input', saveCartDraft);
+        el.orderNote?.addEventListener('input', saveCartDraft);
+        el.customerQuickTrigger?.addEventListener('click', openCustomerSheet);
+        el.customerSheetClose?.addEventListener('click', closeCustomerSheet);
+        el.customerSheetOverlay?.addEventListener('click', closeCustomerSheet);
+        el.savedOrderQuickTrigger?.addEventListener('click', openSavedOrderSheet);
+        el.savedOrderSheetClose?.addEventListener('click', closeSavedOrderSheet);
+        el.savedOrderSheetOverlay?.addEventListener('click', closeSavedOrderSheet);
+        el.customer?.addEventListener('change', () => {
+            saveCartDraft();
+            renderCustomers();
+            closeCustomerSheet();
+        });
+        el.customerCreateTrigger?.addEventListener('click', openCustomerModal);
+        el.customerModalClose?.addEventListener('click', closeCustomerModal);
+        el.customerModalCancel?.addEventListener('click', closeCustomerModal);
+        el.customerModal?.addEventListener('click', (event) => {
+            if (event.target === el.customerModal) {
+                closeCustomerModal();
+            }
+        });
+        el.customerSaveButton?.addEventListener('click', async () => {
+            if (!canUseCustomerFeature) {
+                return;
+            }
+
+            await window.PosUi.runWithSubmitGuard(el.customerSaveButton, async () => {
+                setCustomerModalFeedback('');
+                const created = await createCustomer();
+                if (!created) {
+                    throw new Error('Pelanggan baru tidak ditemukan setelah disimpan.');
+                }
+
+                state.customers = [
+                    created,
+                    ...state.customers.filter((customer) => customer.id !== created.id),
+                ].sort((left, right) => String(left.name || '').localeCompare(String(right.name || ''), 'id'));
+                renderCustomers();
+                if (el.customer) {
+                    el.customer.value = created.id;
+                }
+                saveCartDraft();
+                setCustomerModalFeedback('Pelanggan berhasil ditambahkan.', 'success');
+                setTimeout(() => {
+                    closeCustomerModal();
+                }, 400);
+            }, {
+                loadingHtml: '<span class="material-symbols-outlined text-lg">progress_activity</span> Menyimpan...',
+            }).catch((error) => {
+                setCustomerModalFeedback(error.message || 'Gagal menyimpan pelanggan.', 'error');
+            });
+        });
+        const handleSavedOrderAction = async (event) => {
+            const loadButton = event.target.closest('.saved-order-load');
+            const deleteButton = event.target.closest('.saved-order-delete');
+
+            if (loadButton) {
+                const orderId = loadButton.dataset.id;
+                const savedOrder = state.savedOrders.find((entry) => String(entry.id) === String(orderId));
+                if (!savedOrder) {
+                    return;
+                }
+                await applySavedOrder(savedOrder);
+                return;
+            }
+
+            if (deleteButton) {
+                const orderId = deleteButton.dataset.id;
+                try {
+                    await deleteSavedOrderFromApi(orderId);
+                } catch (error) {
+                    alert(error?.message || 'Gagal menghapus pesanan tersimpan. Coba lagi.');
+                    return;
+                }
+                state.savedOrders = state.savedOrders.filter((entry) => String(entry.id) !== String(orderId));
+                if (String(state.activeSavedOrderId || '') === String(orderId)) {
+                    state.activeSavedOrderId = null;
+                    updateSaveOrderModeUi();
+                }
+                persistSavedOrders();
+                renderSavedOrders();
+            }
+        };
+        el.savedOrderList?.addEventListener('click', handleSavedOrderAction);
+        el.productViewList?.addEventListener('click', () => setProductViewMode('list'));
+        el.productViewGrid?.addEventListener('click', () => setProductViewMode('grid'));
+
+        syncProductViewControls();
+        syncProductGridLayout();
+        state.savedOrders = loadSavedOrders();
+        renderSavedOrders();
 
         (async () => {
             try {
@@ -1307,11 +2218,20 @@ if (!window.__posKasirPageInitialized) {
                     loadBootstrap(),
                     loadTaxSettings(),
                 ]);
+                const pendingDraft = loadCartDraft();
+                state.pendingDraftRestore = Boolean(pendingDraft?.items?.length);
                 setupContext(data);
                 await Promise.all([
                     loadCustomers(),
                     loadProducts({ page: 1, append: false }),
                 ]);
+                try {
+                    state.savedOrders = await loadSavedOrdersFromApi();
+                    persistSavedOrders();
+                    renderSavedOrders();
+                } catch (_) {
+                    // keep local saved orders as fallback
+                }
                 await restoreCartDraft();
                 applyTaxSettings(settings.taxes || []);
                 applyPromoSettings(settings.promos || []);

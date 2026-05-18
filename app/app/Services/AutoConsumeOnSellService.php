@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Exceptions\AutoConsumeValidationException;
 use App\Models\InventoryBalance;
 use App\Models\Product;
+use App\Models\ProductionBatch;
 use App\Models\StockLedger;
 use App\Support\Decimal;
 use Carbon\CarbonImmutable;
@@ -99,6 +100,35 @@ class AutoConsumeOnSellService
 
         if ($alreadyConsumed) {
             $this->emitSkipped($tenantId, $baseContext, 'already_consumed');
+            return;
+        }
+
+        // Safety net: if the product has ever been manufactured via batch
+        // production, raw materials were already consumed during production.
+        // Auto-consuming again at sale time would cause double deduction.
+        $hasPostedBatch = DB::table('production_batches')
+            ->where('tenant_id', $tenantId)
+            ->where('product_id', (string) $soldProduct->id)
+            ->where('status', ProductionBatch::STATUS_POSTED)
+            ->exists();
+
+        if ($hasPostedBatch) {
+            app(AnomalyService::class)->raise(
+                tenantId: $tenantId,
+                severity: 'high',
+                type: 'auto_consume_on_produced_product',
+                payload: [
+                    'source' => 'auto_consume_sale',
+                    'sale_id' => $saleId,
+                    'sale_item_id' => $saleItemId,
+                    'product_id' => (string) $soldProduct->id,
+                    'production_mode' => (string) ($soldProduct->production_mode ?? 'unknown'),
+                    'reason' => 'Product has posted production batches but production_mode is auto_consume_on_sell. Skipped to prevent double raw-material deduction.',
+                ],
+                referenceId: $saleId
+            );
+
+            $this->emitSkipped($tenantId, $baseContext, 'has_posted_production_batch');
             return;
         }
 

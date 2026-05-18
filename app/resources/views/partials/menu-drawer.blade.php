@@ -1,5 +1,6 @@
 @php
-    $activePortal = session('auth_portal', 'pos') === 'backoffice' ? 'backoffice' : 'pos';
+    $routeIsBackoffice = request()->is('backoffice*') || request()->is('admin/opening-balance') || request()->is('superadmin*');
+    $activePortal = $routeIsBackoffice || session('auth_portal', 'pos') === 'backoffice' ? 'backoffice' : 'pos';
     $menuCurrentPath = '/'.ltrim(request()->path(), '/');
     $menuDrawerTenant = \App\Support\TenantContext::get();
     $menuDrawerUser = auth()->user();
@@ -33,62 +34,152 @@
     $canManageProducts = in_array($menuDrawerRole, ['admin', 'owner', 'superadmin'], true);
     $canManageSettings = in_array($menuDrawerRole, ['supervisor', 'admin', 'owner', 'superadmin'], true);
     $canManageUsers = in_array($menuDrawerRole, ['admin', 'owner', 'superadmin'], true);
-    $posPortalOriginPath = $menuCurrentPath !== '/' ? $menuCurrentPath : '/pos/dashboard';
+    $canManageBranches = in_array($menuDrawerRole, ['admin', 'owner', 'superadmin'], true);
+    $canAccessPurchasing = in_array($menuDrawerRole, ['warehouse', 'supervisor', 'admin', 'owner', 'superadmin'], true);
+    $canAccessCustomers = in_array($menuDrawerRole, ['warehouse', 'supervisor', 'admin', 'owner', 'superadmin'], true);
+    $posHomeHref = pos_default_url();
+    $posPortalOriginPath = $menuCurrentPath !== '/' ? normalize_pos_home_url($menuCurrentPath) : $posHomeHref;
     $posBackofficeHref = static function (string $targetPath) use ($posPortalOriginPath): string {
         $separator = str_contains($targetPath, '?') ? '&' : '?';
 
         return '/portal/switch/backoffice?next='.rawurlencode($targetPath.$separator.'from='.rawurlencode($posPortalOriginPath));
     };
-
-    $isMenuItemActive = static function (array $item) use ($menuCurrentPath): bool {
-        $match = trim((string) ($item['match'] ?? $item['href'] ?? ''));
-        if ($match === '') {
+    $posProductHref = '/pos/products';
+    $posProductCreateHref = '/pos/products/new';
+    $posMaterialsHref = '/pos/materials';
+    $posCategoryHref = '/pos/categories';
+    $posInventoryHref = '/pos/inventory';
+    $posPurchasesHref = '/pos/purchases';
+    $posProductionHref = '/pos/inventory/production-batches';
+    $posCustomersHref = '/pos/customers';
+    $posBranchesHref = '/pos/branches';
+    $posUsersHref = '/pos/users';
+    $menuDrawerSubscription = app(\App\Services\SubscriptionService::class);
+    $canFeature = static function (string $featureKey) use ($menuDrawerTenant, $menuDrawerSubscription): bool {
+        if (! $menuDrawerTenant || $featureKey === '') {
             return false;
         }
 
-        $match = preg_replace('/\?.*$/', '', $match);
-        if ($match === $menuCurrentPath) {
-            return true;
+        return $menuDrawerSubscription->canAccessFeature($menuDrawerTenant, $featureKey);
+    };
+    $canAnyFeature = static function (array $featureKeys) use ($canFeature): bool {
+        foreach ($featureKeys as $featureKey) {
+            if ($canFeature((string) $featureKey)) {
+                return true;
+            }
         }
 
-        return $match !== '/' && str_starts_with($menuCurrentPath, rtrim($match, '/').'/');
+        return false;
+    };
+    $isMenuItemActive = static function (array $item) use ($menuCurrentPath): bool {
+        $matches = (array) ($item['match'] ?? $item['href'] ?? '');
+        $matchChildren = (bool) ($item['match_children'] ?? true);
+
+        foreach ($matches as $candidate) {
+            $match = trim((string) $candidate);
+            if ($match === '') {
+                continue;
+            }
+
+            $matchPath = parse_url($match, PHP_URL_PATH) ?: preg_replace('/\?.*$/', '', $match);
+            if ($matchPath === $menuCurrentPath) {
+                return true;
+            }
+
+            if ($matchChildren && $matchPath !== '/' && str_starts_with($menuCurrentPath, rtrim($matchPath, '/').'/')) {
+                return true;
+            }
+        }
+
+        return false;
+    };
+    $withBackofficeBadge = static function (array $item): array {
+        $item['badge'] = 'Backoffice';
+
+        return $item;
     };
 
     $backofficeMenuSections = [
         [
-            'title' => 'Operasional',
+            'title' => 'Utama',
             'items' => array_values(array_filter([
-                ['href' => '/backoffice/dashboard', 'match' => '/backoffice/dashboard', 'icon' => 'dashboard', 'label' => 'Dashboard', 'description' => 'Ringkasan bisnis'],
-                ['href' => '/backoffice/products', 'match' => '/backoffice/products', 'icon' => 'inventory_2', 'label' => 'Daftar Produk', 'description' => 'Lihat katalog barang'],
-                $canManageProducts ? ['href' => '/backoffice/products/new', 'match' => '/backoffice/products/new', 'icon' => 'add_box', 'label' => 'Tambah Produk', 'description' => 'Buat produk baru'] : null,
-                ['href' => '/backoffice/categories', 'match' => '/backoffice/categories', 'icon' => 'grid_view', 'label' => 'Kategori', 'description' => 'Kelompokkan produk'],
-                ['href' => '/backoffice/inventory', 'match' => '/backoffice/inventory', 'icon' => 'warehouse', 'label' => 'Stok & Inventaris', 'description' => 'Pantau stok aktif'],
-                $canManageProducts ? ['href' => '/backoffice/purchases/new', 'match' => '/backoffice/purchases', 'icon' => 'local_shipping', 'label' => 'Pembelian', 'description' => 'Buat dan kelola PO'] : null,
-                ['href' => '/backoffice/branches', 'match' => '/backoffice/branches', 'icon' => 'storefront', 'label' => 'Toko & Cabang', 'description' => 'Atur lokasi operasional'],
-                $canManageUsers ? ['href' => '/backoffice/users', 'match' => '/backoffice/users', 'icon' => 'groups', 'label' => 'Pengguna', 'description' => 'Atur staff dan role'] : null,
+                ($canFeature('dash.overview') ? ['href' => '/backoffice/dashboard', 'match' => '/backoffice/dashboard', 'match_children' => false, 'icon' => 'dashboard', 'label' => 'Dashboard', 'description' => 'Ringkasan toko'] : null),
+                ($canFeature('sale.pos') ? ['href' => '/backoffice/online-orders', 'match' => '/backoffice/online-orders', 'icon' => 'orders', 'label' => 'Order Online', 'description' => 'Pesanan web'] : null),
+            ])),
+        ],
+        [
+            'title' => 'Master Data',
+            'items' => array_values(array_filter([
+                ($canFeature('product.list') ? ['href' => '/backoffice/products', 'match' => '/backoffice/products', 'match_children' => false, 'icon' => 'inventory_2', 'label' => 'Produk', 'description' => 'Katalog barang'] : null),
+                ($canManageProducts && $canFeature('product.list') ? ['href' => '/backoffice/products/new', 'match' => '/backoffice/products/new', 'match_children' => false, 'icon' => 'add_box', 'label' => 'Tambah Produk', 'description' => 'Input produk baru'] : null),
+                ($canFeature('product.category') ? ['href' => '/backoffice/categories', 'match' => '/backoffice/categories', 'match_children' => false, 'icon' => 'grid_view', 'label' => 'Kategori', 'description' => 'Kelompok produk'] : null),
+                ($canFeature('product.materials') ? ['href' => '/backoffice/materials', 'match' => '/backoffice/materials', 'match_children' => false, 'icon' => 'nutrition', 'label' => 'Bahan Baku', 'description' => 'Resep dan produksi'] : null),
+                ($canAccessCustomers && $canFeature('customer.manage') ? ['href' => '/backoffice/customers', 'match' => '/backoffice/customers', 'match_children' => false, 'icon' => 'groups', 'label' => 'Pelanggan', 'description' => 'Data customer'] : null),
+                ($canFeature('supplier.manage') ? ['href' => '/backoffice/suppliers', 'match' => '/backoffice/suppliers', 'match_children' => false, 'icon' => 'local_shipping', 'label' => 'Supplier', 'description' => 'Vendor pembelian'] : null),
+                ($canManageBranches && $canFeature('settings.branches_manage') ? ['href' => '/backoffice/branches', 'match' => '/backoffice/branches', 'icon' => 'storefront', 'label' => 'Toko & Cabang', 'description' => 'Lokasi usaha'] : null),
+                ($canManageUsers && $canFeature('settings.staff_basic') ? ['href' => '/backoffice/users', 'match' => '/backoffice/users', 'match_children' => false, 'icon' => 'badge', 'label' => 'Pengguna', 'description' => 'Staff dan role'] : null),
+            ])),
+        ],
+        [
+            'title' => 'Stok & Produksi',
+            'items' => array_values(array_filter([
+                ($canFeature('inventory.stock') ? ['href' => '/backoffice/inventory', 'match' => '/backoffice/inventory', 'match_children' => false, 'icon' => 'warehouse', 'label' => 'Inventaris', 'description' => 'Stok aktif'] : null),
+                ($canFeature('inventory.adjustment') ? ['href' => '/backoffice/inventory/stock-adjustment', 'match' => '/backoffice/inventory/stock-adjustment', 'match_children' => false, 'icon' => 'edit_note', 'label' => 'Penyesuaian', 'description' => 'Koreksi stok'] : null),
+                ($canFeature('inventory.stock_opname') ? ['href' => '/backoffice/inventory/stock-opname', 'match' => '/backoffice/inventory/stock-opname', 'match_children' => false, 'icon' => 'fact_check', 'label' => 'Stock Opname', 'description' => 'Hitung fisik'] : null),
+                ($canFeature('inventory.transfer') ? ['href' => '/backoffice/inventory/stock-transfers', 'match' => '/backoffice/inventory/stock-transfers', 'match_children' => false, 'icon' => 'sync_alt', 'label' => 'Transfer Stok', 'description' => 'Antar lokasi'] : null),
+                ($canFeature('inventory.production_batches') ? ['href' => '/backoffice/inventory/production-batches', 'match' => '/backoffice/inventory/production-batches', 'icon' => 'precision_manufacturing', 'label' => 'Produksi', 'description' => 'Batch produksi'] : null),
+            ])),
+        ],
+        [
+            'title' => 'Pembelian',
+            'items' => array_values(array_filter([
+                ($canAccessPurchasing && $canAnyFeature(['history.purchases', 'purchase.order', 'purchase.receive', 'purchase.return']) ? ['href' => '/backoffice/purchases/detail', 'match' => '/backoffice/purchases', 'icon' => 'receipt_long', 'label' => 'Daftar Pembelian', 'description' => 'PO dan histori'] : null),
+                ($canAccessPurchasing && $canFeature('purchase.order') ? ['href' => '/backoffice/purchases/new', 'match' => '/backoffice/purchases/new', 'match_children' => false, 'icon' => 'add_shopping_cart', 'label' => 'Buat PO', 'description' => 'Pembelian baru'] : null),
+                ($canAccessPurchasing && $canFeature('purchase.receive') ? ['href' => '/backoffice/receiving', 'match' => '/backoffice/receiving', 'icon' => 'inventory', 'label' => 'Penerimaan', 'description' => 'Barang masuk'] : null),
+                ($canManageProducts && $canFeature('purchase.return') ? ['href' => '/backoffice/purchases/returns', 'match' => '/backoffice/purchases/returns', 'match_children' => false, 'icon' => 'assignment_return', 'label' => 'Retur Pembelian', 'description' => 'Retur supplier'] : null),
             ])),
         ],
         [
             'title' => 'Laporan',
-            'items' => [
-                ['href' => '/backoffice/reports', 'match' => '/backoffice/reports', 'icon' => 'bar_chart', 'label' => 'Laporan', 'description' => 'Penjualan dan inventaris'],
-            ],
+            'items' => array_values(array_filter([
+                ($canFeature('reports.summary') ? ['href' => '/backoffice/reports', 'match' => '/backoffice/reports', 'match_children' => false, 'icon' => 'bar_chart', 'label' => 'Ringkasan', 'description' => 'KPI laporan'] : null),
+                ($canFeature('reports.summary') ? ['href' => '/backoffice/reports/sales', 'match' => '/backoffice/reports/sales', 'match_children' => false, 'icon' => 'list_alt', 'label' => 'Penjualan', 'description' => 'Transaksi dan export'] : null),
+                ($canFeature('reports.summary') ? ['href' => '/backoffice/reports/receivables', 'match' => '/backoffice/reports/receivables', 'match_children' => false, 'icon' => 'request_quote', 'label' => 'Piutang', 'description' => 'Tagihan customer'] : null),
+                ($canFeature('reports.inventory_view') ? ['href' => '/backoffice/reports/inventory', 'match' => '/backoffice/reports/inventory', 'match_children' => false, 'icon' => 'inventory_2', 'label' => 'Persediaan', 'description' => 'Stok dan valuasi'] : null),
+                ($canFeature('reports.inventory_stock_card') ? ['href' => '/backoffice/reports/inventory/stock-card', 'match' => '/backoffice/reports/inventory/stock-card', 'icon' => 'receipt_long', 'label' => 'Kartu Stok', 'description' => 'Ledger produk'] : null),
+                ($canFeature('finance.summary_basic') ? ['href' => '/backoffice/finance/summary', 'match' => '/backoffice/finance/summary', 'match_children' => false, 'icon' => 'account_balance_wallet', 'label' => 'Keuangan', 'description' => 'Laba rugi dan neraca'] : null),
+            ])),
         ],
         [
             'title' => 'Pengaturan',
             'items' => array_values(array_filter([
-                $canManageSettings ? ['href' => '/backoffice/settings/chart-of-accounts', 'match' => '/backoffice/settings/chart-of-accounts', 'icon' => 'account_balance', 'label' => 'Akun Kas & Bank', 'description' => 'COA dan akun pembayaran'] : null,
-                $canManageSettings ? ['href' => '/backoffice/settings/tax-promo', 'match' => '/backoffice/settings/tax-promo', 'icon' => 'percent', 'label' => 'Pajak & Promo', 'description' => 'Atur pajak dan diskon'] : null,
-                $canManageSettings ? ['href' => '/backoffice/settings/preferences', 'match' => '/backoffice/settings/preferences', 'icon' => 'tune', 'label' => 'Preferensi', 'description' => 'Pengaturan toko'] : null,
-                $canManageSettings ? ['href' => '/backoffice/settings/integrations', 'match' => '/backoffice/settings/integrations', 'icon' => 'integration_instructions', 'label' => 'Integrasi', 'description' => 'Perangkat dan koneksi'] : null,
-                $canManageSettings ? ['href' => '/backoffice/settings/subscription', 'match' => '/backoffice/settings/subscription', 'icon' => 'workspace_premium', 'label' => 'Langganan', 'description' => 'Billing dan paket'] : null,
+                ($canManageSettings && $canFeature('finance.bank_accounts') ? ['href' => '/backoffice/settings/payment-settings', 'match' => ['/backoffice/settings/payment-settings', '/backoffice/settings/chart-of-accounts'], 'match_children' => true, 'icon' => 'payments', 'label' => 'Pembayaran & Rekening', 'description' => 'POS, QRIS, transfer'] : null),
+                ($canManageSettings && $canFeature('finance.bank_accounts') ? ['href' => '/admin/opening-balance', 'match' => '/admin/opening-balance', 'match_children' => false, 'icon' => 'savings', 'label' => 'Saldo Awal', 'description' => 'Kas, bank, stok'] : null),
+                ($canManageSettings && $canFeature('finance.lock_period') ? ['href' => '/backoffice/finance/lock-periods', 'match' => '/backoffice/finance/lock-periods', 'match_children' => false, 'icon' => 'lock_clock', 'label' => 'Kunci Periode', 'description' => 'Kontrol tutup buku'] : null),
+                ($canManageSettings && $canFeature('settings.tax') ? ['href' => '/backoffice/settings/tax-promo', 'match' => '/backoffice/settings/tax-promo', 'match_children' => false, 'icon' => 'percent', 'label' => 'Pajak & Promo', 'description' => 'Diskon dan pajak'] : null),
+                ($canManageSettings && $canFeature('settings.store_profile') ? ['href' => '/backoffice/settings/preferences', 'match' => '/backoffice/settings/preferences', 'match_children' => false, 'icon' => 'tune', 'label' => 'Preferensi', 'description' => 'Setelan toko'] : null),
+                ($canManageSettings && $canFeature('settings.inventory_method_basic') ? ['href' => '/backoffice/settings/inventory-method', 'match' => '/backoffice/settings/inventory-method', 'match_children' => false, 'icon' => 'rule_settings', 'label' => 'Metode Persediaan', 'description' => 'FIFO atau average'] : null),
+                ($canManageSettings && $canFeature('settings.integrations') ? ['href' => '/backoffice/settings/integrations', 'match' => '/backoffice/settings/integrations', 'match_children' => false, 'icon' => 'integration_instructions', 'label' => 'Integrasi', 'description' => 'Perangkat dan koneksi'] : null),
+                ($canManageSettings && $canFeature('settings.subscription_billing') ? ['href' => '/backoffice/settings/subscription', 'match' => '/backoffice/settings/subscription', 'icon' => 'workspace_premium', 'label' => 'Langganan', 'description' => 'Paket dan invoice'] : null),
+                ($canManageSettings && $canFeature('settings.inventory_valuation') ? ['href' => '/backoffice/settings/inventory-valuation', 'match' => '/backoffice/settings/inventory-valuation', 'match_children' => false, 'icon' => 'monitoring', 'label' => 'Valuation Lanjutan', 'description' => 'Audit nilai stok'] : null),
+                ($canManageSettings && $canFeature('settings.inventory_valuation') ? ['href' => '/backoffice/settings/inventory-valuation-audit', 'match' => '/backoffice/settings/inventory-valuation-audit', 'match_children' => false, 'icon' => 'history', 'label' => 'Audit Valuation', 'description' => 'Riwayat valuation'] : null),
+                ($canManageSettings && $canFeature('settings.observability') ? ['href' => '/backoffice/settings/observability', 'match' => '/backoffice/settings/observability', 'match_children' => false, 'icon' => 'insights', 'label' => 'Observability', 'description' => 'Kesehatan sistem'] : null),
             ])),
         ],
         [
-            'title' => 'Portal',
+            'title' => 'Bantuan',
+            'items' => array_values(array_filter([
+                ['href' => '/backoffice/help/center', 'match' => '/backoffice/help/center', 'match_children' => false, 'icon' => 'help', 'label' => 'Pusat Bantuan', 'description' => 'Panduan kerja'],
+                ['href' => '/backoffice/help/support', 'match' => '/backoffice/help/support', 'match_children' => false, 'icon' => 'support_agent', 'label' => 'Support', 'description' => 'Hubungi bantuan'],
+                ($canFeature('loyalty.program') ? ['href' => '/backoffice/loyalty', 'match' => '/backoffice/loyalty', 'match_children' => false, 'icon' => 'loyalty', 'label' => 'Loyalty', 'description' => 'Program pelanggan'] : null),
+                ($canFeature('dash.overview') ? ['href' => '/backoffice/marketing/online-store', 'match' => '/backoffice/marketing/online-store', 'match_children' => false, 'icon' => 'storefront', 'label' => 'Toko Online', 'description' => 'Etalase web'] : null),
+            ])),
+        ],
+        [
+            'title' => 'Area',
             'items' => [
-                ['href' => '/portal/switch/pos?next=/pos/checkout', 'match' => '/portal/switch/pos', 'icon' => 'point_of_sale', 'label' => 'Buka POS', 'description' => 'Masuk ke kasir'],
-                ['href' => '/logout', 'match' => '/logout', 'icon' => 'logout', 'label' => 'Keluar', 'description' => 'Akhiri sesi login'],
+                ['href' => '/portal/switch/pos?next=/pos/checkout', 'match' => '/portal/switch/pos', 'match_children' => false, 'icon' => 'point_of_sale', 'label' => 'Area Kasir', 'description' => 'Transaksi harian'],
+                ['href' => '/logout', 'match' => '/logout', 'match_children' => false, 'icon' => 'logout', 'label' => 'Keluar', 'description' => 'Akhiri sesi'],
             ],
         ],
     ];
@@ -96,29 +187,55 @@
     $posMenuSections = [
         [
             'title' => 'Transaksi',
-            'items' => [
-                ['href' => '/pos/dashboard', 'match' => '/pos/dashboard', 'icon' => 'home', 'label' => 'Beranda', 'description' => 'Ringkasan kasir'],
-                ['href' => '/pos/checkout', 'match' => '/pos/checkout', 'icon' => 'point_of_sale', 'label' => 'Kasir', 'description' => 'Mulai transaksi'],
-                ['href' => '/pos/history', 'match' => '/pos/history', 'icon' => 'history', 'label' => 'Riwayat', 'description' => 'Lihat transaksi selesai'],
-                ['href' => '/pos/shifts/open', 'match' => '/pos/shifts/open', 'icon' => 'schedule', 'label' => 'Buka Shift', 'description' => 'Mulai shift kasir'],
-                ['href' => '/pos/shifts/summary', 'match' => '/pos/shifts', 'icon' => 'summarize', 'label' => 'Ringkasan Shift', 'description' => 'Riwayat buka/tutup shift'],
-            ],
-        ],
-        [
-            'title' => 'Akses Cepat',
             'items' => array_values(array_filter([
-                $canManageSettings ? ['href' => $posBackofficeHref('/backoffice/products'), 'match' => '/portal/switch/backoffice', 'icon' => 'inventory_2', 'label' => 'Kelola Produk', 'description' => 'Buka daftar produk di backoffice'] : null,
-                $canManageProducts ? ['href' => $posBackofficeHref('/backoffice/products/new'), 'match' => '/portal/switch/backoffice', 'icon' => 'add_box', 'label' => 'Tambah Produk', 'description' => 'Tambah produk baru'] : null,
-                $canManageSettings ? ['href' => $posBackofficeHref('/backoffice/inventory'), 'match' => '/portal/switch/backoffice', 'icon' => 'warehouse', 'label' => 'Stok & Inventaris', 'description' => 'Cek stok dan pergerakan barang'] : null,
-                $canManageSettings ? ['href' => $posBackofficeHref('/backoffice/settings/preferences'), 'match' => '/portal/switch/backoffice', 'icon' => 'settings', 'label' => 'Pengaturan Toko', 'description' => 'Akses setelan backoffice'] : null,
-                $canManageSettings ? ['href' => $posBackofficeHref('/backoffice/settings/chart-of-accounts'), 'match' => '/portal/switch/backoffice', 'icon' => 'account_balance', 'label' => 'Akun Kas & Bank', 'description' => 'Kelola akun pembayaran'] : null,
+                ['href' => $posHomeHref, 'match' => '/pos/dashboard', 'match_children' => false, 'icon' => 'home', 'label' => 'Beranda', 'description' => 'Ringkasan kasir'],
+                ['href' => '/pos/checkout', 'match' => '/pos/checkout', 'match_children' => false, 'icon' => 'point_of_sale', 'label' => 'Kasir', 'description' => 'Mulai transaksi'],
+                ['href' => '/pos/history', 'match' => '/pos/history', 'match_children' => false, 'icon' => 'history', 'label' => 'Riwayat', 'description' => 'Transaksi selesai'],
+                ($canFeature('history.sales') ? ['href' => '/pos/receivables', 'match' => '/pos/receivables', 'match_children' => false, 'icon' => 'request_quote', 'label' => 'Piutang', 'description' => 'Tagihan pelanggan'] : null),
+                ($canAccessCustomers && $canFeature('customer.manage') ? ['href' => $posCustomersHref, 'match' => '/pos/customers', 'match_children' => false, 'icon' => 'groups', 'label' => 'Pelanggan', 'description' => 'Data pelanggan'] : null),
+                ($canFeature('finance.cash_transactions') ? ['href' => '/pos/cash-in', 'match' => ['/pos/cash-in', '/pos/cash-out'], 'match_children' => false, 'icon' => 'payments', 'label' => 'Kas', 'description' => 'Kas masuk/keluar'] : null),
+                ['href' => '/pos/shifts/open', 'match' => '/pos/shifts/open', 'match_children' => false, 'icon' => 'schedule', 'label' => 'Buka Shift', 'description' => 'Mulai shift'],
+                ['href' => '/pos/shifts/summary', 'match' => '/pos/shifts', 'icon' => 'summarize', 'label' => 'Ringkasan Shift', 'description' => 'Riwayat shift'],
             ])),
         ],
         [
-            'title' => 'Portal',
+            'title' => 'Operasional',
+            'items' => array_values(array_filter([
+                ($canFeature('product.list') ? ['href' => $posProductHref, 'match' => '/pos/products', 'match_children' => false, 'icon' => 'inventory_2', 'label' => 'Produk', 'description' => 'Katalog barang'] : null),
+                ($canManageProducts && $canFeature('product.list') ? ['href' => $posProductCreateHref, 'match' => '/pos/products/new', 'match_children' => false, 'icon' => 'add_box', 'label' => 'Tambah Produk', 'description' => 'Produk baru'] : null),
+                ($canFeature('product.category') ? ['href' => $posCategoryHref, 'match' => '/pos/categories', 'match_children' => false, 'icon' => 'grid_view', 'label' => 'Kategori', 'description' => 'Kelompok produk'] : null),
+                ($canFeature('product.materials') ? ['href' => $posMaterialsHref, 'match' => '/pos/materials', 'match_children' => false, 'icon' => 'nutrition', 'label' => 'Bahan Baku', 'description' => 'Resep dan produksi'] : null),
+                ($canFeature('inventory.stock') ? ['href' => $posInventoryHref, 'match' => '/pos/inventory', 'match_children' => false, 'icon' => 'warehouse', 'label' => 'Inventaris', 'description' => 'Stok aktif'] : null),
+                ($canFeature('inventory.adjustment') ? ['href' => '/pos/inventory/stock-adjustment', 'match' => '/pos/inventory/stock-adjustment', 'match_children' => false, 'icon' => 'edit_note', 'label' => 'Penyesuaian', 'description' => 'Koreksi stok'] : null),
+                ($canFeature('inventory.stock_opname') ? ['href' => '/pos/inventory/stock-opname', 'match' => '/pos/inventory/stock-opname', 'match_children' => false, 'icon' => 'fact_check', 'label' => 'Stock Opname', 'description' => 'Hitung fisik'] : null),
+                ($canAccessPurchasing && $canFeature('purchase.order') ? ['href' => '/pos/purchases/new', 'match' => '/pos/purchases/new', 'match_children' => false, 'icon' => 'add_shopping_cart', 'label' => 'Buat PO', 'description' => 'Pembelian baru'] : null),
+                ($canAccessPurchasing && $canAnyFeature(['history.purchases', 'purchase.order', 'purchase.receive', 'purchase.return']) ? ['href' => $posPurchasesHref, 'match' => '/pos/purchases', 'icon' => 'local_shipping', 'label' => 'Pembelian', 'description' => 'PO dan receiving'] : null),
+                ($canFeature('inventory.production_batches') ? ['href' => $posProductionHref, 'match' => '/pos/inventory/production-batches', 'icon' => 'precision_manufacturing', 'label' => 'Produksi', 'description' => 'Batch produksi'] : null),
+            ])),
+        ],
+        [
+            'title' => 'Admin',
+            'items' => array_values(array_filter([
+                ($canManageBranches && $canFeature('settings.branches_manage') ? ['href' => $posBranchesHref, 'match' => '/pos/branches', 'icon' => 'storefront', 'label' => 'Toko & Cabang', 'description' => 'Lokasi usaha'] : null),
+                ($canManageUsers && $canFeature('settings.staff_basic') ? ['href' => $posUsersHref, 'match' => '/pos/users', 'match_children' => false, 'icon' => 'badge', 'label' => 'Pengguna', 'description' => 'Staff dan role'] : null),
+                ($canManageSettings && $canFeature('finance.summary_basic') ? ['href' => '/pos/finance/summary', 'match' => '/pos/finance/summary', 'match_children' => false, 'icon' => 'account_balance_wallet', 'label' => 'Keuangan', 'description' => 'Laba rugi dan neraca'] : null),
+            ])),
+        ],
+        [
+            'title' => 'Backoffice',
+            'items' => array_values(array_filter([
+                ($canFeature('dash.overview') ? $withBackofficeBadge(['href' => $posBackofficeHref('/backoffice/dashboard'), 'match' => '/portal/switch/backoffice', 'match_children' => false, 'icon' => 'dashboard', 'label' => 'Dashboard', 'description' => 'Ringkasan bisnis']) : null),
+                ($canFeature('product.list') ? $withBackofficeBadge(['href' => $posBackofficeHref('/backoffice/products'), 'match' => '/portal/switch/backoffice', 'match_children' => false, 'icon' => 'inventory_2', 'label' => 'Produk', 'description' => 'Katalog backoffice']) : null),
+                ($canFeature('reports.summary') ? $withBackofficeBadge(['href' => $posBackofficeHref('/backoffice/reports'), 'match' => '/portal/switch/backoffice', 'match_children' => false, 'icon' => 'bar_chart', 'label' => 'Laporan', 'description' => 'Laporan lanjutan']) : null),
+                ($canFeature('finance.summary_basic') ? $withBackofficeBadge(['href' => $posBackofficeHref('/backoffice/finance/summary'), 'match' => '/portal/switch/backoffice', 'match_children' => false, 'icon' => 'account_balance_wallet', 'label' => 'Keuangan', 'description' => 'Ringkasan finansial']) : null),
+                ($canManageSettings && $canFeature('settings.store_profile') ? $withBackofficeBadge(['href' => $posBackofficeHref('/backoffice/settings/preferences'), 'match' => '/portal/switch/backoffice', 'match_children' => false, 'icon' => 'settings', 'label' => 'Pengaturan', 'description' => 'Setelan toko']) : null),
+            ])),
+        ],
+        [
+            'title' => 'Area',
             'items' => [
-                ['href' => $posBackofficeHref('/backoffice/dashboard'), 'match' => '/portal/switch/backoffice', 'icon' => 'storefront', 'label' => 'Backoffice', 'description' => 'Pindah ke manajemen toko'],
-                ['href' => '/logout', 'match' => '/logout', 'icon' => 'logout', 'label' => 'Keluar', 'description' => 'Akhiri sesi login'],
+                ['href' => $posBackofficeHref('/backoffice/dashboard'), 'match' => '/portal/switch/backoffice', 'match_children' => false, 'icon' => 'storefront', 'label' => 'Area Backoffice', 'description' => 'Data master dan laporan'],
+                ['href' => '/logout', 'match' => '/logout', 'match_children' => false, 'icon' => 'logout', 'label' => 'Keluar', 'description' => 'Akhiri sesi'],
             ],
         ],
     ];
@@ -128,105 +245,140 @@
         : $posMenuSections;
 @endphp
 
-<div id="menu-overlay" class="absolute inset-0 z-50 hidden overflow-hidden">
-    <div class="relative h-full w-full">
-        <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"></div>
-        <aside id="menu-drawer" class="absolute left-0 top-0 h-full w-[85%] max-w-[320px] flex-col bg-white dark:bg-slate-900 shadow-2xl flex overflow-hidden -translate-x-full transition-transform">
-            <header class="relative p-6 pt-12 border-b border-primary/10 bg-primary/5">
-                <button type="button" data-menu-close class="absolute right-4 top-4 flex size-9 items-center justify-center rounded-full bg-white/80 text-slate-700 shadow-sm transition hover:bg-white">
+@if ($activePortal === 'backoffice')
+    <aside class="fixed inset-y-0 left-0 z-40 hidden w-72 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950 lg:flex">
+        <header class="border-b border-slate-200 px-5 py-5 dark:border-slate-800">
+            <a class="flex items-center gap-3" href="/backoffice/dashboard" data-prefetch="priority">
+                <span class="flex size-10 items-center justify-center rounded-lg bg-primary text-base font-black text-white shadow-sm shadow-primary/25">K</span>
+                <span class="min-w-0">
+                    <span class="block text-sm font-black uppercase tracking-[0.16em] text-slate-950 dark:text-white">Kalakasir</span>
+                    <span class="block truncate text-xs font-semibold text-slate-500 dark:text-slate-400" data-menu-store-name>{{ $menuDrawerTenant?->name ?: 'Backoffice' }}</span>
+                </span>
+            </a>
+            <div class="mt-4 grid grid-cols-2 gap-2">
+                <a class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-white shadow-sm shadow-primary/20" href="/portal/switch/pos?next=/pos/checkout">
+                    <span class="material-symbols-outlined text-[17px]">point_of_sale</span>
+                    Kasir
+                </a>
+                <a class="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-900" href="/backoffice/reports">
+                    <span class="material-symbols-outlined text-[17px]">bar_chart</span>
+                    Laporan
+                </a>
+            </div>
+        </header>
+
+        <nav class="flex-1 overflow-y-auto px-3 py-4">
+            @include('partials.menu-items', ['menuRenderVariant' => 'desktop'])
+        </nav>
+
+        <footer class="border-t border-slate-200 p-4 dark:border-slate-800">
+            <div class="flex items-center gap-3 rounded-lg bg-slate-50 p-3 dark:bg-slate-900">
+                <div class="size-9 overflow-hidden rounded-full bg-white ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700">
+                    <img alt="User profile" class="h-full w-full object-cover" src="/images/placeholders/user.svg">
+                </div>
+                <div class="min-w-0 flex-1">
+                    <p class="truncate text-sm font-bold text-slate-900 dark:text-slate-100">{{ $menuDrawerUserName }}</p>
+                    <p class="truncate text-xs text-slate-500 dark:text-slate-400">{{ $menuDrawerRoleLabel }} - <span data-menu-branch-name>Cabang utama</span></p>
+                </div>
+            </div>
+        </footer>
+    </aside>
+@endif
+
+<div id="menu-overlay" class="{{ $activePortal === 'backoffice' ? 'fixed lg:hidden' : 'absolute' }} inset-0 z-50 hidden overflow-hidden">
+    <div class="absolute inset-0 bg-slate-950/50 backdrop-blur-sm" data-menu-close></div>
+    <aside id="menu-drawer" class="absolute left-0 top-0 flex h-full w-[21rem] max-w-[88vw] -translate-x-full flex-col bg-white shadow-2xl transition-transform duration-300 dark:bg-slate-950">
+        <header class="border-b border-slate-200 px-4 pb-4 pt-5 dark:border-slate-800">
+            <div class="mb-4 flex items-center justify-between">
+                <p class="text-xs font-bold uppercase tracking-[0.24em] text-slate-400">Menu</p>
+                <button class="flex size-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-slate-100" data-menu-close type="button" aria-label="Tutup menu">
                     <span class="material-symbols-outlined text-[20px]">close</span>
                 </button>
-                <div class="flex items-center gap-4 mb-6">
-                    <div class="size-14 rounded-full bg-primary flex items-center justify-center text-white shadow-lg shadow-primary/30">
-                        <span class="material-symbols-outlined text-3xl">store</span>
-                    </div>
-                    <div class="flex-1 min-w-0">
-                        <h1 id="menu-store-name" class="text-slate-900 dark:text-slate-100 text-lg font-bold leading-tight truncate">Toko</h1>
-                        <p id="menu-branch-name" class="text-primary text-sm font-medium">Cabang</p>
-                    </div>
+            </div>
+            <div class="mb-4 flex items-center gap-3">
+                <div class="flex size-12 items-center justify-center rounded-lg bg-primary text-white shadow-sm shadow-primary/25">
+                    <span class="material-symbols-outlined text-[26px]">store</span>
                 </div>
-                <div class="flex items-center gap-3 p-3 bg-white dark:bg-slate-800 rounded-xl border border-primary/10">
-                    <div class="size-10 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
-                        <img alt="User profile" class="w-full h-full object-cover" src="https://placehold.co/80x80?text=User" />
-                    </div>
-                    <div class="flex-1 min-w-0">
-                        <p class="text-slate-900 dark:text-slate-100 text-sm font-semibold truncate">{{ $menuDrawerUserName }}</p>
-                        <p class="text-slate-500 dark:text-slate-400 text-xs">{{ $menuDrawerRoleLabel }} • {{ $activePortal === 'backoffice' ? 'Backoffice' : 'POS' }}</p>
-                    </div>
-                    <span class="material-symbols-outlined text-primary text-sm">verified_user</span>
+                <div class="min-w-0 flex-1">
+                    <h1 class="truncate text-base font-black leading-tight text-slate-900 dark:text-slate-100" data-menu-store-name>{{ $menuDrawerTenant?->name ?: 'Toko' }}</h1>
+                    <p class="truncate text-sm font-semibold text-primary" data-menu-branch-name>Cabang utama</p>
                 </div>
-            </header>
-            <nav class="flex-1 overflow-y-auto px-4 py-6">
-                <div class="space-y-6">
-                    @foreach ($menuSections as $section)
-                        @if (!empty($section['items']))
-                            <section>
-                                <p class="mb-2 px-2 text-[11px] font-bold uppercase tracking-[0.22em] text-slate-400">{{ $section['title'] }}</p>
-                                <ul class="space-y-2">
-                                    @foreach ($section['items'] as $item)
-                                        @php($isActive = $isMenuItemActive($item))
-                                        <li>
-                                            <a class="flex items-center gap-4 rounded-2xl px-4 py-3 transition-colors {{ $isActive ? 'bg-primary/10 text-primary ring-1 ring-primary/15' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800' }}" href="{{ $item['href'] }}">
-                                                <span class="material-symbols-outlined text-[24px] {{ $isActive ? 'text-primary' : '' }}">{{ $item['icon'] }}</span>
-                                                <span class="min-w-0 flex-1">
-                                                    <span class="block truncate text-sm font-semibold">{{ $item['label'] }}</span>
-                                                    @if (!empty($item['description']))
-                                                        <span class="block truncate text-[11px] {{ $isActive ? 'text-primary/80' : 'text-slate-500 dark:text-slate-400' }}">{{ $item['description'] }}</span>
-                                                    @endif
-                                                </span>
-                                            </a>
-                                        </li>
-                                    @endforeach
-                                </ul>
-                            </section>
-                        @endif
-                    @endforeach
+            </div>
+            <div class="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900">
+                <div class="size-10 overflow-hidden rounded-full bg-white ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700">
+                    <img alt="User profile" class="h-full w-full object-cover" src="/images/placeholders/user.svg">
                 </div>
-            </nav>
-         </aside>
-     </div>
-    <script>
-        (() => {
+                <div class="min-w-0 flex-1">
+                    <p class="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{{ $menuDrawerUserName }}</p>
+                    <p class="truncate text-xs text-slate-500 dark:text-slate-400">{{ $menuDrawerRoleLabel }} - {{ $activePortal === 'backoffice' ? 'Backoffice' : 'Kasir' }}</p>
+                </div>
+                <span class="material-symbols-outlined text-[18px] text-primary">verified_user</span>
+            </div>
+        </header>
+
+        <nav class="flex-1 overflow-y-auto px-4 py-5">
+            @include('partials.menu-items', ['menuRenderVariant' => 'mobile'])
+        </nav>
+    </aside>
+</div>
+
+<script>
+    (() => {
+        const bootMenu = () => {
             const overlay = document.getElementById('menu-overlay');
             const drawer = document.getElementById('menu-drawer');
             const triggers = document.querySelectorAll('[data-menu-trigger]');
-            const storeName = document.getElementById('menu-store-name');
-            const branchName = document.getElementById('menu-branch-name');
+            const storeNameTargets = document.querySelectorAll('[data-menu-store-name]');
+            const branchNameTargets = document.querySelectorAll('[data-menu-branch-name]');
+
+            if (!overlay || !drawer) {
+                return;
+            }
+
+            const setTriggerState = (isOpen) => {
+                triggers.forEach((trigger) => {
+                    trigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+                });
+            };
 
             const openMenu = () => {
                 overlay.classList.remove('hidden');
-                drawer.classList.remove('-translate-x-full');
+                requestAnimationFrame(() => drawer.classList.remove('-translate-x-full'));
+                document.documentElement.classList.add('menu-open');
+                setTriggerState(true);
             };
 
             const closeMenu = () => {
-                overlay.classList.add('hidden');
                 drawer.classList.add('-translate-x-full');
+                document.documentElement.classList.remove('menu-open');
+                setTriggerState(false);
+                window.setTimeout(() => {
+                    overlay.classList.add('hidden');
+                }, 180);
             };
 
-            document.addEventListener('click', (event) => {
-                const trigger = event.target.closest('[data-menu-trigger]');
-                if (trigger) {
+            triggers.forEach((trigger) => {
+                trigger.setAttribute('aria-haspopup', 'dialog');
+                trigger.setAttribute('aria-expanded', 'false');
+                trigger.addEventListener('click', (event) => {
                     event.preventDefault();
                     openMenu();
-                    return;
-                }
+                });
+            });
+
+            document.addEventListener('click', (event) => {
                 const closeButton = event.target.closest('[data-menu-close]');
                 if (closeButton) {
                     event.preventDefault();
                     closeMenu();
                 }
             });
-            overlay.addEventListener('click', (event) => {
-                if (event.target === overlay) {
-                    closeMenu();
-                }
-            });
-            document.addEventListener('keydown', (event) => {
-                if (event.key === 'Escape') {
-                    closeMenu();
-                }
-            });
 
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape' && !overlay.classList.contains('hidden')) {
+                    closeMenu();
+                }
+            });
 
             const centerHeaderTitles = () => {
                 const backIcons = ['arrow_back', 'arrow_back_ios', 'arrow_back_ios_new', 'close'];
@@ -261,18 +413,30 @@
             centerHeaderTitles();
 
             const tenantId = document.querySelector('meta[name="tenant-id"]')?.content;
-            if (tenantId) {
-                fetch('/api/v1/bootstrap', { headers: { 'X-Tenant-Id': tenantId } })
-                    .then((response) => response.ok ? response.json() : null)
+            if (tenantId && window.PosUi?.getBootstrap) {
+                window.PosUi.getBootstrap({ headers: { 'X-Tenant-Id': tenantId } })
                     .then((data) => {
                         if (!data) {
                             return;
                         }
-                        storeName.textContent = data.tenant?.name || 'Toko';
-                        branchName.textContent = data.branches?.[0]?.name || 'Cabang';
 
+                        storeNameTargets.forEach((target) => {
+                            target.textContent = data.tenant?.name || 'Toko';
+                        });
+
+                        branchNameTargets.forEach((target) => {
+                            target.textContent = data.branches?.[0]?.name || 'Cabang utama';
+                        });
                     })
                     .catch(() => {});
             }
-        })();
-    </script>
+        };
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', bootMenu, { once: true });
+            return;
+        }
+
+        bootMenu();
+    })();
+</script>

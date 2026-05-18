@@ -22,20 +22,24 @@
     abort_unless(in_array($categoryEditRole, ['admin', 'owner', 'superadmin'], true), 403);
 @endphp
 
+@php
+    $categoryEditListUrl = (request()->is('pos/*') ? '/pos' : '/backoffice').'/categories';
+@endphp
+
 @section('page_title', 'Ubah Kategori')
 @section('body_class', 'bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 antialiased')
 @section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-white dark:bg-background-dark shadow-2xl')
-@section('main_class', 'flex-1 overflow-hidden p-0')
+@section('main_class', 'flex-1 overflow-hidden p-0 app-bottom-safe-space')
 
 @push('head')
 @endpush
 
 @section('header')
-    <x-page-header title="Ubah Kategori" backUrl="/backoffice/categories" :showMenuButton="true" />
+    <x-page-header title="Ubah Kategori" :backUrl="$categoryEditListUrl" :showMenuButton="true" />
 @endsection
 
 @section('content')
-        <div class="flex-1 overflow-y-auto px-6 py-6 space-y-6 pb-32">
+        <div class="flex-1 overflow-y-auto px-6 py-6 space-y-6 pb-32 app-bottom-safe-space">
             <div class="flex items-center justify-between rounded-xl bg-slate-50 border border-slate-100 px-4 py-3">
                 <p class="text-sm text-slate-500 font-medium">ID Kategori</p>
                 <p id="category-id-label" class="text-xs bg-slate-200 px-2 py-1 rounded font-semibold text-slate-700">-</p>
@@ -82,7 +86,7 @@
             </div>
             <p id="form-error" class="text-sm text-red-500 font-semibold hidden"></p>
         </div>
-        <div class="fixed bottom-0 left-1/2 w-full max-w-[430px] -translate-x-1/2 bg-white border-t border-slate-100 p-6 pb-10">
+        <div class="fixed bottom-0 left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 bg-white border-t border-slate-100 p-6 app-bottom-safe-footer">
             <div class="grid grid-cols-3 gap-3">
                 <button id="cancel-btn" class="py-4 rounded-xl border border-slate-200 text-slate-700 font-bold hover:bg-slate-50" type="button">Batal</button>
                 <button id="delete-btn" class="py-4 rounded-xl border border-rose-200 text-rose-600 font-bold hover:bg-rose-50" type="button">Hapus</button>
@@ -134,11 +138,11 @@
                 };
 
                 const goBack = () => {
-                    window.location.href = '/backoffice/categories';
+                    window.location.href = @json($categoryEditListUrl);
                 };
 
                 const loadCategory = async () => {
-                    const response = await fetch(`/api/v1/categories/${categoryId}`, { headers });
+                    const response = await window.PosUi.fetchWithTimeout(`/api/v1/categories/${categoryId}`, { headers });
                     if (!response.ok) {
                         throw new Error('Kategori tidak ditemukan.');
                     }
@@ -160,26 +164,34 @@
                         return;
                     }
 
-                    const response = await fetch(`/api/v1/categories/${categoryId}`, {
-                        method: 'PUT',
-                        headers: {
-                            ...headers,
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            name,
-                            description: description || null,
-                            icon: selectedIcon,
-                        }),
-                    });
+                    el.save.disabled = true;
 
-                    if (!response.ok) {
-                        const error = await response.json();
+                    try {
+                        const response = await window.PosUi.fetchWithTimeout(`/api/v1/categories/${categoryId}`, {
+                            method: 'PUT',
+                            headers: {
+                                ...headers,
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                name,
+                                description: description || null,
+                                icon: selectedIcon,
+                            }),
+                        });
+
+                        if (!response.ok) {
+                            const mapped = await window.PosUi.mapApiError(response, 'Gagal menyimpan kategori.');
+                            const validationMessage = Object.values(mapped?.payload?.errors || mapped?.payload?.details || {})[0]?.[0];
+                            throw new Error(validationMessage || mapped?.message || 'Gagal menyimpan kategori.');
+                        }
+
+                        goBack();
+                    } catch (error) {
                         showError(error?.message || 'Gagal menyimpan kategori.');
-                        return;
+                    } finally {
+                        el.save.disabled = false;
                     }
-
-                    goBack();
                 };
 
                 const deleteCategory = async () => {
@@ -189,18 +201,25 @@
                         return;
                     }
 
-                    const response = await fetch(`/api/v1/categories/${categoryId}`, {
-                        method: 'DELETE',
-                        headers,
-                    });
+                    el.delete.disabled = true;
 
-                    if (!response.ok) {
-                        const error = await response.json();
+                    try {
+                        const response = await window.PosUi.fetchWithTimeout(`/api/v1/categories/${categoryId}`, {
+                            method: 'DELETE',
+                            headers,
+                        });
+
+                        if (!response.ok) {
+                            const mapped = await window.PosUi.mapApiError(response, 'Gagal menghapus kategori.');
+                            throw new Error(mapped?.message || 'Gagal menghapus kategori.');
+                        }
+
+                        goBack();
+                    } catch (error) {
                         showError(error?.message || 'Gagal menghapus kategori.');
-                        return;
+                    } finally {
+                        el.delete.disabled = false;
                     }
-
-                    goBack();
                 };
 
                 el.cancel.addEventListener('click', goBack);

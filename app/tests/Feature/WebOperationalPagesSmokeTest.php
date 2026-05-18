@@ -38,6 +38,8 @@ class WebOperationalPagesSmokeTest extends TestCase
         $this->assertStringContainsString('/api/v1/categories', $contents);
         $this->assertStringContainsString('Produk berhasil disimpan.', $contents);
         $this->assertStringContainsString('productListUrl', $contents);
+        $this->assertStringContainsString('productBackUrl', $contents);
+        $this->assertStringContainsString('id="cancel-product"', $contents);
         $this->assertStringContainsString('/backoffice/products', $contents);
         $this->assertStringContainsString('enable-variants', $contents);
         $this->assertStringContainsString('variant-line-list', $contents);
@@ -47,6 +49,27 @@ class WebOperationalPagesSmokeTest extends TestCase
         $this->assertStringContainsString('? collectVariantStockLines(payload.variants)', $contents);
         $this->assertStringContainsString('initial_stock: el.trackStock.checked && !el.enableVariants.checked ? Number(el.stock.value || 0) : 0,', $contents);
         $this->assertStringContainsString('const collectVariantStockLines = (variants) => {', $contents);
+    }
+
+    public function test_customer_and_category_views_use_csp_safe_create_flows(): void
+    {
+        $customerContents = file_get_contents(resource_path('views/customers.blade.php'));
+        $categoriesContents = file_get_contents(resource_path('views/categories.blade.php'));
+        $categoryCreateContents = file_get_contents(resource_path('views/category-create.blade.php'));
+
+        $this->assertStringContainsString('id="btn-add-customer"', $customerContents);
+        $this->assertStringContainsString('data-customer-create-form', $customerContents);
+        $this->assertStringContainsString("apiFetch('/api/v1/customers'", $customerContents);
+        $this->assertStringContainsString("apiFetch('/api/v1/customer-categories'", $customerContents);
+        $this->assertStringContainsString('data-customer-category-field', $customerContents);
+        $this->assertStringContainsString('customer_category_id', $customerContents);
+        $this->assertStringContainsString('id="add-category"', $categoriesContents);
+        $this->assertStringContainsString('data-product-add-url', $categoriesContents);
+        $this->assertStringContainsString('id="tab-customer-categories"', $categoriesContents);
+        $this->assertStringContainsString('/api/v1/customer-categories', $categoriesContents);
+        $this->assertStringContainsString('window.PosUi.fetchWithTimeout(\'/api/v1/categories\'', $categoriesContents);
+        $this->assertStringNotContainsString('onclick="location.href', $categoriesContents);
+        $this->assertStringContainsString('window.PosUi.fetchWithTimeout(\'/api/v1/categories\'', $categoryCreateContents);
     }
 
     public function test_product_edit_route_and_view_expose_variant_initial_stock_contract(): void
@@ -175,6 +198,21 @@ class WebOperationalPagesSmokeTest extends TestCase
         $this->assertStringContainsString('Unduh Laporan PDF', $contents);
     }
 
+    public function test_backoffice_online_orders_route_and_view_expose_real_sync_sections(): void
+    {
+        $route = Route::getRoutes()->match(Request::create('/backoffice/online-orders', 'GET'));
+        $middleware = $route->gatherMiddleware();
+        $contents = file_get_contents(resource_path('views/online-orders.blade.php'));
+
+        $this->assertContains('web_access:backoffice,supervisor|admin|owner|superadmin,sale.pos', $middleware);
+        $this->assertTrue(view()->exists('online-orders'));
+        $this->assertStringContainsString('Order Online', $contents);
+        $this->assertStringContainsString('Pelanggan Tersinkron', $contents);
+        $this->assertStringContainsString('Masuk Laporan POS', $contents);
+        $this->assertStringContainsString('OnlineOrder::query()', $contents);
+        $this->assertStringContainsString('/backoffice/reports/sales', $contents);
+    }
+
     public function test_production_batch_list_route_and_view_expose_filterable_batch_monitoring(): void
     {
         $route = Route::getRoutes()->match(Request::create('/backoffice/inventory/production-batches', 'GET'));
@@ -226,5 +264,23 @@ class WebOperationalPagesSmokeTest extends TestCase
         $this->assertStringContainsString('data-anomaly-resolve-id', $contents);
         $this->assertStringContainsString('batch-detail-resolve-modal', $contents);
         $this->assertStringContainsString('context_label', $contents);
+    }
+
+    public function test_pos_cash_transaction_routes_and_view_expose_journal_inputs(): void
+    {
+        $cashInRoute = Route::getRoutes()->match(Request::create('/pos/cash-in', 'GET'));
+        $contents = file_get_contents(resource_path('views/cash-management.blade.php'));
+
+        $this->assertContains('web_access:pos,cashier|staff|warehouse|supervisor|admin|owner|superadmin,finance.cash_transactions', $cashInRoute->gatherMiddleware());
+        $this->assertTrue(view()->exists('cash-management'));
+        $this->assertStringContainsString('Kas Masuk', $contents);
+        $this->assertStringContainsString('Kas Keluar', $contents);
+        $this->assertStringContainsString('transaction_date', $contents);
+        $this->assertStringContainsString('account_id', $contents);
+        $this->assertStringContainsString('category', $contents);
+        $this->assertStringContainsString('description', $contents);
+        $this->assertStringContainsString('Ringkasan Bulan Ini', $contents);
+        $this->assertStringContainsString('Riwayat Transaksi', $contents);
+        $this->assertStringContainsString('cash-sheet-overlay', $contents);
     }
 }

@@ -22,6 +22,10 @@
     abort_unless(in_array($categoryCreateRole, ['admin', 'owner', 'superadmin'], true), 403);
 @endphp
 
+@php
+    $categoryCreateListUrl = (request()->is('pos/*') ? '/pos' : '/backoffice').'/categories';
+@endphp
+
 @section('page_title', 'Tambah Kategori')
 @section('body_class', 'bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 antialiased')
 @section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-white dark:bg-background-dark shadow-2xl')
@@ -30,15 +34,15 @@
 @push('head')
         <style>
             .icon-selected {
-                border-color: #135bec;
-                background-color: rgba(19, 91, 236, 0.1);
-                color: #135bec;
+                border-color: var(--color-primary);
+                background-color: rgba(249, 115, 22, 0.1);
+                color: var(--color-primary);
             }
         </style>
 @endpush
 
 @section('header')
-    <x-page-header title="Tambah Kategori" backUrl="/backoffice/categories" :showMenuButton="true" />
+    <x-page-header title="Tambah Kategori" :backUrl="$categoryCreateListUrl" :showMenuButton="true" />
 @endsection
 
 @section('content')
@@ -84,7 +88,8 @@
                 </div>
             </div>
         </div>
-        <div class="fixed bottom-0 left-1/2 w-full max-w-[430px] -translate-x-1/2 bg-white border-t border-slate-100 p-6 pb-10">
+        <p id="form-error" class="fixed bottom-24 left-1/2 z-30 hidden w-[calc(100%-3rem)] max-w-[382px] -translate-x-1/2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-600"></p>
+        <div class="fixed bottom-0 left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 bg-white border-t border-slate-100 p-6 app-bottom-safe-footer">
             <button id="save-category" class="w-full bg-primary text-white font-bold py-4 rounded-xl shadow-lg shadow-primary/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2" type="button">
                 <span>Simpan Kategori</span>
             </button>
@@ -101,9 +106,21 @@
                     description: document.getElementById('description'),
                     iconGrid: document.getElementById('icon-grid'),
                     save: document.getElementById('save-category'),
+                    error: document.getElementById('form-error'),
                 };
 
                 let selectedIcon = 'restaurant';
+
+                const showError = (message) => {
+                    if (!message) {
+                        el.error.classList.add('hidden');
+                        el.error.textContent = '';
+                        return;
+                    }
+
+                    el.error.textContent = message;
+                    el.error.classList.remove('hidden');
+                };
 
                 const setSelectedIcon = (icon) => {
                     selectedIcon = icon;
@@ -125,32 +142,43 @@
                 });
 
                 const createCategory = async () => {
+                    showError('');
                     const name = el.name.value.trim();
                     const description = el.description.value.trim();
                     if (!name) {
-                        window.alert('Nama kategori wajib diisi.');
+                        showError('Nama kategori wajib diisi.');
+                        el.name.focus();
                         return;
                     }
 
-                    const response = await fetch('/api/v1/categories', {
-                        method: 'POST',
-                        headers: {
-                            ...headers,
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            name,
-                            description: description || null,
-                            icon: selectedIcon,
-                        }),
-                    });
+                    el.save.disabled = true;
 
-                    if (!response.ok) {
-                        window.alert('Gagal menyimpan kategori.');
-                        return;
+                    try {
+                        const response = await window.PosUi.fetchWithTimeout('/api/v1/categories', {
+                            method: 'POST',
+                            headers: {
+                                ...headers,
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                name,
+                                description: description || null,
+                                icon: selectedIcon,
+                            }),
+                        });
+
+                        if (!response.ok) {
+                            const mapped = await window.PosUi.mapApiError(response, 'Gagal menyimpan kategori.');
+                            const validationMessage = Object.values(mapped?.payload?.errors || mapped?.payload?.details || {})[0]?.[0];
+                            throw new Error(validationMessage || mapped?.message || 'Gagal menyimpan kategori.');
+                        }
+
+                        window.location.href = @json($categoryCreateListUrl);
+                    } catch (error) {
+                        showError(error?.message || 'Gagal menyimpan kategori.');
+                    } finally {
+                        el.save.disabled = false;
                     }
-
-                    window.location.href = '/backoffice/categories';
                 };
 
                 el.save.addEventListener('click', createCategory);

@@ -72,6 +72,87 @@ class SubscriptionService
         return FeatureGateConfig::isFeatureAllowed($featureKey, $this->currentPlan($tenant));
     }
 
+    public function ensureCurrentSubscription(Tenant $tenant, ?string $plan = null): object
+    {
+        if (! Schema::hasTable('subscriptions')) {
+            return (object) [];
+        }
+
+        $normalizedPlan = FeatureGateConfig::normalizePlan($plan ?? $tenant->plan ?? null);
+        $now = now('UTC');
+        $subscription = $this->currentSubscription($tenant);
+
+        $currentPeriodStart = $now;
+        $currentPeriodEnd = $now->copy()->addMonth();
+
+        if (! $subscription) {
+            $insert = [
+                'id' => (string) Str::uuid(),
+                'tenant_id' => $tenant->id,
+                'plan' => $normalizedPlan,
+                'status' => 'active',
+                'started_at' => $now,
+                'expires_at' => null,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
+
+            if (DB::getSchemaBuilder()->hasColumn('subscriptions', 'current_period_start')) {
+                $insert['current_period_start'] = $currentPeriodStart;
+            }
+            if (DB::getSchemaBuilder()->hasColumn('subscriptions', 'current_period_end')) {
+                $insert['current_period_end'] = $currentPeriodEnd;
+            }
+            if (DB::getSchemaBuilder()->hasColumn('subscriptions', 'is_current')) {
+                $insert['is_current'] = true;
+            }
+            if (DB::getSchemaBuilder()->hasColumn('subscriptions', 'trial_ends_at')) {
+                $insert['trial_ends_at'] = null;
+            }
+            if (DB::getSchemaBuilder()->hasColumn('subscriptions', 'grace_ends_at')) {
+                $insert['grace_ends_at'] = null;
+            }
+            if (DB::getSchemaBuilder()->hasColumn('subscriptions', 'canceled_at')) {
+                $insert['canceled_at'] = null;
+            }
+
+            DB::table('subscriptions')->insert($insert);
+
+            return $this->currentSubscription($tenant) ?? (object) $insert;
+        }
+
+        $updates = [
+            'plan' => $normalizedPlan,
+            'status' => 'active',
+            'updated_at' => $now,
+        ];
+
+        if (DB::getSchemaBuilder()->hasColumn('subscriptions', 'current_period_start')) {
+            $updates['current_period_start'] = $subscription->current_period_start ?? $currentPeriodStart;
+        }
+        if (DB::getSchemaBuilder()->hasColumn('subscriptions', 'current_period_end')) {
+            $updates['current_period_end'] = $subscription->current_period_end ?? $currentPeriodEnd;
+        }
+        if (DB::getSchemaBuilder()->hasColumn('subscriptions', 'trial_ends_at')) {
+            $updates['trial_ends_at'] = $subscription->trial_ends_at ?? null;
+        }
+        if (DB::getSchemaBuilder()->hasColumn('subscriptions', 'grace_ends_at')) {
+            $updates['grace_ends_at'] = $subscription->grace_ends_at ?? null;
+        }
+        if (DB::getSchemaBuilder()->hasColumn('subscriptions', 'canceled_at')) {
+            $updates['canceled_at'] = null;
+        }
+        if (DB::getSchemaBuilder()->hasColumn('subscriptions', 'is_current')) {
+            $updates['is_current'] = true;
+        }
+
+        DB::table('subscriptions')
+            ->where('id', $subscription->id)
+            ->update($updates);
+
+        return $this->currentSubscription($tenant) ?? (object) $updates;
+    }
+
     public function isStatusAllowed(Tenant $tenant, array $allowedStatuses): bool
     {
         $allowed = array_values(array_filter(array_map(

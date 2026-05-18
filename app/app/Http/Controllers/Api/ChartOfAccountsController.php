@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\AccountMapping;
 use App\Models\ChartOfAccount;
 use App\Support\TenantContext;
+use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Str;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -138,5 +140,90 @@ class ChartOfAccountsController extends Controller
         return response()->json([
             'account' => $account->only(['id', 'code', 'name', 'type', 'parent_id']),
         ]);
+    }
+
+    public function updateMapping(Request $request)
+    {
+        $tenantId = TenantContext::id();
+        if (! $tenantId) {
+            return response()->json([
+                'message' => 'Tenant tidak ditemukan.',
+            ], 400);
+        }
+
+        $payload = $request->validate([
+            'sale_account_id' => ['required', 'uuid'],
+            'cash_account_id' => ['required', 'uuid'],
+            'bank_account_id' => ['required', 'uuid'],
+            'inventory_account_id' => ['required', 'uuid'],
+            'cogs_account_id' => ['required', 'uuid'],
+            'payable_account_id' => ['required', 'uuid'],
+            'receivable_account_id' => ['required', 'uuid'],
+            'expense_adjustment_account_id' => ['required', 'uuid'],
+        ]);
+
+        $resolved = [
+            'sale_account_id' => $this->resolveMappedAccount($tenantId, $payload['sale_account_id'], 'revenue', 'sale_account_id'),
+            'cash_account_id' => $this->resolveMappedAccount($tenantId, $payload['cash_account_id'], 'asset', 'cash_account_id'),
+            'bank_account_id' => $this->resolveMappedAccount($tenantId, $payload['bank_account_id'], 'asset', 'bank_account_id'),
+            'inventory_account_id' => $this->resolveMappedAccount($tenantId, $payload['inventory_account_id'], 'asset', 'inventory_account_id'),
+            'cogs_account_id' => $this->resolveMappedAccount($tenantId, $payload['cogs_account_id'], 'expense', 'cogs_account_id'),
+            'payable_account_id' => $this->resolveMappedAccount($tenantId, $payload['payable_account_id'], 'liability', 'payable_account_id'),
+            'receivable_account_id' => $this->resolveMappedAccount($tenantId, $payload['receivable_account_id'], 'asset', 'receivable_account_id'),
+            'expense_adjustment_account_id' => $this->resolveMappedAccount($tenantId, $payload['expense_adjustment_account_id'], 'expense', 'expense_adjustment_account_id'),
+        ];
+
+        $distinct = collect($resolved)->values()->unique();
+        if ($distinct->count() !== count($resolved)) {
+            return response()->json([
+                'message' => 'Setiap mapping akun wajib menunjuk akun yang berbeda.',
+                'errors' => [
+                    'mapping' => ['Mapping akun duplikat tidak diizinkan.'],
+                ],
+            ], 422);
+        }
+
+        $mapping = AccountMapping::query()->where('tenant_id', $tenantId)->first();
+        $actorId = (string) optional($request->user())->id;
+
+        if (! $mapping) {
+            $mapping = AccountMapping::query()->create(array_merge([
+                'id' => (string) Str::uuid(),
+                'tenant_id' => $tenantId,
+                'created_by' => $actorId !== '' ? $actorId : null,
+                'updated_by' => $actorId !== '' ? $actorId : null,
+            ], $resolved));
+        } else {
+            $mapping->forceFill(array_merge($resolved, [
+                'updated_by' => $actorId !== '' ? $actorId : $mapping->updated_by,
+            ]))->save();
+            $mapping->refresh();
+        }
+
+        return response()->json([
+            'mapping' => $mapping,
+        ]);
+    }
+
+    private function resolveMappedAccount(string $tenantId, string $accountId, string $expectedType, string $field): string
+    {
+        $account = ChartOfAccount::query()
+            ->where('tenant_id', $tenantId)
+            ->where('id', $accountId)
+            ->first();
+
+        if (! $account) {
+            throw ValidationException::withMessages([
+                $field => ['Akun tidak ditemukan untuk tenant aktif.'],
+            ]);
+        }
+
+        if ((string) $account->type !== $expectedType) {
+            throw ValidationException::withMessages([
+                $field => ['Akun wajib bertipe '.$expectedType.'.'],
+            ]);
+        }
+
+        return (string) $account->id;
     }
 }

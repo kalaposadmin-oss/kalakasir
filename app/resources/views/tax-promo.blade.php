@@ -27,16 +27,16 @@
 @section('page_title', 'Pengaturan Pajak dan Promo')
 @section('body_class', 'bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display min-h-screen')
 @section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-white dark:bg-background-dark shadow-2xl')
-@section('main_class', 'flex-1 overflow-hidden p-0')
+@section('main_class', 'flex-1 overflow-hidden p-0 app-bottom-safe-space')
 
 @push('head')
         <style>
             .toggle-checkbox:checked {
                 right: 0;
-                border-color: #135bec;
+                border-color: rgb(var(--primary-500));
             }
             .toggle-checkbox:checked + .toggle-label {
-                background-color: #135bec;
+                background-color: rgb(var(--primary-500));
             }
         </style>
 @endpush
@@ -52,7 +52,7 @@
 @endsection
 
 @section('content')
-        <div class="flex-1 overflow-y-auto pb-32">
+        <div class="flex-1 overflow-y-auto pb-32 app-bottom-safe-space">
             <section class="p-4">
                 <div class="flex items-center justify-between mb-4">
                     <h2 class="text-sm font-bold text-slate-500 uppercase tracking-widest">Pengaturan Pajak</h2>
@@ -81,7 +81,7 @@
             <div class="h-8"></div>
         </div>
         @if ($canManageTaxPromo)
-            <div class="fixed bottom-[88px] left-1/2 -translate-x-1/2 w-full max-w-[430px] px-6 z-40">
+            <div class="fixed bottom-[88px] left-1/2 -translate-x-1/2 w-full max-w-[430px] px-6 z-40 app-bottom-safe-space">
                 <button class="w-full bg-primary text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-xl shadow-primary/30">
                     <span class="material-symbols-outlined">add_task</span>
                     Tambah Pajak Baru

@@ -148,19 +148,22 @@ class PlatformHealthService
 
         $webhook = (string) config('platform.health_alert_webhook', '');
         if ($webhook !== '') {
-            try {
-                Http::timeout(2)->post($webhook, [
-                    'event' => 'platform.health.failure',
-                    'request_id' => $requestId,
-                    'checks' => $checks,
-                ]);
-            } catch (\Throwable $exception) {
-                Log::warning('platform.health.alert_failed', [
-                    'event_type' => 'platform.health.alert_failed',
-                    'request_id' => $requestId,
-                    'message' => $exception->getMessage(),
-                ]);
-            }
+            $timeout = max(1, min((int) config('platform.health_alert_timeout_seconds', 1), 3));
+            app()->terminating(static function () use ($webhook, $timeout, $requestId, $checks): void {
+                try {
+                    Http::connectTimeout(1)->timeout($timeout)->post($webhook, [
+                        'event' => 'platform.health.failure',
+                        'request_id' => $requestId,
+                        'checks' => $checks,
+                    ]);
+                } catch (\Throwable $exception) {
+                    Log::warning('platform.health.alert_failed', [
+                        'event_type' => 'platform.health.alert_failed',
+                        'request_id' => $requestId,
+                        'message' => $exception->getMessage(),
+                    ]);
+                }
+            });
         }
     }
 }

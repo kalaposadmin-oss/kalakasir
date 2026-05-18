@@ -365,6 +365,20 @@ class ProductionBatchQuickFlowTest extends TestCase
             'product_id' => $fixture['finished_good_id'],
             'qty_in' => 11.00,
         ]);
+
+        $this->assertDatabaseHas('products', [
+            'id' => $fixture['finished_good_id'],
+            'tenant_id' => $tenant->id,
+            'hpp_average' => 5454.55,
+        ]);
+
+        $productsResponse = $this->getJson('/api/v1/products', $this->tenantHeaders($tenant->id));
+        $productsResponse->assertOk();
+
+        $finishedGood = collect($productsResponse->json('products'))->firstWhere('id', $fixture['finished_good_id']);
+
+        $this->assertNotNull($finishedGood);
+        $this->assertSame(5454.55, round((float) ($finishedGood['hpp_average'] ?? 0), 2));
     }
 
     public function test_post_batch_is_idempotent_for_same_key(): void
@@ -711,6 +725,7 @@ class ProductionBatchQuickFlowTest extends TestCase
         [$tenant] = $this->bootApiActor('admin', 'admin+production-resolve-batch-anomaly@example.test');
 
         $fixture = $this->seedFixture($tenant);
+        $this->setTenantPlan($tenant, 'P');
         $batchId = $this->createDraftBatch($tenant->id, $fixture, expectedOutputQty: 10, recipeVersion: 3, referenceNo: 'PB-RESOLVE-001');
 
         $this->postJson(
@@ -752,6 +767,13 @@ class ProductionBatchQuickFlowTest extends TestCase
             ->assertJsonPath('data.batches.0.anomaly_summary.open_count', 0)
             ->assertJsonPath('data.batches.0.anomaly_summary.resolved_count', 1)
             ->assertJsonPath('data.batches.0.anomaly_summary.has_open_alert', false);
+    }
+
+    private function setTenantPlan(Tenant $tenant, string $plan): void
+    {
+        DB::table('tenants')
+            ->where('id', $tenant->id)
+            ->update(['plan' => $plan]);
     }
 
     public function test_show_can_filter_and_limit_batch_anomaly_history(): void
@@ -892,7 +914,6 @@ class ProductionBatchQuickFlowTest extends TestCase
             'services.anomaly.production_batch_yield_variance_qty_threshold' => 0.5,
             'services.anomaly.production_batch_yield_variance_severity' => 'high',
         ]);
-
         [$tenant] = $this->bootApiActor('admin', 'admin+production-variance-anomaly@example.test');
 
         $fixture = $this->seedFixture($tenant);
@@ -932,6 +953,336 @@ class ProductionBatchQuickFlowTest extends TestCase
         $this->assertSame(2.0, (float) ($payload['yield_variance_qty'] ?? 0));
         $this->assertSame(20.0, (float) ($payload['yield_variance_pct'] ?? 0));
         $this->assertSame(5.0, (float) ($payload['threshold_pct'] ?? 0));
+    }
+
+    public function test_recipe_preview_shows_required_materials_and_shortage_status(): void
+    {
+        [$tenant] = $this->bootApiActor('admin', 'admin+production-recipe-preview@example.test');
+
+        $fixture = $this->seedFixture($tenant, rawMaterialQty: 100);
+
+        $response = $this->getJson('/api/v1/production/recipe-preview?product_id='.$fixture['finished_good_id'].'&qty=10&location_id='.$fixture['location_id'], $this->tenantHeaders($tenant->id));
+
+        $response->assertOk()
+            ->assertJsonPath('data.product.id', $fixture['finished_good_id'])
+            ->assertJsonPath('data.qty_requested', 10)
+            ->assertJsonPath('data.can_post', true)
+            ->assertJsonPath('data.ingredients.0.material_id', $fixture['raw_material_id'])
+            ->assertJsonPath('data.ingredients.0.material_name', 'Gula')
+            ->assertJsonPath('data.ingredients.0.recipe_qty', 2)
+            ->assertJsonPath('data.ingredients.0.required_qty', 20)
+            ->assertJsonPath('data.ingredients.0.available_qty', 100)
+            ->assertJsonPath('data.ingredients.0.shortage_flag', false)
+            ->assertJsonPath('data.ingredients.0.stock_status', 'cukup');
+
+        $shortageResponse = $this->getJson('/api/v1/production/recipe-preview?product_id='.$fixture['finished_good_id'].'&qty=60&location_id='.$fixture['location_id'], $this->tenantHeaders($tenant->id));
+
+        $shortageResponse->assertOk()
+            ->assertJsonPath('data.can_post', false)
+            ->assertJsonPath('data.ingredients.0.required_qty', 120)
+            ->assertJsonPath('data.ingredients.0.available_qty', 100)
+            ->assertJsonPath('data.ingredients.0.shortage_flag', true)
+            ->assertJsonPath('data.ingredients.0.shortage_qty', 20)
+            ->assertJsonPath('data.ingredients.0.stock_status', 'kurang');
+    }
+
+    public function test_recipe_preview_requires_location_and_reports_empty_recipe_as_not_postable(): void
+    {
+        [$tenant] = $this->bootApiActor('admin', 'admin+production-recipe-preview-hardening@example.test');
+
+        $fixture = $this->seedFixture($tenant, rawMaterialQty: 100);
+
+        DB::table('products')->where('id', $fixture['finished_good_id'])->update([
+            'bom_items' => json_encode([]),
+        ]);
+
+        $missingLocationResponse = $this->getJson(
+            '/api/v1/production/recipe-preview?product_id='.$fixture['finished_good_id'].'&qty=10',
+            $this->tenantHeaders($tenant->id)
+        );
+
+        $missingLocationResponse->assertStatus(422);
+
+        $emptyRecipeResponse = $this->getJson(
+            '/api/v1/production/recipe-preview?product_id='.$fixture['finished_good_id'].'&qty=10&location_id='.$fixture['location_id'],
+            $this->tenantHeaders($tenant->id)
+        );
+
+        $emptyRecipeResponse->assertOk()
+            ->assertJsonPath('data.can_post', false)
+            ->assertJsonPath('data.ingredients', [])
+            ->assertJsonPath('data.warning_message', 'Recipe aktif tidak ditemukan untuk produk batch production.');
+    }
+
+    public function test_recipe_preview_reads_persisted_json_bom_lines_for_multiple_materials(): void
+    {
+        [$tenant] = $this->bootApiActor('admin', 'admin+production-recipe-preview-json-bom@example.test');
+
+        $fixture = $this->seedFixture($tenant, rawMaterialQty: 100);
+
+        $secondRawMaterialId = $this->insertProduct($tenant, [
+            'sku' => 'RM-PROD-'.Str::upper(Str::random(6)),
+            'name' => 'Tepung',
+            'product_mode' => 'add_on',
+            'production_mode' => Product::PRODUCTION_MODE_NONE,
+            'item_type' => 'raw_material',
+            'track_stock' => true,
+            'price' => 1,
+        ]);
+
+        DB::table('products')->where('id', $fixture['finished_good_id'])->update([
+            'bom_items' => json_encode([
+                [
+                    'product_id' => $fixture['raw_material_id'],
+                    'product_variant_id' => null,
+                    'qty' => 1,
+                ],
+                [
+                    'product_id' => $secondRawMaterialId,
+                    'product_variant_id' => null,
+                    'qty' => 2,
+                ],
+            ]),
+        ]);
+
+        DB::table('inventory_balances')->insert([
+            'tenant_id' => $tenant->id,
+            'product_id' => $secondRawMaterialId,
+            'location_id' => $fixture['location_id'],
+            'qty_on_hand' => 100,
+        ]);
+
+        DB::table('inventory_cost_states')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $tenant->id,
+            'product_id' => $secondRawMaterialId,
+            'location_id' => $fixture['location_id'],
+            'qty_on_hand' => 100,
+            'average_cost' => 4000,
+            'last_cost' => 4000,
+            'updated_at' => now('UTC'),
+        ]);
+
+        $response = $this->getJson(
+            '/api/v1/production/recipe-preview?product_id='.$fixture['finished_good_id'].'&qty=1&location_id='.$fixture['location_id'],
+            $this->tenantHeaders($tenant->id)
+        );
+
+        $response->assertOk()
+            ->assertJsonPath('data.can_post', true)
+            ->assertJsonCount(2, 'data.ingredients')
+            ->assertJsonPath('data.ingredients.0.material_name', 'Gula')
+            ->assertJsonPath('data.ingredients.0.recipe_qty', 1)
+            ->assertJsonPath('data.ingredients.1.material_name', 'Tepung')
+            ->assertJsonPath('data.ingredients.1.recipe_qty', 2);
+    }
+
+    public function test_bootstrap_inventory_payload_exposes_batch_eligible_product_metadata_for_production_pages(): void
+    {
+        [$tenant] = $this->bootApiActor('admin', 'admin+production-bootstrap-contract@example.test');
+
+        $fixture = $this->seedFixture($tenant, rawMaterialQty: 100);
+
+        $response = $this->getJson('/api/v1/bootstrap?include=inventory', $this->tenantHeaders($tenant->id));
+
+        $response->assertOk();
+
+        $products = collect($response->json('products'));
+        $finishedGood = $products->firstWhere('id', $fixture['finished_good_id']);
+
+        $this->assertNotNull($finishedGood);
+        $this->assertSame('batch_production', $finishedGood['production_mode'] ?? null);
+        $this->assertSame('finished_good', $finishedGood['item_type'] ?? null);
+        $this->assertTrue((bool) ($finishedGood['production_batch_eligible'] ?? false));
+        $this->assertTrue((bool) data_get($finishedGood, 'production_batch_eligibility.eligible'));
+        $this->assertTrue($products->contains(fn (array $product) => ($product['production_batch_eligible'] ?? false) === true));
+
+        $previewResponse = $this->getJson(
+            '/api/v1/production/recipe-preview?product_id='.$fixture['finished_good_id'].'&qty=10&location_id='.$fixture['location_id'],
+            $this->tenantHeaders($tenant->id)
+        );
+
+        $previewResponse->assertOk()
+            ->assertJsonPath('data.product.id', $fixture['finished_good_id'])
+            ->assertJsonPath('data.can_post', true)
+            ->assertJsonPath('data.ingredients.0.material_id', $fixture['raw_material_id'])
+            ->assertJsonPath('data.ingredients.0.shortage_flag', false);
+    }
+
+    public function test_bootstrap_inventory_payload_keeps_legacy_batch_products_ineligible_for_production_dropdown(): void
+    {
+        [$tenant] = $this->bootApiActor('admin', 'admin+production-bootstrap-legacy-candidate@example.test');
+
+        $legacyProductId = $this->insertProduct($tenant, [
+            'sku' => 'LEGACY-PROD-'.Str::upper(Str::random(6)),
+            'name' => 'Roti Legacy Batch',
+            'product_mode' => 'bom',
+            'production_mode' => Product::PRODUCTION_MODE_NONE,
+            'item_type' => 'finished_good',
+            'track_stock' => false,
+            'price' => 15000,
+        ]);
+
+        $response = $this->getJson('/api/v1/bootstrap?include=inventory', $this->tenantHeaders($tenant->id));
+
+        $response->assertOk();
+
+        $products = collect($response->json('products'));
+        $legacyProduct = $products->firstWhere('id', $legacyProductId);
+
+        $this->assertNotNull($legacyProduct);
+        $this->assertSame('bom', $legacyProduct['product_mode'] ?? null);
+        $this->assertSame(Product::PRODUCTION_MODE_NONE, $legacyProduct['production_mode'] ?? null);
+        $this->assertFalse((bool) ($legacyProduct['production_batch_eligible'] ?? true));
+        $this->assertFalse((bool) data_get($legacyProduct, 'production_batch_eligibility.eligible'));
+        $this->assertSame('Set mode produksi ke batch_production.', data_get($legacyProduct, 'production_batch_eligibility.reasons.0'));
+        $this->assertTrue($products->contains(fn (array $product) => ($product['id'] ?? null) === $legacyProductId));
+    }
+
+    public function test_bootstrap_and_branch_loader_contracts_expose_branch_location_and_product_data_for_create_modal(): void
+    {
+        [$tenant] = $this->bootApiActor('admin', 'admin+production-bootstrap-branch-location-contract@example.test');
+
+        $fixture = $this->seedFixture($tenant, rawMaterialQty: 100);
+
+        $bootstrapResponse = $this->getJson('/api/v1/bootstrap?include=inventory', $this->tenantHeaders($tenant->id));
+
+        $bootstrapResponse->assertOk()
+            ->assertJsonPath('branches.0.id', $fixture['branch_id'])
+            ->assertJsonPath('locations.0.id', $fixture['location_id']);
+
+        $products = collect($bootstrapResponse->json('products'));
+        $finishedGood = $products->firstWhere('id', $fixture['finished_good_id']);
+
+        $this->assertNotNull($finishedGood);
+        $this->assertTrue((bool) ($finishedGood['production_batch_eligible'] ?? false));
+
+        $branchesResponse = $this->getJson('/api/v1/branches', $this->tenantHeaders($tenant->id));
+        $branchesResponse->assertOk();
+
+        $branch = collect($branchesResponse->json('branches'))->firstWhere('id', $fixture['branch_id']);
+
+        $this->assertNotNull($branch);
+        $this->assertSame($fixture['location_id'], data_get($branch, 'locations.0.id'));
+        $this->assertTrue((bool) data_get($branch, 'locations.0.is_default'));
+    }
+
+    public function test_near_whole_recipe_output_qty_is_normalized_in_bootstrap_and_preview(): void
+    {
+        [$tenant] = $this->bootApiActor('admin', 'admin+production-near-whole-output@example.test');
+
+        $fixture = $this->seedFixture($tenant, rawMaterialQty: 100);
+
+        DB::table('products')
+            ->where('tenant_id', $tenant->id)
+            ->where('id', $fixture['finished_good_id'])
+            ->update(['recipe_output_qty' => 9.9998]);
+
+        $bootstrapResponse = $this->getJson('/api/v1/bootstrap?include=inventory', $this->tenantHeaders($tenant->id));
+        $bootstrapResponse->assertOk();
+
+        $finishedGood = collect($bootstrapResponse->json('products'))->firstWhere('id', $fixture['finished_good_id']);
+
+        $this->assertNotNull($finishedGood);
+        $this->assertSame(10.0, (float) ($finishedGood['recipe_output_qty'] ?? 0));
+        $this->assertSame(10.0, (float) data_get($finishedGood, 'production_batch_eligibility.summary.recipe_output_qty', 0));
+
+        $previewResponse = $this->getJson('/api/v1/production/recipe-preview?'.http_build_query([
+            'product_id' => $fixture['finished_good_id'],
+            'location_id' => $fixture['location_id'],
+            'recipe_count' => 1,
+        ]), $this->tenantHeaders($tenant->id));
+
+        $previewResponse->assertOk()
+            ->assertJsonPath('data.recipe_output_qty', 10)
+            ->assertJsonPath('data.expected_output_qty', 10);
+    }
+
+    public function test_branch_loader_contract_can_return_branch_without_locations_for_empty_state_handling(): void
+    {
+        [$tenant] = $this->bootApiActor('admin', 'admin+production-branch-without-location@example.test');
+
+        DB::table('tenants')->where('id', $tenant->id)->update(['plan' => 'M']);
+
+        $branchId = (string) Str::uuid();
+
+        DB::table('branches')->insert([
+            'id' => $branchId,
+            'tenant_id' => $tenant->id,
+            'name' => 'Cabang Tanpa Lokasi',
+        ]);
+
+        $rawMaterialId = $this->insertProduct($tenant, [
+            'sku' => 'RM-EMPTY-'.Str::upper(Str::random(6)),
+            'name' => 'Tepung',
+            'product_mode' => 'add_on',
+            'production_mode' => Product::PRODUCTION_MODE_NONE,
+            'item_type' => 'raw_material',
+            'track_stock' => true,
+            'price' => 1,
+        ]);
+
+        $finishedGoodId = $this->insertProduct($tenant, [
+            'sku' => 'FG-EMPTY-'.Str::upper(Str::random(6)),
+            'name' => 'Adonan Siap',
+            'product_mode' => 'default',
+            'production_mode' => Product::PRODUCTION_MODE_BATCH,
+            'item_type' => 'finished_good',
+            'track_stock' => true,
+            'price' => 10000,
+            'bom_items' => json_encode([
+                [
+                    'product_id' => $rawMaterialId,
+                    'qty' => 2,
+                    'unit' => 'kg',
+                ],
+            ]),
+        ]);
+
+        $bootstrapResponse = $this->getJson('/api/v1/bootstrap?include=inventory', $this->tenantHeaders($tenant->id));
+        $bootstrapResponse->assertOk()
+            ->assertJsonPath('branches.0.id', $branchId)
+            ->assertJsonPath('locations', []);
+
+        $products = collect($bootstrapResponse->json('products'));
+        $this->assertTrue($products->contains(fn (array $product) => ($product['id'] ?? null) === $finishedGoodId));
+
+        $branchesResponse = $this->getJson('/api/v1/branches', $this->tenantHeaders($tenant->id));
+        $branchesResponse->assertOk()
+            ->assertJsonPath('branches.0.id', $branchId)
+            ->assertJsonPath('branches.0.locations', []);
+    }
+
+    public function test_bootstrap_inventory_payload_can_return_empty_products_when_tenant_has_no_active_products(): void
+    {
+        [$tenant] = $this->bootApiActor('admin', 'admin+production-bootstrap-empty-products@example.test');
+
+        DB::table('tenants')->where('id', $tenant->id)->update(['plan' => 'M']);
+
+        $branchId = (string) Str::uuid();
+        $locationId = (string) Str::uuid();
+
+        DB::table('branches')->insert([
+            'id' => $branchId,
+            'tenant_id' => $tenant->id,
+            'name' => 'Cabang Produksi',
+        ]);
+
+        DB::table('locations')->insert([
+            'id' => $locationId,
+            'tenant_id' => $tenant->id,
+            'branch_id' => $branchId,
+            'name' => 'Gudang Produksi',
+            'is_default' => true,
+        ]);
+
+        $response = $this->getJson('/api/v1/bootstrap?include=inventory', $this->tenantHeaders($tenant->id));
+
+        $response->assertOk()
+            ->assertJsonPath('branches.0.id', $branchId)
+            ->assertJsonPath('locations.0.id', $locationId)
+            ->assertJsonPath('products', [])
+            ->assertJsonPath('inventory', []);
     }
 
     public function test_post_requires_variance_reason_when_threshold_is_exceeded(): void
@@ -1119,6 +1470,8 @@ class ProductionBatchQuickFlowTest extends TestCase
         bool $finishedGoodActive = true
     ): array
     {
+        DB::table('tenants')->where('id', $tenant->id)->update(['plan' => 'M']);
+
         $branchId = (string) Str::uuid();
         $locationId = (string) Str::uuid();
 
@@ -1155,6 +1508,7 @@ class ProductionBatchQuickFlowTest extends TestCase
             'track_stock' => true,
             'is_active' => $finishedGoodActive,
             'price' => 10000,
+            'recipe_output_qty' => 10,
             'bom_items' => json_encode([
                 [
                     'product_id' => $rawMaterialId,
@@ -1190,6 +1544,15 @@ class ProductionBatchQuickFlowTest extends TestCase
         ];
     }
 
+    public function test_plan_s_cannot_access_production_batch_endpoints(): void
+    {
+        [$tenant] = $this->bootApiActor('admin', 'admin+production-plan-s@example.test');
+
+        $this->getJson('/api/v1/production-batches', $this->tenantHeaders($tenant->id))
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'FEATURE_NOT_ALLOWED');
+    }
+
     private function insertProduct(Tenant $tenant, array $overrides): string
     {
         $id = (string) Str::uuid();
@@ -1209,6 +1572,7 @@ class ProductionBatchQuickFlowTest extends TestCase
             'product_mode' => 'default',
             'production_mode' => Product::PRODUCTION_MODE_NONE,
             'item_type' => 'finished_good',
+            'recipe_output_qty' => null,
             'variants' => json_encode([]),
             'bom_items' => json_encode([]),
             'bundle_items' => json_encode([]),

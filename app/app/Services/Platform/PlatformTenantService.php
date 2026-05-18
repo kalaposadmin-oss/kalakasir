@@ -78,7 +78,8 @@ class PlatformTenantService
             }
         }
 
-        $total = (int) $query->distinct('t.id')->count('t.id');
+        $totalQuery = clone $query;
+        $total = (int) $totalQuery->distinct('t.id')->count('t.id');
 
         $query->select([
             't.id',

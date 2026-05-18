@@ -39,7 +39,7 @@ return [
         'enabled' => (bool) env('OPS_ALERTS_ENABLED', false),
         'webhook_url' => env('OPS_ALERTS_WEBHOOK_URL'),
         'bearer_token' => env('OPS_ALERTS_BEARER_TOKEN'),
-        'timeout_seconds' => (int) env('OPS_ALERTS_TIMEOUT_SECONDS', 4),
+        'timeout_seconds' => (int) env('OPS_ALERTS_TIMEOUT_SECONDS', 2),
         'report_retention_days' => (int) env('VALUATION_REPORT_RETENTION_DAYS', 14),
         'valuation_min_severity' => env('OPS_ALERTS_VALUATION_MIN_SEVERITY', 'med'),
         'valuation_min_count' => (int) env('OPS_ALERTS_VALUATION_MIN_COUNT', 1),
@@ -100,6 +100,12 @@ return [
                 'ttl_minutes' => env('SECURITY_OPERATION_IDEMPOTENCY_TTL_MINUTES', 60),
                 'lock_seconds' => env('SECURITY_OPERATION_IDEMPOTENCY_LOCK_SECONDS', 10),
             ],
+        ],
+
+        'order_online' => [
+            'admin_pin' => env('ORDER_ONLINE_ADMIN_PIN', env('SECURITY_MANAGER_PIN', '123456')),
+            'admin_whatsapp_number' => env('ORDER_ONLINE_ADMIN_WHATSAPP_NUMBER', ''),
+            'hold_ttl_hours' => (int) env('ORDER_ONLINE_HOLD_TTL_HOURS', 24),
         ],
 
 ];

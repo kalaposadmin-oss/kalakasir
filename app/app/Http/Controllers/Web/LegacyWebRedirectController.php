@@ -38,6 +38,20 @@ class LegacyWebRedirectController extends Controller
         );
     }
 
+    public function stockCard(Request $request): RedirectResponse
+    {
+        $portalPrefix = session('auth_portal', 'pos') === 'backoffice' ? '/backoffice' : '/pos';
+        $query = $request->query();
+        $productId = trim((string) ($query['product_id'] ?? ''));
+        unset($query['product_id']);
+
+        $target = $productId !== ''
+            ? $portalPrefix.'/inventory/products/'.$productId.'/stock-card'
+            : ($portalPrefix === '/backoffice' ? '/backoffice/reports/inventory/stock-card' : '/pos/inventory/stock-card');
+
+        return redirect()->to($this->appendQuery($target, $query));
+    }
+
     public function salesDetail(Request $request): RedirectResponse
     {
         $saleId = trim((string) $request->query('sale_id', ''));

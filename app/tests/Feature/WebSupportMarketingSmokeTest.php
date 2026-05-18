@@ -14,7 +14,7 @@ class WebSupportMarketingSmokeTest extends TestCase
         $middleware = $route->gatherMiddleware();
         $contents = file_get_contents(resource_path('views/settings-preferences.blade.php'));
 
-        $this->assertContains('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview', $middleware);
+        $this->assertContains('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,settings.store_profile', $middleware);
         $this->assertTrue(view()->exists('settings-preferences'));
         $this->assertStringContainsString('Preferensi Sistem & Cetak', $contents);
         $this->assertStringContainsString('Format & Regional', $contents);
@@ -29,8 +29,8 @@ class WebSupportMarketingSmokeTest extends TestCase
         $middleware = $route->gatherMiddleware();
         $contents = file_get_contents(resource_path('views/settings-integrations.blade.php'));
 
-        $this->assertContains('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview', $middleware);
         $this->assertContains('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,settings.integrations', $middleware);
+        $this->assertNotContains('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview', $middleware);
         $this->assertTrue(view()->exists('settings-integrations'));
         $this->assertStringContainsString('Katalog Integrasi', $contents);
         $this->assertStringContainsString('Metode Pembayaran (Payment Gateway)', $contents);
@@ -45,13 +45,13 @@ class WebSupportMarketingSmokeTest extends TestCase
         $middleware = $route->gatherMiddleware();
         $contents = file_get_contents(resource_path('views/help-center.blade.php'));
 
-        $this->assertContains('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview', $middleware);
+        $this->assertContains('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,help.center', $middleware);
         $this->assertTrue(view()->exists('help-center'));
         $this->assertStringContainsString('Pusat Bantuan', $contents);
         $this->assertStringContainsString('help-search', $contents);
         $this->assertStringContainsString('data-help-category="billing"', $contents);
         $this->assertStringContainsString('Artikel Populer', $contents);
-        $this->assertStringContainsString('Buka Dokumentasi', $contents);
+        $this->assertStringContainsString('Artikel bantuan belum dipublikasikan', $contents);
     }
 
     public function test_help_about_route_and_view_expose_release_notes_and_legal_cards(): void
@@ -60,7 +60,7 @@ class WebSupportMarketingSmokeTest extends TestCase
         $middleware = $route->gatherMiddleware();
         $contents = file_get_contents(resource_path('views/help-about.blade.php'));
 
-        $this->assertContains('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview', $middleware);
+        $this->assertContains('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,help.center', $middleware);
         $this->assertTrue(view()->exists('help-about'));
         $this->assertStringContainsString('Tentang Aplikasi', $contents);
         $this->assertStringContainsString('Riwayat Pembaruan', $contents);
@@ -75,13 +75,13 @@ class WebSupportMarketingSmokeTest extends TestCase
         $middleware = $route->gatherMiddleware();
         $contents = file_get_contents(resource_path('views/help-support.blade.php'));
 
-        $this->assertContains('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview', $middleware);
+        $this->assertContains('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,help.center', $middleware);
         $this->assertTrue(view()->exists('help-support'));
         $this->assertStringContainsString('Dukungan & Tiket Bantuan', $contents);
         $this->assertStringContainsString('support-sla', $contents);
         $this->assertStringContainsString('Riwayat Tiket Bantuan', $contents);
         $this->assertStringContainsString('support-ticket-body', $contents);
-        $this->assertStringContainsString('/api/v1/bootstrap', $contents);
+        $this->assertStringContainsString('getBootstrap', $contents);
     }
 
     public function test_marketing_online_store_route_and_view_expose_channels_and_sync_log(): void
@@ -93,10 +93,10 @@ class WebSupportMarketingSmokeTest extends TestCase
         $this->assertContains('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview', $middleware);
         $this->assertTrue(view()->exists('marketing-online-store'));
         $this->assertStringContainsString('Integrasi Toko Online', $contents);
-        $this->assertStringContainsString('Saluran Penjualan Terhubung', $contents);
+        $this->assertStringContainsString('Saluran Penjualan', $contents);
         $this->assertStringContainsString('Log Sinkronisasi Terbaru', $contents);
         $this->assertStringContainsString('online-sync-log', $contents);
-        $this->assertStringContainsString('/api/v1/products', $contents);
+        $this->assertStringContainsString('Produk Toko', $contents);
     }
 
     public function test_marketing_referral_route_and_view_expose_kpis_codes_and_reward_history(): void

@@ -4,6 +4,17 @@
     $isPosPortal = session('auth_portal', 'pos') === 'pos';
     $historyContext = $historyContext ?? ($isPosPortal ? 'pos' : 'backoffice');
     $pageTitle = $historyContext === 'backoffice' ? 'Laporan Penjualan' : 'Riwayat';
+    $historyTenant = \App\Support\TenantContext::get();
+    $historyUser = auth()->user();
+    if (! $historyTenant && filled($historyUser?->tenant_id)) {
+        $historyTenant = \App\Models\Tenant::query()->find($historyUser->tenant_id);
+    }
+    $historyCanExportCsv = $historyTenant
+        ? app(\App\Services\SubscriptionService::class)->canAccessFeature($historyTenant, 'reports.export_csv')
+        : false;
+    $historyCanDownloadPdf = $historyTenant
+        ? app(\App\Services\SubscriptionService::class)->canAccessFeature($historyTenant, 'reports.download_pdf')
+        : false;
     $from = (string) request()->query('from', '');
     $submenuBackUrl = null;
     if ($from !== '') {
@@ -12,12 +23,14 @@
             $submenuBackUrl = '/' . $normalizedFrom;
         }
     }
+    $posHistoryBackUrl = $submenuBackUrl ?: pos_default_url();
 @endphp
 
 @section('page_title', $pageTitle)
 @section('ui_mode', $isPosPortal ? 'pos' : 'backoffice')
 @section('body_class', 'bg-background-light dark:bg-background-dark text-slate-800 dark:text-slate-100 font-display')
-@section('main_class', $isPosPortal ? 'flex-1 overflow-y-auto pb-24' : 'flex-1 overflow-y-auto pb-8 lg:pl-72')
+@section('app_shell_class', $isPosPortal ? 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-background-light dark:bg-background-dark shadow-2xl' : '')
+@section('main_class', $isPosPortal ? 'flex-1 overflow-y-auto pb-24 app-bottom-safe-space' : 'flex-1 overflow-y-auto pb-8 lg:pl-72')
 
 @push('head')
         <style>
@@ -28,123 +41,282 @@
             .ios-shadow { box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.05); }
             .no-scrollbar::-webkit-scrollbar { display: none; }
             .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+            .history-surface {
+                border: 1px solid rgb(226 232 240 / 0.85);
+                background: rgba(255, 255, 255, 0.92);
+                backdrop-filter: blur(12px);
+                box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.05);
+            }
+            .history-chip {
+                position: relative;
+                display: inline-flex;
+                align-items: center;
+                gap: 0.5rem;
+                border-radius: 9999px;
+                border: 1px solid rgb(226 232 240 / 0.9);
+                background: rgb(248 250 252 / 0.95);
+                padding: 0.65rem 0.95rem;
+                font-size: 0.75rem;
+                font-weight: 700;
+                color: rgb(51 65 85);
+                min-width: 0;
+            }
+            .history-chip--active {
+                border-color: rgb(147 197 253);
+                background: rgb(219 234 254 / 0.9);
+                color: rgb(29 78 216);
+            }
+            #history-tabs {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+            #tab-transaksi #sales-period {
+                border: none;
+                background: transparent;
+                box-shadow: none;
+                padding: 0;
+            }
+            #tab-transaksi #sales-period [data-period-custom] {
+                flex-wrap: wrap;
+            }
         </style>
     
 @endpush
 
 @section('header')
-    <header class="sticky top-0 z-10 h-16 border-b border-slate-200 bg-white/95 px-4 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 lg:px-8 lg:pl-[336px]">
-        <div class="flex h-full items-center justify-between">
-            <div class="flex items-center gap-3 min-w-0">
+    @if ($historyContext === 'pos')
+        <header class="sticky top-0 z-30 border-b border-slate-200/60 bg-white/80 px-4 py-4 backdrop-blur-xl dark:border-slate-800/60 dark:bg-slate-900/80">
+            <div class="flex items-center justify-between gap-3">
+                <a href="{{ $posHistoryBackUrl }}" class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300" aria-label="Kembali">
+                    <span class="material-symbols-outlined text-[20px]">arrow_back_ios_new</span>
+                </a>
+                <div class="min-w-0 flex-1">
+                    <h2 class="truncate text-lg font-bold leading-tight tracking-tight text-slate-900 dark:text-slate-100">{{ $pageTitle }}</h2>
+                </div>
+                <button class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300" type="button" aria-label="Menu" data-menu-trigger>
+                    <span class="material-symbols-outlined">menu</span>
+                </button>
+            </div>
+        </header>
+    @else
+        <header class="sticky top-0 z-30 border-b border-slate-200/60 bg-white/80 px-4 py-4 backdrop-blur-xl dark:border-slate-800/60 dark:bg-slate-900/80 lg:px-8 lg:pl-[336px]">
+            <div class="flex w-full items-center gap-3">
                 @if($submenuBackUrl)
-                    <a href="{{ $submenuBackUrl }}" class="flex items-center justify-center size-9 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                    <a href="{{ $submenuBackUrl }}" class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                         <span class="material-symbols-outlined text-[20px]">arrow_back_ios_new</span>
                     </a>
                 @endif
-                <div>
-                    <h2 class="text-base font-bold lg:text-lg">{{ $pageTitle }}</h2>
-                    <p class="hidden text-xs text-slate-500 lg:block">
-                        {{ $historyContext === 'backoffice' ? 'Analitik dan export laporan penjualan' : 'Monitoring transaksi dari POS' }}
+                <div class="min-w-0 flex-1 pr-2">
+                    <h2 class="truncate text-lg font-bold leading-tight tracking-tight text-slate-900 dark:text-slate-100">{{ $pageTitle }}</h2>
+                    <p class="text-[11px] font-medium text-slate-500">
+                        Analitik dan export laporan penjualan
                     </p>
                 </div>
             </div>
-            <button class="flex items-center justify-center size-10 rounded-full bg-slate-100 dark:bg-slate-800" type="button">
-                <span class="material-symbols-outlined text-slate-600 dark:text-slate-300">calendar_month</span>
-            </button>
-        </div>
-    </header>
+        </header>
+    @endif
 @endsection
 
 @section('content')
     @if ($historyContext === 'pos')
-        <div class="mx-auto w-full max-w-7xl px-4 pt-4 lg:px-8">
-            <div class="flex gap-3 overflow-x-auto no-scrollbar" id="history-tabs">
-                <button class="whitespace-nowrap rounded-full bg-primary px-4 py-2 text-sm font-bold text-white" data-tab="transaksi">Transaksi</button>
-                <button class="whitespace-nowrap rounded-full bg-slate-100 px-4 py-2 text-sm font-bold text-slate-500" data-tab="shift">Shift</button>
+        <div class="mx-auto w-full px-4 pt-4">
+            <div class="history-surface rounded-3xl p-4">
+                <div class="gap-3" id="history-tabs">
+                    <button class="whitespace-nowrap rounded-full bg-primary px-4 py-2 text-sm font-bold text-white shadow-sm" data-tab="transaksi">Transaksi</button>
+                    <button class="whitespace-nowrap rounded-full bg-slate-100 px-4 py-2 text-sm font-bold text-slate-500" data-tab="shift">Shift</button>
+                </div>
             </div>
         </div>
-
-        <section class="mx-auto w-full max-w-7xl p-4 pb-0 lg:px-8">
-            @include('partials.owner-pos-panel', [
-                'subtitle' => 'Pantau transaksi POS, lalu lompat cepat ke katalog, stok, atau pengaturan toko.',
-            ])
-        </section>
 
         <div id="tab-transaksi" class="tab-panel">
-        <section class="mx-auto w-full max-w-7xl p-4 space-y-4 lg:px-8">
-        <div class="flex items-center justify-between">
-            <h2 class="text-xs font-bold uppercase tracking-[0.15em] text-slate-400">Filter Pencarian</h2>
-            <button id="reset-filter" class="text-primary text-sm font-medium">Atur Ulang</button>
-        </div>
-        <x-period-filter id="sales-period" defaultPreset="today" />
-        <div class="grid grid-cols-1 gap-3">
-            <div class="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-                <button class="flex shrink-0 items-center gap-2 rounded-full bg-primary/10 border border-primary/20 px-4 py-2 text-primary text-xs font-bold relative">
-                    <span class="material-symbols-outlined text-sm">store</span>
-                    <span id="branch-label">Semua Cabang</span>
-                    <span class="material-symbols-outlined text-sm">expand_more</span>
-                    <select id="branch-filter" class="absolute inset-0 opacity-0 cursor-pointer"></select>
-                </button>
-                <button class="flex shrink-0 items-center gap-2 rounded-full bg-slate-100 dark:bg-slate-900 px-4 py-2 text-slate-700 dark:text-slate-300 text-xs font-semibold relative">
-                    <span class="material-symbols-outlined text-sm">person</span>
-                    <span id="cashier-label">Kasir</span>
-                    <span class="material-symbols-outlined text-sm">expand_more</span>
-                    <select id="cashier-filter" class="absolute inset-0 opacity-0 cursor-pointer"></select>
-                </button>
-                <button class="flex shrink-0 items-center gap-2 rounded-full bg-slate-100 dark:bg-slate-900 px-4 py-2 text-slate-700 dark:text-slate-300 text-xs font-semibold relative">
-                    <span class="material-symbols-outlined text-sm">check_circle</span>
-                    <span id="status-label">Status</span>
-                    <span class="material-symbols-outlined text-sm">expand_more</span>
-                    <select id="status-filter" class="absolute inset-0 opacity-0 cursor-pointer">
-                        <option value="all">Semua Status</option>
-                        <option value="paid">Berhasil</option>
-                        <option value="void">Dibatalkan</option>
-                    </select>
+        <section class="mx-auto w-full p-4 space-y-4">
+        <div class="history-surface rounded-3xl p-4">
+            <div class="flex items-center justify-between gap-3">
+                <div class="flex min-w-0 items-center gap-3">
+                    <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                        <span class="material-symbols-outlined text-[22px]">calendar_month</span>
+                    </div>
+                    <div class="min-w-0">
+                        <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Periode Riwayat</p>
+                        <h3 id="history-period-summary" class="truncate text-base font-bold text-slate-900">7 Hari Terakhir</h3>
+                        <p id="history-filter-summary" class="truncate text-xs text-slate-500">Semua cabang, kasir, dan status</p>
+                    </div>
+                </div>
+                <button id="history-filter-open" class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 shadow-sm active:scale-95" type="button" aria-label="Buka filter pencarian" aria-haspopup="dialog" aria-controls="history-filter-sheet">
+                    <span class="material-symbols-outlined">more_horiz</span>
                 </button>
             </div>
         </div>
         </section>
-        <div class="h-2 bg-background-light dark:bg-slate-900"></div>
-        <section class="mx-auto w-full max-w-7xl p-4 lg:px-8">
-        <div class="flex items-center justify-between mb-4">
-            <div class="flex items-center gap-2">
-                <input id="select-all" class="rounded border-slate-300 text-primary focus:ring-primary" type="checkbox" />
-                <span class="text-sm font-medium text-slate-600 dark:text-slate-400" id="select-label">Pilih Semua (0)</span>
+        <section class="mx-auto w-full p-4">
+        <div class="history-surface rounded-3xl p-4">
+            <div class="mb-4 flex items-center justify-between gap-3">
+                <div class="min-w-0 flex items-center gap-2">
+                    <input id="select-all" class="rounded border-slate-300 text-primary focus:ring-primary" type="checkbox" />
+                    <span class="truncate text-sm font-medium text-slate-600 dark:text-slate-400" id="select-label">Dipilih 0 dari 0</span>
+                </div>
+                @if ($historyCanExportCsv)
+                    <button id="export-button" class="flex items-center gap-1.5 rounded-2xl bg-primary px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-primary/20 active:scale-95 transition-transform">
+                        <span class="material-symbols-outlined text-sm">file_export</span>
+                        Ekspor
+                    </button>
+                @else
+                    <span id="sales-history-export-upgrade-pos" class="text-xs font-semibold text-amber-700">Export CSV tersedia mulai paket Medium</span>
+                @endif
             </div>
-            <button id="export-button" class="flex items-center gap-1.5 bg-primary text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg shadow-primary/20 active:scale-95 transition-transform">
-                <span class="material-symbols-outlined text-sm">file_export</span>
-                Ekspor
-            </button>
+            <div class="space-y-3" id="sale-list"></div>
         </div>
-        <div class="space-y-3" id="sale-list"></div>
         </section>
-        <div class="fixed bottom-6 right-6 max-w-md lg:hidden">
-            <button class="size-14 rounded-full bg-primary text-white shadow-2xl flex items-center justify-center active:scale-90 transition-transform">
-                <span class="material-symbols-outlined text-3xl">add</span>
-            </button>
-        </div>
     </div>
 
     <div id="tab-shift" class="tab-panel hidden">
-        <div class="mx-auto w-full max-w-7xl px-4 pt-4 space-y-4 lg:px-8">
-            <div class="flex items-center gap-3">
-                <div class="relative flex-1">
-                    <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">search</span>
-                    <input id="shift-search" class="w-full rounded-2xl border border-slate-100 bg-white px-12 py-3 text-sm font-medium placeholder:text-slate-400 ios-shadow" placeholder="Cari kasir atau tanggal..." type="text" />
+        <div class="mx-auto w-full px-4 pt-4">
+            <div class="history-surface rounded-3xl p-4">
+                <div class="flex items-center justify-between gap-3">
+                    <div class="flex min-w-0 items-center gap-3">
+                        <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+                            <span class="material-symbols-outlined text-[22px]">history</span>
+                        </div>
+                        <div class="min-w-0">
+                            <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Periode Shift</p>
+                            <h3 id="shift-period-summary" class="truncate text-base font-bold text-slate-900">7 Hari Terakhir</h3>
+                            <p id="shift-filter-summary" class="truncate text-xs text-slate-500">Semua cabang, kasir, dan status</p>
+                        </div>
+                    </div>
+                    <button id="shift-filter-open" class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 shadow-sm active:scale-95" type="button" aria-label="Buka filter shift" aria-haspopup="dialog" aria-controls="shift-filter-sheet">
+                        <span class="material-symbols-outlined">more_horiz</span>
+                    </button>
                 </div>
-                <button class="size-12 rounded-2xl bg-white border border-slate-100 flex items-center justify-center ios-shadow" type="button">
-                    <span class="material-symbols-outlined text-slate-600">tune</span>
+            </div>
+        </div>
+        <div class="mx-auto w-full px-4 pt-4 pb-24 app-bottom-safe-space" id="shift-list"></div>
+        <p id="shift-empty" class="mx-auto w-full px-4 pt-4 text-sm text-slate-400 hidden">Belum ada riwayat shift.</p>
+    </div>
+
+    <div id="shift-filter-sheet" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true" aria-labelledby="shift-filter-title">
+        <div id="shift-filter-overlay" class="absolute inset-0 bg-slate-950/40"></div>
+        <div class="absolute bottom-0 left-1/2 flex max-h-[90vh] w-full max-w-[430px] -translate-x-1/2 flex-col overflow-hidden rounded-t-[2rem] bg-white shadow-2xl dark:bg-slate-900">
+            <div class="border-b border-slate-100 px-4 pb-4 pt-3 dark:border-slate-800">
+                <div class="mx-auto mb-4 h-1.5 w-12 rounded-full bg-slate-200 dark:bg-slate-700"></div>
+                <div class="flex items-center justify-between gap-3">
+                    <div>
+                        <h2 id="shift-filter-title" class="text-lg font-bold text-slate-900 dark:text-slate-100">Filter Shift</h2>
+                        <p class="mt-1 text-xs text-slate-500">Cari riwayat shift berdasarkan periode, petugas, dan selisih kas.</p>
+                    </div>
+                    <button id="shift-filter-dismiss" class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300" type="button" aria-label="Tutup filter shift">
+                        <span class="material-symbols-outlined">close</span>
+                    </button>
+                </div>
+            </div>
+            <div class="flex-1 space-y-4 overflow-y-auto p-4">
+                <div class="flex items-center justify-between">
+                    <p class="text-xs font-bold uppercase tracking-[0.15em] text-slate-400">Periode</p>
+                    <button id="shift-reset-filter" class="text-sm font-bold text-primary" type="button">Atur Ulang</button>
+                </div>
+                <x-period-filter id="shift-period" defaultPreset="last7" />
+                <div class="space-y-3">
+                    <p class="text-xs font-bold uppercase tracking-[0.15em] text-slate-400">Detail Filter Shift</p>
+                    <label class="relative block">
+                        <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">search</span>
+                        <input id="shift-search" class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-12 py-3 text-sm font-medium placeholder:text-slate-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/10" placeholder="Cari kasir, cabang, atau tanggal..." type="text" />
+                    </label>
+                    <div class="flex flex-wrap gap-2">
+                        <button class="history-chip shrink-0 relative" type="button">
+                            <span class="material-symbols-outlined text-sm">store</span>
+                            <span id="shift-branch-label">Semua Cabang</span>
+                            <span class="material-symbols-outlined text-sm">expand_more</span>
+                            <select id="shift-branch-filter" class="absolute inset-0 cursor-pointer opacity-0"></select>
+                        </button>
+                        <button class="history-chip shrink-0 relative" type="button">
+                            <span class="material-symbols-outlined text-sm">person</span>
+                            <span id="shift-cashier-label">Kasir</span>
+                            <span class="material-symbols-outlined text-sm">expand_more</span>
+                            <select id="shift-cashier-filter" class="absolute inset-0 cursor-pointer opacity-0"></select>
+                        </button>
+                        <button class="history-chip shrink-0 relative" type="button">
+                            <span class="material-symbols-outlined text-sm">fact_check</span>
+                            <span id="shift-status-label">Semua Status</span>
+                            <span class="material-symbols-outlined text-sm">expand_more</span>
+                            <select id="shift-status-filter" class="absolute inset-0 cursor-pointer opacity-0">
+                                <option value="all">Semua Status</option>
+                                <option value="balanced">Sesuai</option>
+                                <option value="difference">Selisih</option>
+                            </select>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="border-t border-slate-100 p-4 dark:border-slate-800">
+                <button id="shift-filter-close" class="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-bold text-white shadow-lg shadow-primary/20 active:scale-95" type="button">
+                    <span class="material-symbols-outlined text-lg">check</span>
+                    Terapkan
                 </button>
             </div>
         </div>
-        <div class="mx-auto w-full max-w-7xl px-4 pt-4 pb-24 lg:px-8" id="shift-list"></div>
-        <p id="shift-empty" class="mx-auto w-full max-w-7xl px-4 pt-4 text-sm text-slate-400 hidden lg:px-8">Belum ada riwayat shift.</p>
+    </div>
+
+    <div id="history-filter-sheet" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true" aria-labelledby="history-filter-title">
+        <div id="history-filter-overlay" class="absolute inset-0 bg-slate-950/40"></div>
+        <div class="absolute bottom-0 left-1/2 flex max-h-[90vh] w-full max-w-[430px] -translate-x-1/2 flex-col overflow-hidden rounded-t-[2rem] bg-white shadow-2xl dark:bg-slate-900">
+            <div class="border-b border-slate-100 px-4 pb-4 pt-3 dark:border-slate-800">
+                <div class="mx-auto mb-4 h-1.5 w-12 rounded-full bg-slate-200 dark:bg-slate-700"></div>
+                <div class="flex items-center justify-between gap-3">
+                    <div>
+                        <h2 id="history-filter-title" class="text-lg font-bold text-slate-900 dark:text-slate-100">Filter Pencarian</h2>
+                        <p class="mt-1 text-xs text-slate-500">Sesuaikan periode, cabang, kasir, dan status.</p>
+                    </div>
+                    <button id="history-filter-dismiss" class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300" type="button" aria-label="Tutup filter">
+                        <span class="material-symbols-outlined">close</span>
+                    </button>
+                </div>
+            </div>
+            <div class="flex-1 space-y-4 overflow-y-auto p-4">
+                <div class="flex items-center justify-between">
+                    <p class="text-xs font-bold uppercase tracking-[0.15em] text-slate-400">Periode</p>
+                    <button id="reset-filter" class="text-sm font-bold text-primary" type="button">Atur Ulang</button>
+                </div>
+                <x-period-filter id="sales-period" defaultPreset="last7" />
+                <div class="space-y-3">
+                    <p class="text-xs font-bold uppercase tracking-[0.15em] text-slate-400">Detail Filter</p>
+                    <div class="flex flex-wrap gap-2">
+                        <button class="history-chip shrink-0 relative" type="button">
+                            <span class="material-symbols-outlined text-sm">store</span>
+                            <span id="branch-label">Semua Cabang</span>
+                            <span class="material-symbols-outlined text-sm">expand_more</span>
+                            <select id="branch-filter" class="absolute inset-0 cursor-pointer opacity-0"></select>
+                        </button>
+                        <button class="history-chip shrink-0 relative" type="button">
+                            <span class="material-symbols-outlined text-sm">person</span>
+                            <span id="cashier-label">Kasir</span>
+                            <span class="material-symbols-outlined text-sm">expand_more</span>
+                            <select id="cashier-filter" class="absolute inset-0 cursor-pointer opacity-0"></select>
+                        </button>
+                        <button class="history-chip shrink-0 relative" type="button">
+                            <span class="material-symbols-outlined text-sm">check_circle</span>
+                            <span id="status-label">Semua Status</span>
+                            <span class="material-symbols-outlined text-sm">expand_more</span>
+                            <select id="status-filter" class="absolute inset-0 cursor-pointer opacity-0">
+                                <option value="all">Semua Status</option>
+                                <option value="paid">Berhasil</option>
+                                <option value="void">Dibatalkan</option>
+                            </select>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="border-t border-slate-100 p-4 dark:border-slate-800">
+                <button id="history-filter-close" class="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-bold text-white shadow-lg shadow-primary/20 active:scale-95" type="button">
+                    <span class="material-symbols-outlined text-lg">check</span>
+                    Terapkan
+                </button>
+            </div>
+        </div>
     </div>
     @endif
 
     @if ($historyContext === 'backoffice')
     <div id="tab-laporan" class="tab-panel">
-        <div class="mx-auto w-full max-w-7xl px-4 pt-4 pb-24 space-y-4 lg:px-8">
+        <div class="mx-auto w-full max-w-7xl px-4 pt-4 pb-24 app-bottom-safe-space space-y-4 lg:px-8">
             <div class="space-y-3">
                 <x-period-filter id="sales-period" defaultPreset="today" />
                 <div class="flex gap-2 overflow-x-auto no-scrollbar">
@@ -200,6 +372,18 @@
                     <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Net Sales</p>
                     <p id="report-net-sales" class="mt-2 text-xl font-bold text-primary">Rp 0</p>
                 </div>
+                <div class="rounded-2xl bg-white border border-slate-100 p-4 ios-shadow">
+                    <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Piutang Aktif</p>
+                    <p id="report-receivable-active" class="mt-2 text-xl font-bold text-amber-700">Rp 0</p>
+                </div>
+                <div class="rounded-2xl bg-white border border-slate-100 p-4 ios-shadow">
+                    <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Piutang Tempo</p>
+                    <p id="report-receivable-overdue" class="mt-2 text-xl font-bold text-rose-600">Rp 0</p>
+                </div>
+                <div class="rounded-2xl bg-white border border-slate-100 p-4 ios-shadow">
+                    <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Piutang Lunas</p>
+                    <p id="report-receivable-paid" class="mt-2 text-xl font-bold text-emerald-600">Rp 0</p>
+                </div>
             </div>
 
             <div class="grid gap-4 lg:grid-cols-2">
@@ -226,21 +410,32 @@
                         <input id="select-all" class="rounded border-slate-300 text-primary focus:ring-primary" type="checkbox" />
                         <span class="text-sm font-medium text-slate-600" id="select-label">Pilih Semua (0)</span>
                     </div>
-                    <button id="export-button" class="flex items-center gap-1.5 bg-primary text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg shadow-primary/20 active:scale-95 transition-transform">
-                        <span class="material-symbols-outlined text-sm">file_export</span>
-                        Ekspor CSV
-                    </button>
+                    @if ($historyCanExportCsv)
+                        <button id="export-button" class="flex items-center gap-1.5 bg-primary text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg shadow-primary/20 active:scale-95 transition-transform">
+                            <span class="material-symbols-outlined text-sm">file_export</span>
+                            Ekspor CSV
+                        </button>
+                    @else
+                        <span id="sales-history-export-upgrade-backoffice" class="text-xs font-semibold text-amber-700">Export CSV tersedia mulai paket Medium</span>
+                    @endif
                 </div>
                 <div class="space-y-3" id="sale-list"></div>
             </section>
 
-            <button id="report-download" class="w-full rounded-2xl border border-slate-200 bg-white py-4 text-sm font-semibold text-slate-700 ios-shadow" type="button">
-                <span class="material-symbols-outlined text-base align-middle mr-2">download</span>
-                Unduh Laporan PDF/Excel
-            </button>
+            @if ($historyCanDownloadPdf)
+                <button id="report-download" class="w-full rounded-2xl border border-slate-200 bg-white py-4 text-sm font-semibold text-slate-700 ios-shadow" type="button">
+                    <span class="material-symbols-outlined text-base align-middle mr-2">download</span>
+                    Unduh Laporan PDF/Excel
+                </button>
+            @else
+                <div id="sales-history-download-upgrade-backoffice" class="w-full rounded-2xl border border-dashed border-amber-200 bg-amber-50 px-4 py-4 text-sm font-semibold text-amber-700 ios-shadow">
+                    Download PDF/Excel tersedia mulai paket Medium.
+                </div>
+            @endif
         </div>
     </div>
 
+    @if ($historyCanDownloadPdf)
     <div id="report-modal" class="fixed inset-0 z-50 hidden">
         <div id="report-modal-overlay" class="absolute inset-0 bg-black/30"></div>
         <div class="absolute bottom-0 left-1/2 w-full max-w-[430px] -translate-x-1/2 rounded-t-3xl bg-white p-6 pb-8 lg:max-w-xl">
@@ -302,6 +497,7 @@
         </div>
     </div>
     @endif
+    @endif
 
         <script>
             (() => {
@@ -328,6 +524,21 @@
                     shiftList: document.getElementById('shift-list'),
                     shiftEmpty: document.getElementById('shift-empty'),
                     shiftSearch: document.getElementById('shift-search'),
+                    shiftPeriod: document.getElementById('shift-period'),
+                    shiftBranch: document.getElementById('shift-branch-filter'),
+                    shiftBranchLabel: document.getElementById('shift-branch-label'),
+                    shiftCashier: document.getElementById('shift-cashier-filter'),
+                    shiftCashierLabel: document.getElementById('shift-cashier-label'),
+                    shiftStatus: document.getElementById('shift-status-filter'),
+                    shiftStatusLabel: document.getElementById('shift-status-label'),
+                    shiftFilterOpen: document.getElementById('shift-filter-open'),
+                    shiftFilterSheet: document.getElementById('shift-filter-sheet'),
+                    shiftFilterOverlay: document.getElementById('shift-filter-overlay'),
+                    shiftFilterDismiss: document.getElementById('shift-filter-dismiss'),
+                    shiftFilterClose: document.getElementById('shift-filter-close'),
+                    shiftReset: document.getElementById('shift-reset-filter'),
+                    shiftPeriodSummary: document.getElementById('shift-period-summary'),
+                    shiftFilterSummary: document.getElementById('shift-filter-summary'),
                     reportGrossSales: document.getElementById('report-gross-sales'),
                     reportTransactions: document.getElementById('report-total-transactions'),
                     reportAverageTicket: document.getElementById('report-average-ticket'),
@@ -335,6 +546,9 @@
                     reportTransactionDiscount: document.getElementById('report-transaction-discount'),
                     reportTotalDiscount: document.getElementById('report-total-discount'),
                     reportNetSales: document.getElementById('report-net-sales'),
+                    reportReceivableActive: document.getElementById('report-receivable-active'),
+                    reportReceivableOverdue: document.getElementById('report-receivable-overdue'),
+                    reportReceivablePaid: document.getElementById('report-receivable-paid'),
                     reportGrandTotal: document.getElementById('report-grand-total'),
                     reportPayments: document.getElementById('report-payments'),
                     reportTopProducts: document.getElementById('report-top-products'),
@@ -342,11 +556,28 @@
                     reportModal: document.getElementById('report-modal'),
                     reportModalOverlay: document.getElementById('report-modal-overlay'),
                     reportModalClose: document.getElementById('report-modal-close'),
+                    filterOpen: document.getElementById('history-filter-open'),
+                    filterSheet: document.getElementById('history-filter-sheet'),
+                    filterOverlay: document.getElementById('history-filter-overlay'),
+                    filterDismiss: document.getElementById('history-filter-dismiss'),
+                    filterClose: document.getElementById('history-filter-close'),
+                    periodSummary: document.getElementById('history-period-summary'),
+                    filterSummary: document.getElementById('history-filter-summary'),
                 };
 
                 const supportsSalesList = Boolean(el.list);
                 const supportsFilters = Boolean(el.branch && el.cashier && el.status && el.period);
                 const supportsSelection = Boolean(el.selectAll && el.selectLabel);
+                const defaultPeriodPreset = historyContext === 'pos' ? 'last7' : 'today';
+                const readInitialPeriod = () => {
+                    const query = new URLSearchParams(window.location.search);
+
+                    return {
+                        preset: query.get('preset') || defaultPeriodPreset,
+                        start_date: query.get('start_date') || '',
+                        end_date: query.get('end_date') || '',
+                    };
+                };
 
                 const state = {
                     branches: [],
@@ -354,7 +585,8 @@
                     sales: [],
                     shifts: [],
                     summary: null,
-                    period: { preset: 'today', start_date: '', end_date: '' },
+                    period: readInitialPeriod(),
+                    shiftPeriod: readInitialPeriod(),
                     tab: 'transaksi',
                     shiftLoaded: false,
                     selectedSales: new Set(),
@@ -390,6 +622,46 @@
                     minute: '2-digit',
                 }).format(new Date(value));
 
+                const parseDateOnly = (value) => {
+                    if (!value) {
+                        return null;
+                    }
+                    const parsed = new Date(`${value}T00:00:00+07:00`);
+                    return Number.isNaN(parsed.getTime()) ? null : parsed;
+                };
+
+                const formatDateRangeLabel = (startDate, endDate) => {
+                    const start = parseDateOnly(startDate);
+                    const end = parseDateOnly(endDate || startDate);
+
+                    if (!start || !end) {
+                        return 'Periode Custom';
+                    }
+
+                    const monthFormatter = new Intl.DateTimeFormat('id-ID', { month: 'short', timeZone: 'Asia/Jakarta' });
+                    const yearFormatter = new Intl.DateTimeFormat('id-ID', { year: 'numeric', timeZone: 'Asia/Jakarta' });
+                    const startDay = new Intl.DateTimeFormat('id-ID', { day: '2-digit', timeZone: 'Asia/Jakarta' }).format(start);
+                    const endDay = new Intl.DateTimeFormat('id-ID', { day: '2-digit', timeZone: 'Asia/Jakarta' }).format(end);
+                    const startMonth = monthFormatter.format(start);
+                    const endMonth = monthFormatter.format(end);
+                    const startYear = yearFormatter.format(start);
+                    const endYear = yearFormatter.format(end);
+
+                    if (startDate === (endDate || startDate)) {
+                        return `${endDay} ${endMonth} ${endYear}`;
+                    }
+
+                    if (startMonth === endMonth && startYear === endYear) {
+                        return `${startDay}-${endDay} ${endMonth} ${endYear}`;
+                    }
+
+                    if (startYear === endYear) {
+                        return `${startDay} ${startMonth} - ${endDay} ${endMonth} ${endYear}`;
+                    }
+
+                    return `${startDay} ${startMonth} ${startYear} - ${endDay} ${endMonth} ${endYear}`;
+                };
+
                 const formatCsvDate = (value) => new Intl.DateTimeFormat('sv-SE', {
                     year: 'numeric',
                     month: '2-digit',
@@ -418,6 +690,30 @@
                         if (method === 'bank') return 'Debit';
                         return method;
                     }).join(', ');
+                };
+
+                const receivableBadge = (sale) => {
+                    if (!sale.receivable) {
+                        return '';
+                    }
+
+                    if (sale.receivable.status === 'paid') {
+                        return '<span class="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold uppercase">Piutang lunas</span>';
+                    }
+
+                    if (sale.receivable.is_overdue) {
+                        return '<span class="px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 text-[10px] font-bold uppercase">Piutang tempo</span>';
+                    }
+
+                    return '<span class="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-bold uppercase">Piutang</span>';
+                };
+
+                const channelBadge = (sale) => {
+                    const isOnline = sale.sales_channel === 'online';
+                    const classes = isOnline ? 'bg-sky-50 text-sky-700' : 'bg-slate-100 text-slate-600';
+                    const label = sale.sales_channel_label || (isOnline ? 'Online' : 'Kasir / Offline');
+
+                    return `<span class="px-2 py-0.5 rounded-full ${classes} text-[10px] font-bold uppercase">${label}</span>`;
                 };
 
                 const renderList = () => {
@@ -457,21 +753,24 @@
                             ? `/backoffice/sales/${sale.id}`
                             : `/pos/sales/${sale.id}`;
                         row.href = `${detailBasePath}?${detailParams.toString()}`;
-                        row.className = `flex items-center justify-between rounded-2xl bg-white dark:bg-slate-900 p-4 ios-shadow border border-slate-100 dark:border-slate-800 active:bg-slate-50 transition-colors${sale.status === 'void' ? ' opacity-80' : ''}`;
+                        row.className = `flex items-start justify-between gap-3 rounded-2xl bg-white dark:bg-slate-900 p-4 ios-shadow border border-slate-100 dark:border-slate-800 active:bg-slate-50 transition-colors${sale.status === 'void' ? ' opacity-80' : ''}`;
                         row.innerHTML = `
-                            <div class="flex items-center gap-4">
+                            <div class="flex min-w-0 items-start gap-3">
                                 <input class="mt-1 rounded border-slate-300 text-primary focus:ring-primary" type="checkbox" onclick="event.stopPropagation()" />
-                                <div>
-                                    <div class="flex items-center gap-2">
-                                        <p class="font-bold text-slate-900 dark:text-slate-100">${formatInvoice(sale)}</p>
+                                <div class="min-w-0">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <p class="truncate font-bold text-slate-900 dark:text-slate-100">${formatInvoice(sale)}</p>
                                         <span class="px-2 py-0.5 rounded-full ${statusBadge} text-[10px] font-bold uppercase">${statusLabel}</span>
+                                        ${channelBadge(sale)}
+                                        ${receivableBadge(sale)}
                                     </div>
                                     <p class="text-xs text-slate-400 mt-1">${formatDate(sale.created_at)} • ${sale.item_count} Produk</p>
                                 </div>
                             </div>
-                            <div class="text-right">
-                                <p class="text-lg font-bold tracking-tight ${totalClass}">${formatCurrency(sale.total)}</p>
+                            <div class="shrink-0 pl-2 text-right">
+                                <p class="text-base font-bold tracking-tight ${totalClass}">${formatCurrency(sale.total)}</p>
                                 <p class="text-[10px] text-slate-400">${paymentLabel(sale)}</p>
+                                ${sale.receivable ? `<p class="text-[10px] font-semibold text-amber-700">Sisa ${formatCurrency(sale.receivable.remaining_amount)}</p>` : ''}
                             </div>
                         `;
                         const checkbox = row.querySelector('input[type="checkbox"]');
@@ -574,7 +873,9 @@
                         average_ticket: 0,
                         payments: [],
                         top_products: [],
+                        receivables: {},
                     };
+                    const receivables = summary.receivables || {};
                     el.reportGrossSales.textContent = formatCurrency(summary.gross_sales || 0);
                     el.reportTransactions.textContent = summary.transaction_count || 0;
                     el.reportAverageTicket.textContent = `Avg: ${formatCurrency(summary.average_ticket || 0)}`;
@@ -582,6 +883,15 @@
                     el.reportTransactionDiscount.textContent = formatCurrency(summary.transaction_discount || 0);
                     el.reportTotalDiscount.textContent = formatCurrency(summary.total_discount || 0);
                     el.reportNetSales.textContent = formatCurrency(summary.net_sales || 0);
+                    if (el.reportReceivableActive) {
+                        el.reportReceivableActive.textContent = formatCurrency(receivables.active_total || 0);
+                    }
+                    if (el.reportReceivableOverdue) {
+                        el.reportReceivableOverdue.textContent = formatCurrency(receivables.overdue_total || 0);
+                    }
+                    if (el.reportReceivablePaid) {
+                        el.reportReceivablePaid.textContent = formatCurrency(receivables.paid_total || 0);
+                    }
                     if (el.reportGrandTotal) {
                         el.reportGrandTotal.textContent = `Grand total ${formatCurrency(summary.grand_total || 0)}`;
                     }
@@ -630,17 +940,12 @@
                 };
 
                 const loadBootstrap = async () => {
-                    const response = await fetch('/api/v1/bootstrap', { headers });
-                    if (!response.ok) {
-                        return null;
-                    }
-                    const payload = await response.json().catch(() => ({}));
-                    return window.PosUi.unwrapApiPayload(payload) || {};
+                    return window.PosUi.getBootstrap({ headers, ttlMs: 20000 }).catch(() => null);
                 };
 
                 const loadSales = async () => {
                     const params = new URLSearchParams({
-                        preset: state.period.preset || 'today',
+                        preset: state.period.preset || defaultPeriodPreset,
                         start_date: state.period.start_date || '',
                         end_date: state.period.end_date || '',
                         branch_id: el.branch?.value || '',
@@ -660,7 +965,7 @@
                         return;
                     }
                     const params = new URLSearchParams();
-                    params.set('preset', state.period.preset || 'today');
+                    params.set('preset', state.period.preset || defaultPeriodPreset);
                     if (state.period.start_date) params.set('start_date', state.period.start_date);
                     if (state.period.end_date) params.set('end_date', state.period.end_date);
                     params.set('page', '1');
@@ -680,6 +985,46 @@
                     history.replaceState(null, '', `${window.location.pathname}?${params.toString()}`);
                 };
 
+                const updateShiftQuery = () => {
+                    if (!el.shiftPeriod) {
+                        return;
+                    }
+
+                    const params = new URLSearchParams(window.location.search);
+                    params.set('tab', 'shift');
+                    params.set('preset', state.shiftPeriod.preset || defaultPeriodPreset);
+                    params.set('page', '1');
+
+                    if (state.shiftPeriod.start_date) {
+                        params.set('start_date', state.shiftPeriod.start_date);
+                    } else {
+                        params.delete('start_date');
+                    }
+
+                    if (state.shiftPeriod.end_date) {
+                        params.set('end_date', state.shiftPeriod.end_date);
+                    } else {
+                        params.delete('end_date');
+                    }
+
+                    const entries = {
+                        shift_branch_id: el.shiftBranch?.value || '',
+                        shift_cashier_id: el.shiftCashier?.value || '',
+                        shift_status: el.shiftStatus?.value || 'all',
+                        shift_q: el.shiftSearch?.value?.trim() || '',
+                    };
+
+                    Object.keys(entries).forEach((key) => {
+                        if (entries[key] && entries[key] !== 'all') {
+                            params.set(key, entries[key]);
+                        } else {
+                            params.delete(key);
+                        }
+                    });
+
+                    history.replaceState(null, '', `${window.location.pathname}?${params.toString()}`);
+                };
+
                 const loadCashiers = async () => {
                     const response = await fetch('/api/v1/cashiers', { headers });
                     if (!response.ok) {
@@ -690,7 +1035,17 @@
                 };
 
                 const loadShiftHistory = async () => {
-                    const response = await fetch('/api/v1/shifts/closed', { headers });
+                    const params = new URLSearchParams({
+                        preset: state.shiftPeriod.preset || defaultPeriodPreset,
+                        start_date: state.shiftPeriod.start_date || '',
+                        end_date: state.shiftPeriod.end_date || '',
+                        branch_id: el.shiftBranch?.value || '',
+                        cashier_id: el.shiftCashier?.value || '',
+                        status: el.shiftStatus?.value || 'all',
+                        q: el.shiftSearch?.value?.trim() || '',
+                        limit: '100',
+                    });
+                    const response = await fetch(`/api/v1/shifts/closed?${params.toString()}`, { headers });
                     if (!response.ok) {
                         return [];
                     }
@@ -698,12 +1053,56 @@
                     return window.PosUi.unwrapApiList(payload, 'shifts');
                 };
 
+                const syncShiftLabels = () => {
+                    const periodText = state.shiftPeriod.preset === 'custom'
+                        ? formatDateRangeLabel(state.shiftPeriod.start_date, state.shiftPeriod.end_date)
+                        : el.shiftPeriod?.querySelector('[data-period-summary]')?.textContent?.trim()
+                        || (state.shiftPeriod.preset === 'last7' ? '7 Hari Terakhir' : 'Hari Ini');
+
+                    if (el.shiftPeriodSummary) {
+                        el.shiftPeriodSummary.textContent = periodText;
+                    }
+                    if (el.shiftBranchLabel && el.shiftBranch) {
+                        el.shiftBranchLabel.textContent = el.shiftBranch.options[el.shiftBranch.selectedIndex]?.textContent || 'Semua Cabang';
+                    }
+                    if (el.shiftCashierLabel && el.shiftCashier) {
+                        el.shiftCashierLabel.textContent = el.shiftCashier.options[el.shiftCashier.selectedIndex]?.textContent || 'Kasir';
+                    }
+                    if (el.shiftStatusLabel && el.shiftStatus) {
+                        el.shiftStatusLabel.textContent = el.shiftStatus.options[el.shiftStatus.selectedIndex]?.textContent || 'Semua Status';
+                    }
+                    if (el.shiftFilterSummary) {
+                        const activeDetails = [];
+                        if (el.shiftSearch?.value?.trim()) activeDetails.push(`Cari: ${el.shiftSearch.value.trim()}`);
+                        if (el.shiftBranch?.value) activeDetails.push(el.shiftBranchLabel?.textContent || 'Cabang dipilih');
+                        if (el.shiftCashier?.value) activeDetails.push(el.shiftCashierLabel?.textContent || 'Kasir dipilih');
+                        if (el.shiftStatus?.value && el.shiftStatus.value !== 'all') activeDetails.push(el.shiftStatusLabel?.textContent || 'Status dipilih');
+                        el.shiftFilterSummary.textContent = activeDetails.length
+                            ? activeDetails.join(' / ')
+                            : 'Semua cabang, kasir, dan status';
+                    }
+                };
+
+                const refreshShift = async () => {
+                    if (!el.shiftList) {
+                        return;
+                    }
+                    syncShiftLabels();
+                    try {
+                        state.shifts = await loadShiftHistory();
+                        renderShiftList();
+                        updateShiftQuery();
+                    } catch (_) {
+                        el.shiftList.innerHTML = '<div class="text-sm text-slate-400">Gagal memuat riwayat shift.</div>';
+                    }
+                };
+
                 const setActiveTab = (tabId) => {
                     state.tab = tabId;
                     el.tabs.forEach((btn) => {
                         const isActive = btn.dataset.tab === tabId;
                         btn.className = isActive
-                            ? 'whitespace-nowrap rounded-full bg-primary px-4 py-2 text-sm font-bold text-white'
+                            ? 'whitespace-nowrap rounded-full bg-primary px-4 py-2 text-sm font-bold text-white shadow-sm'
                             : 'whitespace-nowrap rounded-full bg-slate-100 px-4 py-2 text-sm font-bold text-slate-500';
                     });
                     el.tabPanels.forEach((panel) => {
@@ -712,14 +1111,7 @@
 
                     if (tabId === 'shift' && !state.shiftLoaded) {
                         state.shiftLoaded = true;
-                        loadShiftHistory().then((rows) => {
-                            state.shifts = rows;
-                            renderShiftList();
-                        }).catch(() => {
-                            if (el.shiftList) {
-                                el.shiftList.innerHTML = '<div class="text-sm text-slate-400">Gagal memuat riwayat shift.</div>';
-                            }
-                        });
+                        refreshShift();
                     }
                 };
 
@@ -749,6 +1141,56 @@
                     el.branchLabel.textContent = el.branch.options[el.branch.selectedIndex]?.textContent || 'Semua Cabang';
                     el.cashierLabel.textContent = el.cashier.options[el.cashier.selectedIndex]?.textContent || 'Kasir';
                     el.statusLabel.textContent = el.status.options[el.status.selectedIndex]?.textContent || 'Status';
+
+                    const periodText = state.period.preset === 'custom'
+                        ? formatDateRangeLabel(state.period.start_date, state.period.end_date)
+                        : el.period?.querySelector('[data-period-summary]')?.textContent?.trim()
+                        || (state.period.preset === 'last7' ? '7 Hari Terakhir' : 'Hari Ini');
+                    if (el.periodSummary) {
+                        el.periodSummary.textContent = periodText;
+                    }
+                    if (el.filterSummary) {
+                        const activeDetails = [];
+                        if (el.branch.value) activeDetails.push(el.branchLabel.textContent);
+                        if (el.cashier.value) activeDetails.push(el.cashierLabel.textContent);
+                        if (el.status.value && el.status.value !== 'all') activeDetails.push(el.statusLabel.textContent);
+                        el.filterSummary.textContent = activeDetails.length
+                            ? activeDetails.join(' / ')
+                            : 'Semua cabang, kasir, dan status';
+                    }
+                };
+
+                const openFilterSheet = () => {
+                    if (!el.filterSheet) {
+                        return;
+                    }
+                    el.filterSheet.classList.remove('hidden');
+                    document.body.classList.add('overflow-hidden');
+                };
+
+                const closeFilterSheet = () => {
+                    if (!el.filterSheet) {
+                        return;
+                    }
+                    el.filterSheet.classList.add('hidden');
+                    document.body.classList.remove('overflow-hidden');
+                };
+
+                const openShiftFilterSheet = () => {
+                    if (!el.shiftFilterSheet) {
+                        return;
+                    }
+                    el.shiftFilterSheet.classList.remove('hidden');
+                    document.body.classList.add('overflow-hidden');
+                    setTimeout(() => el.shiftSearch?.focus(), 80);
+                };
+
+                const closeShiftFilterSheet = () => {
+                    if (!el.shiftFilterSheet) {
+                        return;
+                    }
+                    el.shiftFilterSheet.classList.add('hidden');
+                    document.body.classList.remove('overflow-hidden');
                 };
 
                 const refresh = async () => {
@@ -772,6 +1214,22 @@
                 el.branch?.addEventListener('change', refresh);
                 el.cashier?.addEventListener('change', refresh);
                 el.status?.addEventListener('change', refresh);
+                el.filterOpen?.addEventListener('click', openFilterSheet);
+                el.filterOverlay?.addEventListener('click', closeFilterSheet);
+                el.filterDismiss?.addEventListener('click', closeFilterSheet);
+                el.filterClose?.addEventListener('click', closeFilterSheet);
+                el.shiftFilterOpen?.addEventListener('click', openShiftFilterSheet);
+                el.shiftFilterOverlay?.addEventListener('click', closeShiftFilterSheet);
+                el.shiftFilterDismiss?.addEventListener('click', closeShiftFilterSheet);
+                el.shiftFilterClose?.addEventListener('click', closeShiftFilterSheet);
+                document.addEventListener('keydown', (event) => {
+                    if (event.key === 'Escape' && !el.filterSheet?.classList.contains('hidden')) {
+                        closeFilterSheet();
+                    }
+                    if (event.key === 'Escape' && !el.shiftFilterSheet?.classList.contains('hidden')) {
+                        closeShiftFilterSheet();
+                    }
+                });
 
                 el.reset?.addEventListener('click', () => {
                     if (!supportsFilters) {
@@ -789,6 +1247,40 @@
                     refresh();
                 });
 
+                el.shiftPeriod?.addEventListener('period:change', (event) => {
+                    state.shiftPeriod = event.detail;
+                    if (state.tab === 'shift') {
+                        refreshShift();
+                    } else {
+                        syncShiftLabels();
+                    }
+                });
+
+                el.shiftBranch?.addEventListener('change', refreshShift);
+                el.shiftCashier?.addEventListener('change', refreshShift);
+                el.shiftStatus?.addEventListener('change', refreshShift);
+                let shiftSearchTimer = null;
+                el.shiftSearch?.addEventListener('input', () => {
+                    syncShiftLabels();
+                    clearTimeout(shiftSearchTimer);
+                    shiftSearchTimer = setTimeout(() => {
+                        if (state.tab === 'shift') {
+                            refreshShift();
+                        } else {
+                            updateShiftQuery();
+                        }
+                    }, 250);
+                });
+
+                el.shiftReset?.addEventListener('click', () => {
+                    if (el.shiftBranch) el.shiftBranch.value = '';
+                    if (el.shiftCashier) el.shiftCashier.value = '';
+                    if (el.shiftStatus) el.shiftStatus.value = 'all';
+                    if (el.shiftSearch) el.shiftSearch.value = '';
+                    el.shiftPeriod?.querySelector('[data-period-reset]')?.click();
+                    refreshShift();
+                });
+
                 el.export?.addEventListener('click', () => {
                     if (!state.sales.length) {
                         return;
@@ -803,10 +1295,11 @@
                     }
 
                     const rows = [
-                        ['Invoice', 'Tanggal', 'Kasir', 'Cabang', 'Status', 'Gross Sales', 'Item Discount', 'Transaction Discount', 'Total Discount', 'Net Sales', 'Grand Total', 'Metode'],
+                        ['Invoice', 'Tanggal', 'Channel', 'Kasir', 'Cabang', 'Status', 'Gross Sales', 'Item Discount', 'Transaction Discount', 'Total Discount', 'Net Sales', 'Grand Total', 'Metode'],
                         ...selectedRows.map((sale) => [
                             formatInvoice(sale),
                             formatCsvDate(sale.created_at),
+                            sale.sales_channel_label || '-',
                             sale.cashier_name || '-',
                             sale.branch_name || '-',
                             sale.status,
@@ -847,10 +1340,6 @@
                     updateSelectionMeta();
                 });
 
-                el.shiftSearch?.addEventListener('input', () => {
-                    renderShiftList();
-                });
-
                 el.tabs.forEach((btn) => {
                     btn.addEventListener('click', () => {
                         const tabId = btn.dataset.tab || 'transaksi';
@@ -883,15 +1372,35 @@
                     const bootstrap = await loadBootstrap();
                     state.branches = bootstrap?.branches || [];
                     buildOptions(el.branch, state.branches, 'name', 'Semua Cabang');
+                    buildOptions(el.shiftBranch, state.branches, 'name', 'Semua Cabang');
 
                     const cashiers = await loadCashiers();
                     state.cashiers = cashiers.map((item) => ({ id: item.id, name: item.name }));
                     buildOptions(el.cashier, state.cashiers, 'name', 'Kasir');
+                    buildOptions(el.shiftCashier, state.cashiers, 'name', 'Kasir');
                     if (el.status && historyContext === 'backoffice' && !el.status.value) {
                         el.status.value = 'completed';
                     }
 
+                    const query = new URLSearchParams(window.location.search);
+                    if (el.shiftBranch && query.get('shift_branch_id')) {
+                        el.shiftBranch.value = query.get('shift_branch_id');
+                    }
+                    if (el.shiftCashier && query.get('shift_cashier_id')) {
+                        el.shiftCashier.value = query.get('shift_cashier_id');
+                    }
+                    if (el.shiftStatus && query.get('shift_status')) {
+                        el.shiftStatus.value = query.get('shift_status');
+                    }
+                    if (el.shiftSearch && query.get('shift_q')) {
+                        el.shiftSearch.value = query.get('shift_q');
+                    }
+                    syncShiftLabels();
+
                     refresh();
+                    if (state.tab === 'shift') {
+                        refreshShift();
+                    }
                 })();
             })();
         </script>

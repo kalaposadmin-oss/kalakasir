@@ -13,34 +13,47 @@ class DailyFinanceControlService
 {
     public function calculate(string $tenantId, string $date): array
     {
+        $readiness = app(SalesCostReadinessService::class);
         $snapshotDate = CarbonImmutable::parse($date, 'UTC')->toDateString();
         $windowStart = CarbonImmutable::parse($snapshotDate, 'UTC')->startOfDay();
         $windowEnd = CarbonImmutable::parse($snapshotDate, 'UTC')->endOfDay();
         $dueEnd = CarbonImmutable::parse($snapshotDate, 'UTC')->addDays(7)->toDateString();
 
+        $readiness->assertNoMissingCompletedSalesForBusinessDateRange(
+            $tenantId,
+            $snapshotDate,
+            $snapshotDate,
+            'finance-control-daily'
+        );
+
+        $saleAggregateCogs = $readiness->saleAggregateTotalsSubquery($tenantId);
+
         $salesRows = DB::table('sales')
-            ->where('tenant_id', $tenantId)
-            ->where('status', 'completed')
+            ->joinSub($saleAggregateCogs, 'sale_aggregate_cogs', function ($join) {
+                $join->on('sale_aggregate_cogs.sale_id', '=', 'sales.id')
+                    ->on('sale_aggregate_cogs.tenant_id', '=', 'sales.tenant_id');
+            })
+            ->where('sales.tenant_id', $tenantId)
+            ->where('sales.status', 'completed')
             // Daily finance control is a business-day snapshot, so sales use transaction_date.
             // Legacy rows that still have null transaction_date fall back to created_at date.
-            ->whereRaw('DATE(COALESCE(transaction_date, created_at)) = ?', [$snapshotDate])
-            ->get(['id', 'total']);
+            ->whereRaw('DATE(COALESCE(sales.transaction_date, sales.created_at)) = ?', [$snapshotDate])
+            ->get([
+                'sales.id',
+                'sales.total',
+                DB::raw('sale_aggregate_cogs.aggregated_cogs'),
+            ]);
 
-        $saleIds = $salesRows->pluck('id')->all();
         $salesTotal = $salesRows->reduce(
             fn (string $carry, $row) => Decimal::add($carry, Decimal::money($row->total), Decimal::MONEY_SCALE),
             Decimal::money('0')
         );
-        $transactionCount = count($saleIds);
+        $transactionCount = $salesRows->count();
 
-        $cogsTotal = Decimal::money('0');
-        if (! empty($saleIds)) {
-            $cogsTotal = Decimal::money(DB::table('sale_items')
-                ->where('tenant_id', $tenantId)
-                ->whereIn('sale_id', $saleIds)
-                ->selectRaw('sum(qty * hpp_snapshot) as total')
-                ->value('total'));
-        }
+        $cogsTotal = $salesRows->reduce(
+            fn (string $carry, $row) => Decimal::add($carry, $row->aggregated_cogs ?? 0, Decimal::MONEY_SCALE),
+            Decimal::money('0')
+        );
 
         $shiftRows = DB::table('shifts')
             ->where('tenant_id', $tenantId)
@@ -137,14 +150,11 @@ class DailyFinanceControlService
 
     public function readRange(string $tenantId, string $fromDate, string $toDate): array
     {
-        $stored = collect($this->getRange($tenantId, $fromDate, $toDate))
-            ->keyBy('snapshot_date');
-
         return collect(CarbonPeriod::create($fromDate, $toDate))
-            ->map(function ($date) use ($tenantId, $stored) {
+            ->map(function ($date) use ($tenantId) {
                 $snapshotDate = CarbonImmutable::parse($date, 'UTC')->toDateString();
 
-                return $stored->get($snapshotDate) ?? $this->calculate($tenantId, $snapshotDate);
+                return $this->calculate($tenantId, $snapshotDate);
             })
             ->values()
             ->all();

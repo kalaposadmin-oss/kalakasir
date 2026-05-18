@@ -36,10 +36,13 @@ class ProductionBatchService
         $product = $this->loadBatchProduct($tenantId, (string) $payload['product_id']);
         $productVariantId = $this->resolveVariantId($tenantId, (string) $product->id, Arr::get($payload, 'product_variant_id'));
         $recipeLines = $this->normalizeRecipeLines($product);
-        $expectedOutputQty = Decimal::qty($payload['expected_output_qty']);
+        $draftPlan = $this->resolveDraftPlan($payload, $product);
+        $expectedOutputQty = $draftPlan['expected_output_qty'];
+        $recipeCount = $draftPlan['recipe_count'];
+        $plannedInputs = $this->buildPlannedInputsFromRecipeLines($recipeLines, $draftPlan['input_multiplier']);
 
         try {
-            return DB::transaction(function () use ($payload, $tenantId, $userId, $now, $transactionDate, $location, $product, $productVariantId, $recipeLines, $expectedOutputQty): ProductionBatch {
+            return DB::transaction(function () use ($payload, $tenantId, $userId, $now, $transactionDate, $location, $product, $productVariantId, $recipeLines, $expectedOutputQty, $recipeCount, $plannedInputs): ProductionBatch {
                 $batchId = (string) Str::uuid();
 
                 $batch = ProductionBatch::query()->create([
@@ -49,7 +52,7 @@ class ProductionBatchService
                     'location_id' => $payload['location_id'],
                     'product_id' => $product->id,
                     'product_variant_id' => $productVariantId,
-                    'recipe_version' => (int) $payload['recipe_version'],
+                    'recipe_version' => $recipeCount,
                     'reference_no' => Arr::get($payload, 'reference_no'),
                     'status' => ProductionBatch::STATUS_DRAFT,
                     'notes' => Arr::get($payload, 'notes'),
@@ -67,7 +70,7 @@ class ProductionBatchService
 
                 foreach ($recipeLines as $line) {
                     $lineVariantId = $this->resolveVariantId($tenantId, (string) $line['product_id'], Arr::get($line, 'product_variant_id'));
-                    $plannedQty = Decimal::multiply($expectedOutputQty, Decimal::qty($line['qty']), Decimal::QTY_SCALE);
+                    $plannedQty = Decimal::qty($plannedInputs[$this->itemKey((string) $line['product_id'], $lineVariantId)] ?? 0);
 
                     $rows[] = [
                         'id' => (string) Str::uuid(),
@@ -126,7 +129,8 @@ class ProductionBatchService
                         'product_variant_id' => $productVariantId,
                         'transaction_date' => $transactionDate->toDateString(),
                         'expected_output_qty' => Decimal::float($expectedOutputQty, Decimal::QTY_SCALE),
-                        'recipe_version' => (int) $payload['recipe_version'],
+                        'recipe_version' => $recipeCount,
+                        'recipe_count' => $recipeCount,
                         'reference_no' => Arr::get($payload, 'reference_no'),
                         'notes' => Arr::get($payload, 'notes'),
                         'variance_reason' => null,
@@ -152,7 +156,7 @@ class ProductionBatchService
                 'tenant_id' => $tenantId,
                 'location_id' => Arr::get($payload, 'location_id'),
                 'total_input_cost' => 0.0,
-                'output_qty' => Decimal::float(Decimal::qty(Arr::get($payload, 'expected_output_qty', 0)), Decimal::QTY_SCALE),
+                'output_qty' => Decimal::float($expectedOutputQty, Decimal::QTY_SCALE),
                 'unit_cost_result' => 0.0,
                 'error' => $exception->getMessage(),
                 'exception' => class_basename($exception),
@@ -183,15 +187,9 @@ class ProductionBatchService
             $product = $this->loadBatchProduct($tenantId, (string) $batch->product_id);
             $transactionDate = (new TransactionDateService())
                 ->resolve(Arr::get($payload, 'transaction_date', $batch->transaction_date));
-            $expectedOutputQty = array_key_exists('expected_output_qty', $payload)
-                ? Decimal::qty($payload['expected_output_qty'])
-                : Decimal::qty($batch->expected_output_qty);
-
-            if (Decimal::compare($expectedOutputQty, '0') <= 0) {
-                throw ValidationException::withMessages([
-                    'expected_output_qty' => 'Expected output qty harus lebih dari 0.',
-                ]);
-            }
+            $draftPlan = $this->resolveDraftPlan($payload, $product, $batch);
+            $expectedOutputQty = $draftPlan['expected_output_qty'];
+            $recipeCount = $draftPlan['recipe_count'];
 
             $productVariantId = array_key_exists('product_variant_id', $payload)
                 ? $this->resolveVariantId($tenantId, (string) $product->id, Arr::get($payload, 'product_variant_id'))
@@ -214,9 +212,16 @@ class ProductionBatchService
 
             $beforeSnapshot = $this->draftAuditSnapshot($batch, $inputs, $output);
 
-            $plannedInputMap = array_key_exists('inputs', $payload)
-                ? $this->normalizePlannedInputs($payload['inputs'] ?? [])
-                : null;
+            $plannedInputMap = null;
+
+            if ($draftPlan['mode'] === 'recipe_count') {
+                $plannedInputMap = $this->buildPlannedInputsFromRecipeLines(
+                    $this->normalizeRecipeLines($product),
+                    $draftPlan['input_multiplier']
+                );
+            } elseif (array_key_exists('inputs', $payload)) {
+                $plannedInputMap = $this->normalizePlannedInputs($payload['inputs'] ?? []);
+            }
 
             if ($plannedInputMap !== null) {
                 $this->validateDraftInputKeys($inputs, $plannedInputMap, 'inputs');
@@ -266,7 +271,7 @@ class ProductionBatchService
             $batch->product_variant_id = $productVariantId;
             $batch->transaction_date = $transactionDate->toDateString();
             $batch->expected_output_qty = Decimal::float($expectedOutputQty, Decimal::QTY_SCALE);
-            $batch->recipe_version = (int) Arr::get($payload, 'recipe_version', $batch->recipe_version);
+            $batch->recipe_version = $recipeCount;
             if (array_key_exists('reference_no', $payload)) {
                 $batch->reference_no = Arr::get($payload, 'reference_no');
             }
@@ -650,113 +655,24 @@ class ProductionBatchService
 
     private function loadLocation(string $tenantId, string $branchId, string $locationId): Location
     {
-        $location = Location::query()
-            ->where('tenant_id', $tenantId)
-            ->where('branch_id', $branchId)
-            ->where('id', $locationId)
-            ->first();
-
-        if (! $location) {
-            throw ValidationException::withMessages([
-                'location_id' => 'Location tidak valid untuk branch dan tenant aktif.',
-            ]);
-        }
-
-        return $location;
+        return app(ProductionEligibilityService::class)->loadLocation($tenantId, $branchId, $locationId);
     }
 
     private function loadBatchProduct(string $tenantId, string $productId): Product
     {
-        $product = Product::query()
-            ->where('tenant_id', $tenantId)
-            ->where('id', $productId)
-            ->first();
-
-        if (! $product) {
-            throw ValidationException::withMessages([
-                'product_id' => 'Produk tidak ditemukan untuk tenant aktif.',
-            ]);
-        }
-
-        if (! $product->is_active) {
-            throw ValidationException::withMessages([
-                'product_id' => 'Produk batch production harus aktif.',
-            ]);
-        }
-
-        if ((string) ($product->production_mode ?? Product::PRODUCTION_MODE_NONE) !== Product::PRODUCTION_MODE_BATCH) {
-            throw ValidationException::withMessages([
-                'product_id' => 'Produk harus menggunakan production_mode batch_production.',
-            ]);
-        }
-
-        $resolvedType = ProductItemTypeMapper::resolve(
-            $product->item_type,
-            (string) ($product->product_mode ?? 'default')
-        );
-
-        if ($resolvedType !== 'finished_good' || ! $product->track_stock) {
-            throw ValidationException::withMessages([
-                'product_id' => 'Produk batch production harus finished_good dan track_stock aktif.',
-            ]);
-        }
-
-        return $product;
+        return app(ProductionEligibilityService::class)->loadBatchProduct($tenantId, $productId);
     }
 
     private function normalizeRecipeLines(Product $product): array
     {
-        $recipeLines = collect(Arr::wrap($product->bom_items))
-            ->filter(fn ($line) => is_array($line) && ! empty($line['product_id']))
-            ->map(function (array $line) {
-                return [
-                    'product_id' => (string) $line['product_id'],
-                    'product_variant_id' => Arr::get($line, 'product_variant_id'),
-                    'qty' => Decimal::qty($line['qty'] ?? 0),
-                    'unit' => Arr::get($line, 'unit'),
-                    'uom' => Arr::get($line, 'uom'),
-                ];
-            })
-            ->filter(fn (array $line) => Decimal::compare($line['qty'], '0') > 0)
-            ->values();
-
-        if ($recipeLines->isEmpty()) {
-            throw ValidationException::withMessages([
-                'product_id' => 'Recipe aktif tidak ditemukan untuk produk batch production.',
-            ]);
-        }
-
-        $products = $this->loadProductsForRecipe((string) $product->tenant_id, $recipeLines->pluck('product_id')->all());
-
-        foreach ($recipeLines as $index => $line) {
-            $recipeProduct = $products->get($line['product_id']);
-            $resolvedType = ProductItemTypeMapper::resolve(
-                $recipeProduct?->item_type,
-                (string) ($recipeProduct?->product_mode ?? 'default')
-            );
-
-            if ($resolvedType !== 'raw_material') {
-                throw ValidationException::withMessages([
-                    'product_id' => 'Semua input recipe batch production harus bertipe raw_material.',
-                ]);
-            }
-
-            if (! empty($line['product_variant_id'])) {
-                $this->resolveVariantId((string) $product->tenant_id, $line['product_id'], (string) $line['product_variant_id']);
-            } elseif ($this->productHasVariants((string) $product->tenant_id, $line['product_id'])) {
-                throw ValidationException::withMessages([
-                    'product_id' => sprintf('Recipe input index %d wajib menyimpan product_variant_id.', $index),
-                ]);
-            }
-        }
-
-        return $recipeLines->all();
+        return app(ProductionEligibilityService::class)->normalizeRecipeLines($product);
     }
 
     private function loadProductsForRecipe(string $tenantId, array $productIds): Collection
     {
         $products = Product::query()
             ->where('tenant_id', $tenantId)
+            ->where('is_active', true)
             ->whereIn('id', $productIds)
             ->get(['id', 'item_type', 'product_mode'])
             ->keyBy('id');
@@ -804,6 +720,77 @@ class ProductionBatchService
             ->where('tenant_id', $tenantId)
             ->where('product_id', $productId)
             ->exists();
+    }
+
+    private function resolveDraftPlan(array $payload, Product $product, ?ProductionBatch $batch = null): array
+    {
+        $hasExpectedOutputQty = array_key_exists('expected_output_qty', $payload);
+        $useRecipeCountMode = array_key_exists('recipe_count', $payload)
+            || (! $hasExpectedOutputQty && array_key_exists('recipe_version', $payload));
+        $recipeOutputQty = Decimal::snappedQty($product->recipe_output_qty ?? 0);
+
+        if ($useRecipeCountMode) {
+            $recipeCount = (int) Arr::get($payload, 'recipe_count', Arr::get($payload, 'recipe_version'));
+
+            if ($recipeCount < 1) {
+                throw ValidationException::withMessages([
+                    'recipe_count' => 'Jumlah resep wajib lebih dari 0.',
+                ]);
+            }
+
+            if (Decimal::compare($recipeOutputQty, '0') <= 0) {
+                throw ValidationException::withMessages([
+                    'recipe_output_qty' => 'Produk batch production wajib punya hasil standar per 1 resep.',
+                ]);
+            }
+
+            return [
+                'mode' => 'recipe_count',
+                'recipe_count' => $recipeCount,
+                'recipe_output_qty' => $recipeOutputQty,
+                'expected_output_qty' => Decimal::multiply(
+                    Decimal::qty((string) $recipeCount),
+                    $recipeOutputQty,
+                    Decimal::QTY_SCALE
+                ),
+                'input_multiplier' => Decimal::qty((string) $recipeCount),
+            ];
+        }
+
+        $expectedOutputQty = $hasExpectedOutputQty
+            ? Decimal::qty($payload['expected_output_qty'])
+            : Decimal::qty($batch?->expected_output_qty ?? 0);
+
+        if (Decimal::compare($expectedOutputQty, '0') <= 0) {
+            throw ValidationException::withMessages([
+                'expected_output_qty' => 'Expected output qty harus lebih dari 0.',
+            ]);
+        }
+
+        return [
+            'mode' => 'legacy_output',
+            'recipe_count' => (int) Arr::get($payload, 'recipe_version', $batch?->recipe_version ?? 1),
+            'recipe_output_qty' => $recipeOutputQty,
+            'expected_output_qty' => $expectedOutputQty,
+            'input_multiplier' => $expectedOutputQty,
+        ];
+    }
+
+    private function buildPlannedInputsFromRecipeLines(array $recipeLines, string $multiplier): array
+    {
+        $plannedInputs = [];
+
+        foreach ($recipeLines as $line) {
+            $plannedInputs[$this->itemKey(
+                (string) $line['product_id'],
+                Arr::get($line, 'product_variant_id')
+            )] = Decimal::float(
+                Decimal::multiply($multiplier, Decimal::qty($line['qty']), Decimal::QTY_SCALE),
+                Decimal::QTY_SCALE
+            );
+        }
+
+        return $plannedInputs;
     }
 
     private function normalizeActualInputs(array $inputs): array
@@ -1056,6 +1043,7 @@ class ProductionBatchService
             'transaction_date' => optional($batch->transaction_date)?->format('Y-m-d'),
             'expected_output_qty' => (float) ($batch->expected_output_qty ?? 0),
             'recipe_version' => (int) ($batch->recipe_version ?? 0),
+            'recipe_count' => (int) ($batch->recipe_version ?? 0),
             'reference_no' => $batch->reference_no,
             'notes' => $batch->notes,
             'variance_reason' => $batch->variance_reason,
@@ -1086,6 +1074,8 @@ class ProductionBatchService
             'status' => (string) $batch->status,
             'transaction_date' => optional($batch->transaction_date)?->format('Y-m-d'),
             'expected_output_qty' => (float) ($batch->expected_output_qty ?? 0),
+            'recipe_version' => (int) ($batch->recipe_version ?? 0),
+            'recipe_count' => (int) ($batch->recipe_version ?? 0),
             'actual_output_qty' => (float) ($batch->actual_output_qty ?? 0),
             'yield_variance_qty' => (float) ($batch->yield_variance_qty ?? 0),
             'yield_variance_pct' => (float) ($batch->yield_variance_pct ?? 0),
@@ -1199,6 +1189,7 @@ class ProductionBatchService
             'transaction_date' => optional($batch->transaction_date)?->format('Y-m-d'),
             'expected_output_qty' => (float) ($batch->expected_output_qty ?? 0),
             'recipe_version' => (int) ($batch->recipe_version ?? 0),
+            'recipe_count' => (int) ($batch->recipe_version ?? 0),
             'reference_no' => $batch->reference_no,
             'notes' => $batch->notes,
             'product_variant_id' => $batch->product_variant_id,

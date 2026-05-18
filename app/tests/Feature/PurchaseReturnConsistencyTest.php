@@ -23,6 +23,7 @@ class PurchaseReturnConsistencyTest extends TestCase
         parent::setUp();
 
         [$this->tenant, $this->user] = $this->bootApiActor('admin', 'admin-return@example.com', 'Admin Return');
+        $this->tenant->forceFill(['plan' => 'M'])->save();
         $this->fixture = $this->seedCheckoutFixture($this->tenant->id, $this->user->id);
     }
 

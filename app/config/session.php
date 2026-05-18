@@ -15,6 +15,27 @@ $normalizeSessionHost = static function (?string $host): string {
     return explode(':', $host)[0] ?? '';
 };
 
+$normalizeSessionDomainOverride = static function (?string $value) use ($normalizeSessionHost): ?string {
+    $value = trim((string) $value);
+
+    if ($value === '') {
+        return null;
+    }
+
+    if (in_array(strtolower($value), ['null', 'false'], true)) {
+        return null;
+    }
+
+    $normalizedHost = ltrim($normalizeSessionHost($value), '.');
+    if ($normalizedHost === '') {
+        return null;
+    }
+
+    $prefix = str_starts_with($value, '.') ? '.' : '';
+
+    return $prefix.$normalizedHost;
+};
+
 $portalHostsFromEnv = static function (string $key) use ($normalizeSessionHost): array {
     $raw = trim((string) env($key, ''));
     if ($raw === '') {
@@ -34,11 +55,13 @@ $portalHostsFromEnv = static function (string $key) use ($normalizeSessionHost):
     return $hosts;
 };
 
-$inferSharedSessionDomain = static function () use ($portalHostsFromEnv): ?string {
-    $explicit = trim((string) env('SESSION_DOMAIN', ''));
-    if ($explicit !== '') {
+$inferSharedSessionDomain = static function () use ($normalizeSessionDomainOverride, $normalizeSessionHost, $portalHostsFromEnv): ?string {
+    $explicit = $normalizeSessionDomainOverride((string) env('SESSION_DOMAIN', ''));
+    if ($explicit !== null) {
         return $explicit;
     }
+
+    $appHost = $normalizeSessionHost((string) env('APP_URL', ''));
 
     $hosts = array_values(array_unique(array_merge(
         $portalHostsFromEnv('POS_PORTAL_HOSTS'),
@@ -46,6 +69,10 @@ $inferSharedSessionDomain = static function () use ($portalHostsFromEnv): ?strin
     )));
 
     if (count($hosts) < 2) {
+        if ($appHost === '' || $appHost === 'localhost' || filter_var($appHost, FILTER_VALIDATE_IP)) {
+            return null;
+        }
+
         return null;
     }
 
@@ -85,6 +112,14 @@ $inferSharedSessionDomain = static function () use ($portalHostsFromEnv): ?strin
         if ($host === $sharedDomain) {
             return null;
         }
+    }
+
+    if (
+        $appHost !== ''
+        && $appHost !== $sharedDomain
+        && ! str_ends_with($appHost, '.'.$sharedDomain)
+    ) {
+        return null;
     }
 
     return '.'.$sharedDomain;

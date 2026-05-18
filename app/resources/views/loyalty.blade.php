@@ -27,12 +27,12 @@
 @section('page_title', 'Loyalitas dan Member Tiers')
 @section('body_class', 'bg-background-light dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-display')
 @section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-background-light dark:bg-slate-950 shadow-2xl')
-@section('main_class', 'flex-1 overflow-hidden p-0')
+@section('main_class', 'flex-1 overflow-hidden p-0 app-bottom-safe-space')
 
 @push('head')
         <style>
             .tier-card-active {
-                outline: 2px solid #135bec;
+                outline: 2px solid var(--color-primary);
                 outline-offset: 2px;
             }
             .no-scrollbar::-webkit-scrollbar {
@@ -50,7 +50,7 @@
 @endsection
 
 @section('content')
-        <div class="flex-1 overflow-y-auto pb-32">
+        <div class="flex-1 overflow-y-auto pb-32 app-bottom-safe-space">
             <section class="p-4">
                 <div class="flex items-center justify-between mb-3 px-1">
                     <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wider">Level Keanggotaan</h2>
@@ -75,7 +75,7 @@
             </div>
         </div>
         @if ($canManageLoyalty)
-            <div class="fixed bottom-24 right-6 left-6 max-w-[382px] mx-auto z-40">
+            <div class="fixed bottom-24 right-6 left-6 max-w-[382px] mx-auto z-40 app-bottom-safe-space">
                 <button class="w-full bg-primary text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-xl shadow-primary/30">
                     <span class="material-symbols-outlined">person_add</span>
                     Tambah Member Baru

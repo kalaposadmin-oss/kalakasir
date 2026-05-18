@@ -83,12 +83,12 @@
 
             const load = async () => {
                 const [bootstrapRes, subRes] = await Promise.all([
-                    fetch('/api/v1/bootstrap', { headers }),
+                    window.PosUi.getBootstrap({ headers, ttlMs: 20000 }),
                     fetch('/api/v1/subscription/current', { headers }),
                 ]);
 
-                if (bootstrapRes.ok) {
-                    const bootstrap = await bootstrapRes.json();
+                if (bootstrapRes) {
+                    const bootstrap = bootstrapRes;
                     el.tenant.textContent = `Tenant: ${bootstrap?.tenant?.name || '-'} (${bootstrap?.tenant?.timezone || '-'})`;
                 }
 

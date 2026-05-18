@@ -59,21 +59,23 @@ class OpsAlertService
             return;
         }
 
-        $timeout = (int) config('services.ops_alerts.timeout_seconds', 4);
+        $timeout = max(1, min((int) config('services.ops_alerts.timeout_seconds', 2), 3));
         $token = (string) config('services.ops_alerts.bearer_token', '');
 
-        try {
-            $request = Http::timeout(max(1, $timeout));
-            if ($token !== '') {
-                $request = $request->withToken($token);
-            }
+        app()->terminating(static function () use ($webhookUrl, $message, $timeout, $token): void {
+            try {
+                $request = Http::connectTimeout(1)->timeout($timeout);
+                if ($token !== '') {
+                    $request = $request->withToken($token);
+                }
 
-            $request->post($webhookUrl, $message)->throw();
-        } catch (\Throwable $exception) {
-            Log::error('gagal kirim ops alert valuation', [
-                'message' => $exception->getMessage(),
-                ...$message,
-            ]);
-        }
+                $request->post($webhookUrl, $message)->throw();
+            } catch (\Throwable $exception) {
+                Log::error('gagal kirim ops alert valuation', [
+                    'message' => $exception->getMessage(),
+                    ...$message,
+                ]);
+            }
+        });
     }
 }

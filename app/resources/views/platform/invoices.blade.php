@@ -4,6 +4,9 @@
     $pageTitle = 'Billing / Invoices';
     $active = 'invoices';
     $invoices = $invoices ?? [];
+    $filters = $filters ?? [];
+    $page = (int) ($page ?? 1);
+    $lastPage = (int) ($lastPage ?? 1);
     $totalCount = (int) ($total ?? 0);
     $openCount = collect($invoices)->where('status', 'open')->count();
     $overdueCount = collect($invoices)->where('status', 'overdue')->count();
@@ -15,21 +18,31 @@
             <h1 class="text-2xl font-bold text-slate-900">Billing / Invoices</h1>
             <p class="mt-1 text-sm text-slate-500">Pantau status invoice dan piutang tenant.</p>
         </div>
-        <div class="flex flex-wrap items-center gap-2">
-            <button class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600">Export CSV</button>
-            <button class="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white shadow-sm">Generate Invoice</button>
-        </div>
+        <a href="/superadmin/support/search" class="inline-flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50">
+            <span class="material-symbols-outlined text-[18px]">support_agent</span>
+            Support search
+        </a>
     </div>
 
-    <div class="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4">
-        <div class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
-            <span class="material-symbols-outlined text-[18px]">search</span>
-            <span>Cari invoice, tenant, ID</span>
+    <form method="GET" action="/superadmin/billing/invoices" class="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm lg:grid-cols-[minmax(0,1.4fr)_repeat(2,minmax(0,0.8fr))_auto]">
+        <input name="q" value="{{ $filters['q'] ?? '' }}" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700" placeholder="Cari invoice atau tenant" />
+        <select name="status" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+            <option value="">Semua status</option>
+            @foreach (['draft', 'open', 'paid', 'overdue', 'void'] as $status)
+                <option value="{{ $status }}" @selected(($filters['status'] ?? '') === $status)>{{ ucfirst($status) }}</option>
+            @endforeach
+        </select>
+        <select name="sort_by" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+            <option value="created_at" @selected(($filters['sort_by'] ?? 'created_at') === 'created_at')>Terbaru</option>
+            <option value="due_at" @selected(($filters['sort_by'] ?? '') === 'due_at')>Due date</option>
+            <option value="amount" @selected(($filters['sort_by'] ?? '') === 'amount')>Amount</option>
+            <option value="status" @selected(($filters['sort_by'] ?? '') === 'status')>Status</option>
+        </select>
+        <div class="flex items-center gap-2">
+            <button class="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white" type="submit">Filter</button>
+            <a href="/superadmin/billing/invoices" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600">Reset</a>
         </div>
-        <div class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">Status: Overdue</div>
-        <div class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">Due: 7 hari</div>
-        <button class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600">Reset</button>
-    </div>
+    </form>
 
     <section class="grid gap-4 md:grid-cols-3">
         <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -55,7 +68,7 @@
                 <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Invoice List</p>
                 <h3 class="text-sm font-bold text-slate-900">{{ number_format($totalCount) }} invoice ditemukan</h3>
             </div>
-            <button class="text-xs font-semibold text-primary">Lihat semua</button>
+            <span class="text-xs font-semibold text-slate-500">Live data</span>
         </div>
         <div class="overflow-x-auto">
             <table class="min-w-full text-left text-sm">
@@ -66,7 +79,6 @@
                         <th class="px-6 py-3">Status</th>
                         <th class="px-6 py-3">Amount</th>
                         <th class="px-6 py-3">Due</th>
-                        <th class="px-6 py-3">Action</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
@@ -88,19 +100,16 @@
                             </td>
                             <td class="px-6 py-4 text-sm font-semibold text-slate-700">{{ number_format((float) ($invoice['amount'] ?? 0), 0, ',', '.') }}</td>
                             <td class="px-6 py-4 text-xs text-slate-500">{{ $invoice['due_at'] ?? '-' }}</td>
-                            <td class="px-6 py-4">
-                                <button class="text-xs font-semibold text-primary">Detail</button>
-                            </td>
                         </tr>
                     @empty
                         <tr>
-                            <td class="px-6 py-4 text-sm text-slate-500" colspan="6">Belum ada invoice.</td>
+                            <td class="px-6 py-4 text-sm text-slate-500" colspan="5">Belum ada invoice.</td>
                         </tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
+        @include('platform.partials.pagination')
     </section>
 
-    @include('platform.partials.states')
 @endsection

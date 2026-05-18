@@ -19,8 +19,9 @@
 
     abort_unless(in_array($branchRole, ['admin', 'owner', 'superadmin'], true), 403);
 
-    $branchCurrentPath = $currentPath ?? ($branchId ? '/backoffice/branches/'.$branchId.'/edit' : '/backoffice/branches/edit');
-    $branchBackUrl = $backUrl ?? '/backoffice/branches';
+    $branchPortalPrefix = request()->is('pos/*') ? '/pos' : '/backoffice';
+    $branchCurrentPath = $currentPath ?? ($branchId ? $branchPortalPrefix.'/branches/'.$branchId.'/edit' : $branchPortalPrefix.'/branches/edit');
+    $branchBackUrl = $backUrl ?? $branchPortalPrefix.'/branches';
     $resolvedBranchId = (string) ($branchId ?? request()->query('branch_id', ''));
 @endphp
 
@@ -29,7 +30,7 @@
 @section('page_title', 'Tambah & Edit Cabang')
 @section('body_class', 'bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display')
 @section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-background-light dark:bg-background-dark shadow-2xl')
-@section('main_class', 'flex-1 overflow-hidden p-0')
+@section('main_class', 'flex-1 overflow-hidden p-0 app-bottom-safe-space')
 
 @push('head')
         <style>
@@ -38,7 +39,7 @@
                 background-color: #ffffff;
             }
             .ios-switch:checked ~ .ios-switch-bg {
-                background-color: #135bec;
+                background-color: var(--color-primary);
             }
         </style>
 @endpush
@@ -52,7 +53,7 @@
 @endsection
 
 @section('content')
-        <div class="flex-1 overflow-y-auto pb-32">
+        <div class="flex-1 overflow-y-auto pb-32 app-bottom-safe-space">
             <div class="p-4 space-y-6">
                 <div class="space-y-4">
                     <div class="flex items-center gap-2 px-1">
@@ -116,7 +117,7 @@
                 </div>
             </div>
         </div>
-        <div class="fixed bottom-0 left-1/2 w-full max-w-[430px] -translate-x-1/2 bg-white/90 dark:bg-background-dark/90 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800 p-4 pb-8">
+        <div class="fixed bottom-0 left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 bg-white/90 dark:bg-background-dark/90 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800 p-4 app-bottom-safe-footer">
             <button id="save-bottom" class="w-full bg-primary text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-primary/20">Simpan Perubahan</button>
             <div class="mt-4 flex justify-center">
                 <div class="w-32 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full"></div>
@@ -186,7 +187,7 @@
                     if (!branchId) {
                         branchId = data.branch_id;
                         if (branchId) {
-                            const nextPath = `/backoffice/branches/${encodeURIComponent(branchId)}/edit`;
+                            const nextPath = `${@json($branchPortalPrefix)}/branches/${encodeURIComponent(branchId)}/edit`;
                             window.history.replaceState(null, '', nextPath);
                         }
                     }

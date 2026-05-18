@@ -13,6 +13,7 @@ class OnboardingProvisioningService
         private readonly TenantDefaultRoleSetupService $roleSetup,
         private readonly TenantDefaultAccountingSetupService $accountingSetup,
         private readonly TenantDefaultOperationalSetupService $operationalSetup,
+        private readonly TenantDefaultRegisterSetupService $registerSetup,
     ) {
     }
 
@@ -21,11 +22,11 @@ class OnboardingProvisioningService
      * @param  array{store_name:string,operational_address?:string|null,business_category?:string|null,timezone?:string|null}  $companyData
      * @return array{0: Tenant, 1: User}
      */
-    public function completeCompanyProfileStep(array $userData, array $companyData, ?string $existingTenantId = null): array
+    public function completeCompanyProfileStep(array $userData, array $companyData, ?string $existingTenantId = null, ?string $existingOwnerId = null): array
     {
         $timezone = $companyData['timezone'] ?? 'Asia/Jakarta';
 
-        return DB::transaction(function () use ($companyData, $timezone, $userData, $existingTenantId) {
+        return DB::transaction(function () use ($companyData, $timezone, $userData, $existingTenantId, $existingOwnerId) {
             $tenant = null;
 
             if ($existingTenantId !== null && trim($existingTenantId) !== '') {
@@ -55,10 +56,20 @@ class OnboardingProvisioningService
                 ]);
             }
 
-            $owner = User::query()
-                ->where('tenant_id', $tenant->id)
-                ->where('email', $userData['email'])
-                ->first();
+            $owner = null;
+            if ($existingOwnerId !== null && trim($existingOwnerId) !== '') {
+                $owner = User::query()
+                    ->where('tenant_id', $tenant->id)
+                    ->where('id', $existingOwnerId)
+                    ->first();
+            }
+
+            if (! $owner) {
+                $owner = User::query()
+                    ->where('tenant_id', $tenant->id)
+                    ->where('email', $userData['email'])
+                    ->first();
+            }
 
             if (! $owner) {
                 $owner = User::query()->create([
@@ -68,6 +79,13 @@ class OnboardingProvisioningService
                     'password' => Hash::make($userData['password']),
                     'failed_login_attempts' => 0,
                 ]);
+            } else {
+                $owner->update([
+                    'name' => $userData['name'],
+                    'email' => $userData['email'],
+                    'password' => Hash::make($userData['password']),
+                ]);
+                $owner->refresh();
             }
 
             $this->roleSetup->assignNamedRole($tenant->id, $owner->id, 'Owner');
@@ -77,6 +95,7 @@ class OnboardingProvisioningService
                 $companyData['operational_address'] ?? null,
             );
             $this->accountingSetup->ensure($tenant->id, $owner->id);
+            $this->registerSetup->ensure($tenant);
 
             return [$tenant, $owner];
         });

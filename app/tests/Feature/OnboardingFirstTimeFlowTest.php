@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use Illuminate\Contracts\View\View;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
+use Illuminate\Session\TokenMismatchException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
@@ -38,6 +39,30 @@ class OnboardingFirstTimeFlowTest extends TestCase
         $this->get('/register/step-2')->assertRedirect('/register/step-1');
         $this->get('/register/step-3')->assertRedirect('/register/step-2');
         $this->get('/register/step-4')->assertRedirect('/register/step-3');
+        $this->get('/register/review')->assertRedirect('/register/step-4');
+    }
+
+    public function test_onboarding_step_one_with_expired_session_redirects_back_with_message(): void
+    {
+        $this->seedTenant();
+
+        Route::post('/register/step-expired', static function () {
+            throw new TokenMismatchException('expired');
+        });
+
+        $response = $this->post('/register/step-expired', [
+            'name' => 'Owner Expired',
+            'email' => 'owner-expired@example.test',
+            'phone' => '08123456789',
+            'password' => 'secret123',
+            'password_confirmation' => 'secret123',
+            'accept_terms' => '1',
+        ]);
+
+        $response->assertRedirect('/register/step-expired');
+        $response->assertSessionHasErrors('session');
+        $response->assertSessionHas('_old_input.name', 'Owner Expired');
+        $response->assertSessionHas('_old_input.email', 'owner-expired@example.test');
     }
 
     public function test_register_step_four_view_exposes_variant_initial_stock_contract(): void
@@ -54,6 +79,106 @@ class OnboardingFirstTimeFlowTest extends TestCase
         $this->assertStringContainsString('appendHiddenInput(`variants[${index}][id]`, variant.id);', $contents);
         $this->assertStringContainsString("initialStockInput.value = '0';", $contents);
         $this->assertStringContainsString("hiddenInputs.innerHTML = '';", $contents);
+        $this->assertStringContainsString('Opsional. Boleh dikosongkan jika HPP baru akan terbentuk saat pembelian atau produksi pertama.', $contents);
+        $this->assertStringContainsString('Opsional. Boleh dikosongkan jika harga jual akan ditentukan setelah onboarding.', $contents);
+        $this->assertStringContainsString('@error(\'hpp_average\')', $contents);
+    }
+
+    public function test_onboarding_step_four_allows_empty_hpp_and_price_and_defaults_to_zero(): void
+    {
+        $existingTenantId = $this->seedTenant();
+
+        DB::table('users')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $existingTenantId,
+            'name' => 'Owner Existing',
+            'email' => 'owner-existing-validation@example.test',
+            'password' => bcrypt('secret123'),
+            'failed_login_attempts' => 0,
+            'remember_token' => null,
+            'created_at' => now('UTC'),
+            'updated_at' => now('UTC'),
+            'deleted_at' => null,
+        ]);
+
+        $this->completeOnboardingStepThree('owner-validation@example.test', 'Tenant Validasi');
+
+        $this->from('/register/step-4')
+            ->post('/register/step-4', [
+                'name' => 'Produk Validasi',
+                'sku' => 'VAL-001',
+                'category' => 'Snack',
+                'hpp_average' => '',
+                'price' => '',
+                'initial_stock' => '0',
+            ])
+            ->assertRedirect('/register/review')
+            ->assertSessionHas('onboarding.step4.skip_product', false);
+
+        $this->post('/register/complete', [
+            'selected_plan' => 'M',
+        ])
+            ->assertRedirect('/pos/dashboard')
+            ->assertSessionHas('auth_portal', 'pos');
+
+        $tenant = DB::table('tenants')->where('name', 'Tenant Validasi')->first();
+        $this->assertNotNull($tenant);
+
+        $this->assertDatabaseHas('products', [
+            'tenant_id' => $tenant->id,
+            'sku' => 'VAL-001',
+            'price' => 0,
+            'hpp_average' => 0,
+        ]);
+
+        $this->assertDatabaseHas('tenants', [
+            'id' => $tenant->id,
+            'plan' => 'M',
+        ]);
+
+        $subscription = DB::table('subscriptions')
+            ->where('tenant_id', $tenant->id)
+            ->first();
+
+        $this->assertNotNull($subscription);
+        $this->assertSame('M', $subscription->plan);
+        $this->assertSame('active', $subscription->status);
+        $this->assertTrue((bool) $subscription->is_current);
+    }
+
+    public function test_onboarding_step_four_invalid_numeric_values_use_indonesian_messages(): void
+    {
+        $existingTenantId = $this->seedTenant();
+
+        DB::table('users')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $existingTenantId,
+            'name' => 'Owner Existing',
+            'email' => 'owner-existing-validation-number@example.test',
+            'password' => bcrypt('secret123'),
+            'failed_login_attempts' => 0,
+            'remember_token' => null,
+            'created_at' => now('UTC'),
+            'updated_at' => now('UTC'),
+            'deleted_at' => null,
+        ]);
+
+        $this->completeOnboardingStepThree('owner-validation-number@example.test', 'Tenant Validasi Angka');
+
+        $this->followingRedirects()
+            ->from('/register/step-4')
+            ->post('/register/step-4', [
+                'name' => 'Produk Validasi',
+                'sku' => 'VAL-002',
+                'category' => 'Snack',
+                'hpp_average' => 'abc',
+                'price' => 'xyz',
+                'initial_stock' => '1',
+            ])
+            ->assertSee('Silakan lengkapi field wajib dan perbaiki input yang masih invalid.')
+            ->assertSee('Harga pokok (hpp) harus berupa angka.', false)
+            ->assertSee('Harga jual harus berupa angka.', false)
+            ->assertDontSee('validation.numeric', false);
     }
 
     public function test_root_redirects_to_onboarding_when_tenant_has_no_users(): void
@@ -64,7 +189,7 @@ class OnboardingFirstTimeFlowTest extends TestCase
             ->assertRedirect('/register/step-1');
     }
 
-    public function test_root_redirects_to_login_when_user_exists(): void
+    public function test_root_renders_pos_login_when_user_exists(): void
     {
         $tenantId = $this->seedTenant();
 
@@ -81,7 +206,9 @@ class OnboardingFirstTimeFlowTest extends TestCase
         ]);
 
         $this->get('/')
-            ->assertRedirect('/login');
+            ->assertOk()
+            ->assertSee('Login POS')
+            ->assertSee('action="/"', false);
     }
 
     public function test_onboarding_step_two_assigns_owner_and_creates_default_branch_location(): void
@@ -186,6 +313,14 @@ class OnboardingFirstTimeFlowTest extends TestCase
             'hpp_average' => '15000',
             'price' => '25000',
             'initial_stock' => '2',
+        ])->assertRedirect('/register/review');
+
+        $this->assertDatabaseMissing('products', [
+            'sku' => 'NEW-001',
+        ]);
+
+        $this->post('/register/complete', [
+            'selected_plan' => 'M',
         ])->assertRedirect('/pos/dashboard')
             ->assertSessionHas('auth_portal', 'pos');
 
@@ -234,6 +369,8 @@ class OnboardingFirstTimeFlowTest extends TestCase
             'name' => 'Produk Baru',
         ]);
 
+        $this->assertSame('M', $newTenant->plan);
+
         $this->assertDatabaseMissing('product_variants', [
             'tenant_id' => $newTenant->id,
             'product_id' => DB::table('products')->where('tenant_id', $newTenant->id)->where('sku', 'NEW-001')->value('id'),
@@ -277,6 +414,10 @@ class OnboardingFirstTimeFlowTest extends TestCase
                 ['product_variant_id' => $variantA, 'qty' => '2', 'unit_cost' => '14000'],
                 ['product_variant_id' => $variantB, 'qty' => '3', 'unit_cost' => '16000'],
             ],
+        ])->assertRedirect('/register/review');
+
+        $this->post('/register/complete', [
+            'selected_plan' => 'P',
         ])->assertRedirect('/pos/dashboard')
             ->assertSessionHas('auth_portal', 'pos');
 
@@ -306,6 +447,7 @@ class OnboardingFirstTimeFlowTest extends TestCase
 
         $locationId = DB::table('locations')->where('tenant_id', $newTenant->id)->where('is_default', true)->value('id');
         $this->assertNotNull($locationId);
+        $this->assertSame('P', $newTenant->plan);
 
         $this->assertSame(2.0, $this->inventoryBalanceQty($newTenant->id, $product->id, $variantA, $locationId));
         $this->assertSame(3.0, $this->inventoryBalanceQty($newTenant->id, $product->id, $variantB, $locationId));
@@ -315,6 +457,55 @@ class OnboardingFirstTimeFlowTest extends TestCase
             ->where('location_id', $locationId)
             ->whereNull('product_variant_id')
             ->value('qty_on_hand'));
+    }
+
+    public function test_onboarding_review_renders_summary_and_edit_links(): void
+    {
+        $this->seedTenant();
+
+        $this->withSession([
+            'onboarding.step1' => [
+                'name' => 'Owner Review',
+                'email' => 'owner-review@example.test',
+                'phone' => '08123',
+                'password' => 'secret123',
+            ],
+            'onboarding.step2' => [
+                'tenant_id' => (string) Str::uuid(),
+                'user_id' => (string) Str::uuid(),
+                'store_name' => 'Toko Review',
+                'operational_address' => 'Jl. Review No. 1',
+                'business_category' => 'service',
+                'timezone' => 'Asia/Jakarta',
+                'valuation_method' => 'fifo',
+            ],
+            'onboarding.step3' => [
+                'valuation_method' => 'fifo',
+            ],
+            'onboarding.step4' => [
+                'skip_product' => false,
+                'product' => [
+                    'name' => 'Produk Review',
+                    'sku' => 'REV-001',
+                    'category' => 'Layanan',
+                    'hpp_average' => '0',
+                    'price' => '0',
+                    'initial_stock' => '1',
+                    'variants' => [],
+                    'initial_stock_lines' => [],
+                ],
+            ],
+        ])->get('/register/review')
+            ->assertOk()
+            ->assertSee('Review Sebelum Masuk')
+            ->assertSee('Pilih Paket')
+            ->assertSee('Cocok untuk:')
+            ->assertSee('Owner Review')
+            ->assertSee('Toko Review')
+            ->assertSee('Produk Review')
+            ->assertSee('Konfirmasi dan Masuk Dashboard')
+            ->assertSee('href="/register/step-1"', false)
+            ->assertSee('href="/register/step-4"', false);
     }
 
     public function test_onboarding_variant_rejects_initial_stock_line_without_product_variant_id(): void
@@ -374,6 +565,10 @@ class OnboardingFirstTimeFlowTest extends TestCase
 
         $this->from('/register/step-4')->post('/register/step-4', [
             'skip_product' => '1',
+        ])->assertRedirect('/register/review');
+
+        $this->post('/register/complete', [
+            'selected_plan' => 'S',
         ])->assertRedirect('/pos/dashboard')
             ->assertSessionHas('auth_portal', 'pos');
 
@@ -381,9 +576,19 @@ class OnboardingFirstTimeFlowTest extends TestCase
 
         $newTenant = DB::table('tenants')->where('name', 'Tenant Skip Produk')->first();
         $this->assertNotNull($newTenant);
+        $this->assertSame('S', $newTenant->plan);
         $this->assertDatabaseMissing('products', [
             'tenant_id' => $newTenant->id,
         ]);
+
+        $subscription = DB::table('subscriptions')
+            ->where('tenant_id', $newTenant->id)
+            ->first();
+
+        $this->assertNotNull($subscription);
+        $this->assertSame('S', $subscription->plan);
+        $this->assertSame('active', $subscription->status);
+        $this->assertTrue((bool) $subscription->is_current);
     }
 
     public function test_onboarding_completion_clears_step_session_and_marks_completed(): void
@@ -407,12 +612,17 @@ class OnboardingFirstTimeFlowTest extends TestCase
 
         $this->from('/register/step-4')->post('/register/step-4', [
             'skip_product' => '1',
+        ])->assertRedirect('/register/review');
+
+        $this->post('/register/complete', [
+            'selected_plan' => 'M',
         ])->assertRedirect('/pos/dashboard')
             ->assertSessionHas('auth_portal', 'pos')
             ->assertSessionHas('onboarding.completed', true)
             ->assertSessionMissing('onboarding.step1')
             ->assertSessionMissing('onboarding.step2')
-            ->assertSessionMissing('onboarding.step3');
+            ->assertSessionMissing('onboarding.step3')
+            ->assertSessionMissing('onboarding.step4');
     }
 
     private function completeOnboardingStepThree(string $ownerEmail, string $storeName): void

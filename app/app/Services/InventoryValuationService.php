@@ -6,6 +6,7 @@ use App\Exceptions\PurchaseReturnValuationException;
 use App\Models\InventoryCostState;
 use App\Models\InventoryIssueAllocation;
 use App\Models\InventoryLayer;
+use App\Models\Product;
 use App\Models\Sale;
 use App\Support\Decimal;
 use Illuminate\Support\Facades\DB;
@@ -553,6 +554,8 @@ class InventoryValuationService
                 'updated_at' => $at,
             ]);
 
+            $this->syncProductAverageCost($tenantId, $productId, $at);
+
             return;
         }
 
@@ -578,6 +581,8 @@ class InventoryValuationService
             'last_cost' => Decimal::cost($unitCost),
             'updated_at' => $at,
         ]);
+
+        $this->syncProductAverageCost($tenantId, $productId, $at);
     }
 
     public function upsertCostStateOut(
@@ -611,6 +616,8 @@ class InventoryValuationService
                 'updated_at' => $at,
             ]);
 
+            $this->syncProductAverageCost($tenantId, $productId, $at);
+
             return;
         }
 
@@ -621,6 +628,47 @@ class InventoryValuationService
             'last_cost' => Decimal::cost($issueUnitCost),
             'updated_at' => $at,
         ]);
+
+        $this->syncProductAverageCost($tenantId, $productId, $at);
+    }
+
+    private function syncProductAverageCost(string $tenantId, string $productId, \DateTimeInterface $at): void
+    {
+        $aggregate = DB::table('inventory_cost_states')
+            ->where('tenant_id', $tenantId)
+            ->where('product_id', $productId)
+            ->selectRaw('COALESCE(SUM(CASE WHEN qty_on_hand > 0 THEN qty_on_hand ELSE 0 END), 0) as total_qty')
+            ->selectRaw('COALESCE(SUM(CASE WHEN qty_on_hand > 0 THEN qty_on_hand * average_cost ELSE 0 END), 0) as total_value')
+            ->first();
+
+        $totalQty = Decimal::qty($aggregate?->total_qty ?? 0);
+        $resolvedCost = null;
+
+        if (Decimal::compare($totalQty, '0') > 0) {
+            $resolvedCost = Decimal::divide($aggregate?->total_value ?? 0, $totalQty, Decimal::MONEY_SCALE);
+        } else {
+            $lastCost = DB::table('inventory_cost_states')
+                ->where('tenant_id', $tenantId)
+                ->where('product_id', $productId)
+                ->orderByDesc('updated_at')
+                ->value('last_cost');
+
+            if ($lastCost !== null && Decimal::compare($lastCost, '0') > 0) {
+                $resolvedCost = Decimal::money($lastCost);
+            }
+        }
+
+        if ($resolvedCost === null) {
+            return;
+        }
+
+        Product::query()
+            ->where('tenant_id', $tenantId)
+            ->where('id', $productId)
+            ->update([
+                'hpp_average' => Decimal::float($resolvedCost, Decimal::MONEY_SCALE),
+                'updated_at' => $at,
+            ]);
     }
 
     public function replayFromLedger(string $tenantId): void
@@ -685,7 +733,7 @@ class InventoryValuationService
                     unitCost: $unitCost,
                     sourceType: (string) $row->reference_type,
                     sourceId: (string) $row->reference_id,
-                    sourceItemId: $row->reference_type === 'purchase' ? $referenceItemId : null,
+                    sourceItemId: $referenceItemId,
                     at: $at
                 );
             }
@@ -727,7 +775,7 @@ class InventoryValuationService
             }
         }
 
-        $this->syncSaleJournalCogsFromSnapshots($tenantId);
+        $this->syncSaleCostAggregatesAndJournals($tenantId);
 
         app(ValuationAuditService::class)->log($tenantId, 'valuation_replay_completed', [
             'source' => 'InventoryValuationService.replayFromLedger',
@@ -873,15 +921,9 @@ class InventoryValuationService
         throw new RuntimeException('Replay valuation gagal: missing variant context untuk row produk bervarian.');
     }
 
-    private function syncSaleJournalCogsFromSnapshots(string $tenantId): void
+    private function syncSaleCostAggregatesAndJournals(string $tenantId): void
     {
-        $mapping = DB::table('account_mappings')
-            ->where('tenant_id', $tenantId)
-            ->first(['cogs_account_id', 'inventory_account_id']);
-
-        if (! $mapping || ! $mapping->cogs_account_id || ! $mapping->inventory_account_id) {
-            return;
-        }
+        $salesCostAggregationService = app(SalesCostAggregationService::class);
 
         $sales = DB::table('sales')
             ->where('tenant_id', $tenantId)
@@ -892,80 +934,12 @@ class InventoryValuationService
         foreach ($sales as $sale) {
             $saleId = (string) $sale->id;
 
-            $cogsTotal = Decimal::money(DB::table('sale_items')
-                ->where('tenant_id', $tenantId)
-                ->where('sale_id', $saleId)
-                ->selectRaw('sum(qty * hpp_snapshot) as total')
-                ->value('total'));
-
-            $entryIds = DB::table('journal_entries')
-                ->where('tenant_id', $tenantId)
-                ->where('reference_type', 'sale')
-                ->where('reference_id', $saleId)
-                ->pluck('id');
-
-            if ($entryIds->isEmpty()) {
-                continue;
-            }
-
-            foreach ($entryIds as $entryId) {
-                if (Decimal::compare($cogsTotal, 0) <= 0) {
-                    DB::table('journal_items')
-                        ->where('tenant_id', $tenantId)
-                        ->where('journal_entry_id', $entryId)
-                        ->whereIn('account_id', [$mapping->cogs_account_id, $mapping->inventory_account_id])
-                        ->where('is_reversal', false)
-                        ->delete();
-
-                    continue;
-                }
-
-                $roundedCogs = Decimal::money($cogsTotal);
-
-                $updatedCogs = DB::table('journal_items')
-                    ->where('tenant_id', $tenantId)
-                    ->where('journal_entry_id', $entryId)
-                    ->where('account_id', $mapping->cogs_account_id)
-                    ->where('is_reversal', false)
-                    ->update([
-                        'debit' => $roundedCogs,
-                        'credit' => 0,
-                    ]);
-
-                if ($updatedCogs === 0) {
-                    DB::table('journal_items')->insert([
-                        'id' => (string) Str::uuid(),
-                        'journal_entry_id' => $entryId,
-                        'tenant_id' => $tenantId,
-                        'account_id' => $mapping->cogs_account_id,
-                        'debit' => $roundedCogs,
-                        'credit' => 0,
-                        'is_reversal' => false,
-                    ]);
-                }
-
-                $updatedInventory = DB::table('journal_items')
-                    ->where('tenant_id', $tenantId)
-                    ->where('journal_entry_id', $entryId)
-                    ->where('account_id', $mapping->inventory_account_id)
-                    ->where('is_reversal', false)
-                    ->update([
-                        'debit' => 0,
-                        'credit' => $roundedCogs,
-                    ]);
-
-                if ($updatedInventory === 0) {
-                    DB::table('journal_items')->insert([
-                        'id' => (string) Str::uuid(),
-                        'journal_entry_id' => $entryId,
-                        'tenant_id' => $tenantId,
-                        'account_id' => $mapping->inventory_account_id,
-                        'debit' => 0,
-                        'credit' => $roundedCogs,
-                        'is_reversal' => false,
-                    ]);
-                }
-            }
+            $salesCostAggregationService->recomputeForSale(
+                tenantId: $tenantId,
+                saleId: $saleId,
+                source: 'rebuild'
+            );
+            $salesCostAggregationService->syncSaleJournalForSale($tenantId, $saleId);
         }
     }
 
@@ -1335,7 +1309,28 @@ class InventoryValuationService
             ]);
         }
 
-        if (in_array($referenceType, ['production_output', 'production_input'], true)) {
+        if ($referenceType === 'stock_opname') {
+            $query = DB::table('stock_opname_items')
+                ->where('tenant_id', $tenantId)
+                ->where('stock_opname_id', $referenceId)
+                ->where('product_id', $productId);
+
+            $query = $this->applyVariantScopeToTable($query, $productVariantId, 'product_variant_id');
+
+            if ($referenceItemId !== null) {
+                $query->where('id', $referenceItemId);
+            }
+
+            return $this->singleValueOrNull($tenantId, $query, 'unit_cost', [
+                'reference_type' => $referenceType,
+                'reference_id' => $referenceId,
+                'reference_item_id' => $referenceItemId,
+                'product_id' => $productId,
+                'product_variant_id' => $productVariantId,
+            ]);
+        }
+
+        if (in_array($referenceType, ['production_output', 'production_input', 'production_batch'], true)) {
             $query = DB::table('production_batch_items')
                 ->where('tenant_id', $tenantId)
                 ->where('production_batch_id', $referenceId)
@@ -1472,6 +1467,8 @@ class InventoryValuationService
             'transfer_in' => ['table' => 'stock_transfer_items', 'parent' => 'stock_transfer_id'],
             'transfer_out' => ['table' => 'stock_transfer_items', 'parent' => 'stock_transfer_id'],
             'stock_adjustment' => ['table' => 'stock_adjustment_items', 'parent' => 'stock_adjustment_id'],
+            'stock_opname' => ['table' => 'stock_opname_items', 'parent' => 'stock_opname_id'],
+            'production_batch' => ['table' => 'production_batch_items', 'parent' => 'production_batch_id'],
             'production_input' => ['table' => 'production_batch_items', 'parent' => 'production_batch_id'],
             'production_output' => ['table' => 'production_batch_items', 'parent' => 'production_batch_id'],
             'purchase_return' => ['table' => 'purchase_return_items', 'parent' => 'purchase_return_id'],

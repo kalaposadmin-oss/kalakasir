@@ -470,7 +470,27 @@ class AutoConsumeOnSellCheckoutFlowTest extends TestCase
         $response = $this->postJson('/api/v1/checkout', $ctx['payload'], $this->tenantHeaders($tenant->id));
 
         $response->assertStatus(422)
-            ->assertJsonPath('code', 'AUTO_CONSUME_RECIPE_INVALID');
+            ->assertJsonPath('code', 'INVALID_PRODUCT_TYPE');
+    }
+
+    public function test_raw_material_cannot_be_sold_via_checkout(): void
+    {
+        [$tenant, $user] = $this->bootApiActor('admin', 'admin+raw-material-checkout-blocked@example.test');
+
+        $ctx = $this->prepareRecipeCheckoutContext(
+            $tenant,
+            $user->id,
+            rawMaterialStock: 10,
+            autoConsumeEnabled: false,
+            withRecipe: false,
+            soldProductItemType: 'raw_material'
+        );
+
+        $response = $this->postJson('/api/v1/checkout', $ctx['payload'], $this->tenantHeaders($tenant->id));
+
+        $response->assertStatus(422)
+            ->assertJsonPath('code', 'INVALID_PRODUCT_TYPE')
+            ->assertJsonPath('message', 'Produk raw material tidak dapat dijual melalui checkout.');
     }
 
     public function test_partially_consumed_reference_retry_stays_non_duplicate(): void

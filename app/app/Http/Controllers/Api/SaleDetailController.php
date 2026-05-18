@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Discount;
 use App\Models\Payment;
+use App\Models\Receivable;
 use App\Models\Sale;
 use App\Models\SaleItem;
+use App\Support\SaleChannel;
 use App\Support\TenantContext;
 use Illuminate\Http\Request;
 
@@ -43,10 +45,14 @@ class SaleDetailController extends Controller
                 'sales.shift_id',
                 'sales.register_id',
                 'sales.customer_id',
+                'sales.order_holder_name',
+                'sales.order_note',
                 'sales.subtotal',
                 'sales.discount',
                 'sales.tax',
                 'sales.total',
+                'sales.idempotency_key',
+                'sales.transaction_date',
                 'sales.status',
                 'sales.created_at',
                 'sales.voided_by',
@@ -71,6 +77,8 @@ class SaleDetailController extends Controller
             })
             ->select([
                 'sale_items.id',
+                'sale_items.product_id',
+                'sale_items.product_variant_id',
                 'sale_items.qty',
                 'sale_items.price',
                 'sale_items.discount',
@@ -86,6 +94,8 @@ class SaleDetailController extends Controller
 
                 return [
                     'id' => $item->id,
+                    'product_id' => $item->product_id,
+                    'product_variant_id' => $item->product_variant_id,
                     'qty' => (float) $item->qty,
                     'price' => (float) $item->price,
                     'discount' => (float) $item->discount,
@@ -126,6 +136,14 @@ class SaleDetailController extends Controller
             })
             ->values();
 
+        $receivable = Receivable::query()
+            ->with(['payments' => fn ($query) => $query->orderByDesc('created_at')])
+            ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
+            ->where('sale_id', $saleRow->id)
+            ->first();
+
+        $channel = SaleChannel::fromIdempotencyKey($saleRow->idempotency_key);
+
         return response()->json([
             'sale' => [
                 'id' => $saleRow->id,
@@ -135,12 +153,18 @@ class SaleDetailController extends Controller
                 'branch_name' => $saleRow->branch_name,
                 'customer_id' => $saleRow->customer_id,
                 'customer_name' => $saleRow->customer_name,
+                'order_holder_name' => $saleRow->order_holder_name,
+                'order_note' => $saleRow->order_note,
                 'cashier_id' => $saleRow->created_by,
                 'cashier_name' => $saleRow->cashier_name,
                 'subtotal' => (float) $saleRow->subtotal,
                 'discount' => (float) $saleRow->discount,
                 'tax' => (float) $saleRow->tax,
                 'total' => (float) $saleRow->total,
+                'sales_channel' => $channel['channel'],
+                'sales_channel_label' => $channel['label'],
+                'stock_source_label' => $channel['stock_label'],
+                'transaction_date' => $saleRow->transaction_date,
                 'status' => $saleRow->status,
                 'created_at' => $saleRow->created_at,
                 'voided_by' => $saleRow->voided_by,
@@ -153,6 +177,22 @@ class SaleDetailController extends Controller
             'items' => $items,
             'payments' => $payments,
             'discounts' => $discounts,
+            'receivable' => $receivable ? [
+                'id' => $receivable->id,
+                'customer_id' => $receivable->customer_id,
+                'total_amount' => (float) $receivable->total_amount,
+                'paid_amount' => (float) $receivable->paid_amount,
+                'remaining_amount' => (float) $receivable->remaining_amount,
+                'due_date' => $receivable->due_date?->toDateString(),
+                'status' => $receivable->status,
+                'payments' => $receivable->payments->map(fn ($payment) => [
+                    'id' => $payment->id,
+                    'amount' => (float) $payment->amount,
+                    'payment_method' => $payment->payment_method,
+                    'created_at' => $payment->created_at,
+                    'notes' => $payment->notes,
+                ])->values(),
+            ] : null,
         ]);
     }
 }

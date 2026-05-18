@@ -4,6 +4,11 @@
     $pageTitle = 'Audit Logs';
     $active = 'audit-logs';
     $auditLogs = $auditLogs ?? [];
+    $filters = $filters ?? [];
+    $exportFilters = array_filter($filters, fn ($value) => $value !== null && $value !== '');
+    $exportQuery = $exportFilters ? '?'.http_build_query($exportFilters) : '';
+    $page = (int) ($page ?? 1);
+    $lastPage = (int) ($lastPage ?? 1);
 @endphp
 
 @section('platform_content')
@@ -12,21 +17,25 @@
             <h1 class="text-2xl font-bold text-slate-900">Audit Logs</h1>
             <p class="mt-1 text-sm text-slate-500">Pantau semua aksi penting platform.</p>
         </div>
-        <div class="flex flex-wrap items-center gap-2">
-            <button class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600">Export CSV</button>
-            <button class="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white shadow-sm">Buat Snapshot</button>
-        </div>
+        <a href="/api/v1/platform/audit-logs/export{{ $exportQuery }}" class="inline-flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50">
+            <span class="material-symbols-outlined text-[18px]">download</span>
+            Export CSV
+        </a>
     </div>
 
-    <div class="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4">
-        <div class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
-            <span class="material-symbols-outlined text-[18px]">search</span>
-            <span>Cari event, actor, tenant</span>
+    <form method="GET" action="/superadmin/audit-logs" class="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm lg:grid-cols-[minmax(0,1.3fr)_repeat(3,minmax(0,0.8fr))_auto]">
+        <input name="q" value="{{ $filters['q'] ?? '' }}" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700" placeholder="Cari event atau reference" />
+        <input name="event_type" value="{{ $filters['event_type'] ?? '' }}" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700" placeholder="Event type" />
+        <input name="tenant_id" value="{{ $filters['tenant_id'] ?? '' }}" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700" placeholder="Tenant ID" />
+        <select name="sort_by" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+            <option value="created_at" @selected(($filters['sort_by'] ?? 'created_at') === 'created_at')>Terbaru</option>
+            <option value="event_type" @selected(($filters['sort_by'] ?? '') === 'event_type')>Event type</option>
+        </select>
+        <div class="flex items-center gap-2">
+            <button class="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white" type="submit">Filter</button>
+            <a href="/superadmin/audit-logs" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600">Reset</a>
         </div>
-        <div class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">Event: tenant_suspended</div>
-        <div class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">Tanggal: 7 hari</div>
-        <button class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600">Reset</button>
-    </div>
+    </form>
 
     <section class="rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div class="flex items-center justify-between border-b border-slate-100 px-6 py-4">
@@ -34,7 +43,7 @@
                 <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Audit Stream</p>
                 <h3 class="text-sm font-bold text-slate-900">{{ number_format((int) ($total ?? 0)) }} event ditemukan</h3>
             </div>
-            <button class="text-xs font-semibold text-primary">Filter Lanjutan</button>
+            <span class="text-xs font-semibold text-slate-500">Live data</span>
         </div>
         <div class="overflow-x-auto">
             <table class="min-w-full text-left text-sm">
@@ -68,7 +77,7 @@
                 </tbody>
             </table>
         </div>
+        @include('platform.partials.pagination')
     </section>
 
-    @include('platform.partials.states')
 @endsection

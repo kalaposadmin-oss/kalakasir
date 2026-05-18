@@ -25,6 +25,19 @@ final class Decimal
         return self::scale($value, self::QTY_SCALE);
     }
 
+    public static function snappedQty(mixed $value, float $wholeTolerance = 0.0005): string
+    {
+        $scaled = self::qty($value);
+        $floatValue = (float) $scaled;
+        $nearestWhole = round($floatValue);
+
+        if (abs($floatValue - $nearestWhole) <= $wholeTolerance) {
+            return self::qty((string) $nearestWhole);
+        }
+
+        return $scaled;
+    }
+
     public static function cost(mixed $value): string
     {
         return self::scale($value, self::COST_SCALE);

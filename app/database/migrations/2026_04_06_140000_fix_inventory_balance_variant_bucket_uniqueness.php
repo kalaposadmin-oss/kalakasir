@@ -12,9 +12,12 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('inventory_balances', function (Blueprint $table) {
-            $table->dropUnique(['tenant_id', 'location_id', 'product_variant_id']);
-            $table->dropUnique(['tenant_id', 'location_id', 'product_id']);
-            $table->index(['tenant_id', 'product_id', 'product_variant_id', 'location_id'], 'inv_balances_variant_bucket_idx');
+            $table->dropUnique('inv_bal_tenant_loc_var_unq');
+            $table->dropUnique('inventory_balances_tenant_id_location_id_product_id_unique');
+            $table->index(
+                ['tenant_id', 'product_id', 'product_variant_id', 'location_id'],
+                'inv_balances_variant_bucket_idx'
+            );
         });
 
         $this->createVariantBucketUniqueIndex();
@@ -26,8 +29,16 @@ return new class extends Migration
 
         Schema::table('inventory_balances', function (Blueprint $table) {
             $table->dropIndex('inv_balances_variant_bucket_idx');
-            $table->unique(['tenant_id', 'location_id', 'product_variant_id']);
-            $table->unique(['tenant_id', 'location_id', 'product_id']);
+
+            $table->unique(
+                ['tenant_id', 'location_id', 'product_variant_id'],
+                'inv_bal_tenant_loc_var_unq'
+            );
+
+            $table->unique(
+                ['tenant_id', 'location_id', 'product_id'],
+                'inventory_balances_tenant_id_location_id_product_id_unique'
+            );
         });
     }
 

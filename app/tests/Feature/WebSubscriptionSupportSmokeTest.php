@@ -14,7 +14,7 @@ class WebSubscriptionSupportSmokeTest extends TestCase
         $middleware = $route->gatherMiddleware();
         $contents = file_get_contents(resource_path('views/subscription-history.blade.php'));
 
-        $this->assertContains('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview', $middleware);
+        $this->assertContains('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,settings.subscription_billing', $middleware);
         $this->assertTrue(view()->exists('subscription-history'));
         $this->assertStringContainsString('Riwayat Langganan', $contents);
         $this->assertStringContainsString('Audit Trail', $contents);
@@ -29,7 +29,7 @@ class WebSubscriptionSupportSmokeTest extends TestCase
         $middleware = $route->gatherMiddleware();
         $contents = file_get_contents(resource_path('views/subscription-change.blade.php'));
 
-        $this->assertContains('web_access:backoffice,admin|owner|superadmin,dash.overview', $middleware);
+        $this->assertContains('web_access:backoffice,admin|owner|superadmin,settings.subscription_billing', $middleware);
         $this->assertTrue(view()->exists('subscription-change'));
         $this->assertStringContainsString('Ubah Paket Langganan', $contents);
         $this->assertStringContainsString('Preview Dampak', $contents);
@@ -44,7 +44,7 @@ class WebSubscriptionSupportSmokeTest extends TestCase
         $middleware = $route->gatherMiddleware();
         $contents = file_get_contents(resource_path('views/subscription-features.blade.php'));
 
-        $this->assertContains('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview', $middleware);
+        $this->assertContains('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,settings.subscription_billing', $middleware);
         $this->assertTrue(view()->exists('subscription-features'));
         $this->assertStringContainsString('Entitlement', $contents);
         $this->assertStringContainsString('btn-apply', $contents);

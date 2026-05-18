@@ -89,4 +89,27 @@ class SupplierTenantScopingTest extends TestCase
             'details' => [],
         ], $response->getData(true));
     }
+
+    public function test_admin_can_create_supplier_inline_for_active_tenant(): void
+    {
+        [$tenant, $user] = $this->bootApiActor('admin', 'admin-supplier-create@example.com', 'Admin Supplier Create');
+        DB::table('tenants')->where('id', $tenant->id)->update(['plan' => 'M']);
+
+        $response = $this->actingAs($user, 'sanctum')
+            ->withHeaders($this->tenantHeaders($tenant->id))
+            ->postJson('/api/v1/suppliers', [
+                'name' => 'Supplier Baru Langsung',
+            ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('supplier.name', 'Supplier Baru Langsung')
+            ->assertJsonPath('supplier.balance', 0)
+            ->assertJsonPath('supplier.status', 'inactive');
+
+        $this->assertDatabaseHas('suppliers', [
+            'tenant_id' => $tenant->id,
+            'name' => 'Supplier Baru Langsung',
+            'balance' => 0,
+        ]);
+    }
 }

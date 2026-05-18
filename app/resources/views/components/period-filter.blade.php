@@ -162,6 +162,39 @@
         return Math.floor(diff / (24 * 60 * 60 * 1000)) + 1;
     };
 
+    const formatPeriodDateRange = (from, to) => {
+        const startDate = parseWib(from);
+        const endDate = parseWib(to || from);
+
+        if (!startDate || !endDate) {
+            return 'Periode Custom';
+        }
+
+        const dayFormatter = new Intl.DateTimeFormat('id-ID', { day: '2-digit', timeZone: 'Asia/Jakarta' });
+        const monthFormatter = new Intl.DateTimeFormat('id-ID', { month: 'short', timeZone: 'Asia/Jakarta' });
+        const yearFormatter = new Intl.DateTimeFormat('id-ID', { year: 'numeric', timeZone: 'Asia/Jakarta' });
+        const startDay = dayFormatter.format(startDate);
+        const endDay = dayFormatter.format(endDate);
+        const startMonth = monthFormatter.format(startDate);
+        const endMonth = monthFormatter.format(endDate);
+        const startYear = yearFormatter.format(startDate);
+        const endYear = yearFormatter.format(endDate);
+
+        if (from === (to || from)) {
+            return `${endDay} ${endMonth} ${endYear}`;
+        }
+
+        if (startMonth === endMonth && startYear === endYear) {
+            return `${startDay}-${endDay} ${endMonth} ${endYear}`;
+        }
+
+        if (startYear === endYear) {
+            return `${startDay} ${startMonth} - ${endDay} ${endMonth} ${endYear}`;
+        }
+
+        return `${startDay} ${startMonth} ${startYear} - ${endDay} ${endMonth} ${endYear}`;
+    };
+
     const updateInputs = () => {
         el.inputs.forEach((input) => {
             if (input.dataset.periodInput === 'preset') input.value = preset;
@@ -177,8 +210,9 @@
             end = computed.end;
         }
         el.custom.classList.toggle('hidden', preset !== 'custom');
-        el.summary.textContent = labels[preset] || 'Periode';
-        el.chip.textContent = preset === 'custom' && start && end ? `${start} - ${end}` : (labels[preset] || '-');
+        const customLabel = preset === 'custom' ? formatPeriodDateRange(start, end) : null;
+        el.summary.textContent = customLabel || labels[preset] || 'Periode';
+        el.chip.textContent = customLabel || labels[preset] || '-';
         el.presets.forEach(btn => {
             const active = btn.dataset.periodPreset === preset;
             btn.classList.toggle('border-primary', active);

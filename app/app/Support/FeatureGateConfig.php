@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Cache;
 
 class FeatureGateConfig
 {
-    private const CONFIG_CACHE_KEY = 'feature-gating:config:v1';
+    private const CONFIG_CACHE_KEY = 'feature-gating:config';
     private const ENTITLEMENT_CACHE_PREFIX = 'feature-gating:entitlements:';
     private const CACHE_TTL_SECONDS = 300;
 
@@ -15,7 +15,7 @@ class FeatureGateConfig
      */
     public static function config(): array
     {
-        return Cache::remember(self::CONFIG_CACHE_KEY, self::CACHE_TTL_SECONDS, static function (): array {
+        return Cache::remember(static::configCacheKey(), self::CACHE_TTL_SECONDS, static function (): array {
             $path = base_path('config/feature-gating.json');
             if (! is_file($path)) {
                 return [];
@@ -128,6 +128,24 @@ class FeatureGateConfig
 
     private static function entitlementCacheKey(string $plan): string
     {
-        return self::ENTITLEMENT_CACHE_PREFIX.$plan.':v1';
+        return self::ENTITLEMENT_CACHE_PREFIX.$plan.':'.static::configVersion();
+    }
+
+    private static function configCacheKey(): string
+    {
+        return self::CONFIG_CACHE_KEY.':'.static::configVersion();
+    }
+
+    private static function configVersion(): string
+    {
+        $path = base_path('config/feature-gating.json');
+
+        if (! is_file($path)) {
+            return 'missing';
+        }
+
+        $modifiedAt = @filemtime($path);
+
+        return $modifiedAt === false ? 'unknown' : (string) $modifiedAt;
     }
 }

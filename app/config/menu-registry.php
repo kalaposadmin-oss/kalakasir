@@ -4,10 +4,10 @@ return [
     'bottom_nav' => [
         'pos' => [
             ['key' => 'dashboard', 'label' => 'Beranda', 'route' => '/pos/dashboard', 'icon' => 'dashboard', 'feature_key' => 'dash.overview'],
-            ['key' => 'kasir', 'label' => 'Kasir', 'route' => '/kasir', 'icon' => 'point_of_sale', 'feature_key' => 'pos.checkout'],
+            ['key' => 'kasir', 'label' => 'Kasir', 'route' => '/pos/checkout', 'icon' => 'point_of_sale', 'feature_key' => 'pos.checkout'],
             ['key' => 'riwayat', 'label' => 'Riwayat', 'route' => '/pos/history', 'icon' => 'history', 'feature_key' => 'history.sales'],
-            ['key' => 'produk', 'label' => 'Produk', 'route' => '/menu/products-pos', 'icon' => 'inventory_2', 'feature_key' => 'product.list'],
-            ['key' => 'setelan', 'label' => 'Setelan', 'route' => '/menu/settings-pos', 'icon' => 'settings', 'feature_key' => null],
+            ['key' => 'produk', 'label' => 'Produk', 'route' => '/pos/products', 'icon' => 'inventory_2', 'feature_key' => 'product.list'],
+            ['key' => 'setelan', 'label' => 'Setelan', 'route' => '/pos/dashboard', 'icon' => 'settings', 'feature_key' => null],
         ],
         'backoffice' => [
             ['key' => 'dashboard', 'label' => 'Dashboard', 'route' => '/backoffice/dashboard', 'icon' => 'dashboard', 'feature_key' => 'dash.overview'],
@@ -26,8 +26,8 @@ return [
             'title' => 'Penjualan',
             'items' => [
                 ['label' => 'Riwayat Transaksi', 'icon' => 'history', 'href' => '/pos/history', 'feature' => 'history.sales'],
-                ['label' => 'Detail Transaksi', 'icon' => 'receipt_long', 'href' => '/sales-detail', 'feature' => 'history.sales'],
-                ['label' => 'Void / Refund', 'icon' => 'assignment_return', 'href' => '/sales-void-refund', 'feature' => 'pos.void'],
+                ['label' => 'Detail Transaksi', 'icon' => 'receipt_long', 'href' => '/pos/history', 'feature' => 'history.sales'],
+                ['label' => 'Void / Refund', 'icon' => 'assignment_return', 'href' => '/pos/void-refund', 'feature' => 'pos.void'],
             ],
         ],
         'shift' => [
@@ -40,9 +40,9 @@ return [
             'is_visible' => true,
             'title' => 'Shift',
             'items' => [
-                ['label' => 'Buka Shift', 'icon' => 'schedule', 'href' => '/shift/open', 'feature' => 'shift.open'],
-                ['label' => 'Tutup Shift', 'icon' => 'power_settings_new', 'href' => '/shift/close', 'feature' => 'shift.close'],
-                ['label' => 'Riwayat Shift', 'icon' => 'history', 'href' => '/shift/close-summary', 'feature' => 'shift.history'],
+                ['label' => 'Buka Shift', 'icon' => 'schedule', 'href' => '/pos/shifts/open', 'feature' => 'shift.open'],
+                ['label' => 'Tutup Shift', 'icon' => 'power_settings_new', 'href' => '/pos/shifts/close', 'feature' => 'shift.close'],
+                ['label' => 'Riwayat Shift', 'icon' => 'history', 'href' => '/pos/shifts/summary', 'feature' => 'shift.history'],
             ],
         ],
         'products-pos' => [
@@ -57,6 +57,7 @@ return [
             'items' => [
                 ['label' => 'Katalog Produk (Read Only)', 'icon' => 'inventory', 'href' => '/pos/products', 'feature' => 'product.list'],
                 ['label' => 'Stok Saat Ini', 'icon' => 'inventory_2', 'href' => '/pos/inventory', 'feature' => 'inventory.stock'],
+                ['label' => 'Batch Produksi', 'icon' => 'precision_manufacturing', 'href' => '/pos/inventory/production-batches', 'feature' => 'inventory.production_batches'],
             ],
         ],
         'settings-pos' => [
@@ -69,8 +70,8 @@ return [
             'is_visible' => true,
             'title' => 'Setelan POS',
             'items' => [
-                ['label' => 'Pengaturan Shift', 'icon' => 'schedule', 'href' => '/menu/shift', 'feature' => 'shift.open'],
-                ['label' => 'Bantuan', 'icon' => 'help', 'href' => '/help/center', 'feature' => 'help.center'],
+                ['label' => 'Pengaturan Shift', 'icon' => 'schedule', 'href' => '/pos/shifts/open', 'feature' => 'shift.open'],
+                ['label' => 'Bantuan', 'icon' => 'help', 'href' => '/portal/switch/backoffice?next=%2Fbackoffice%2Fhelp%2Fcenter', 'feature' => 'help.center'],
                 ['label' => 'Logout', 'icon' => 'logout', 'href' => '/logout'],
             ],
         ],
@@ -86,7 +87,8 @@ return [
             'items' => [
                 ['label' => 'Daftar Produk', 'icon' => 'inventory', 'href' => '/backoffice/products', 'feature' => 'product.list'],
                 ['label' => 'Tambah Produk', 'icon' => 'add_box', 'href' => '/backoffice/products/new', 'feature' => 'product.list'],
-                ['label' => 'Kategori Produk', 'icon' => 'grid_view', 'href' => '/backoffice/categories', 'feature' => 'product.category'],
+                ['label' => 'Kategori', 'icon' => 'grid_view', 'href' => '/backoffice/categories', 'feature' => 'product.category'],
+                ['label' => 'Batch Produksi', 'icon' => 'precision_manufacturing', 'href' => '/backoffice/inventory/production-batches', 'feature' => 'inventory.production_batches'],
             ],
         ],
         'settings' => [
@@ -97,12 +99,13 @@ return [
             'icon' => 'settings',
             'group' => 'system',
             'is_visible' => true,
-            'route' => '/backoffice/settings',
+            'route' => '/backoffice/settings/preferences',
             'title' => 'Pengaturan Sistem',
             'items' => [
-                ['label' => 'Toko & Cabang', 'icon' => 'store', 'href' => '/menu/settings-branches', 'feature' => 'settings.branches_manage'],
-                ['label' => 'Staff & Role', 'icon' => 'groups', 'href' => '/menu/settings-staff', 'feature' => 'settings.staff_basic'],
+                ['label' => 'Toko & Cabang', 'icon' => 'store', 'href' => '/backoffice/branches', 'feature' => 'settings.branches_manage'],
+                ['label' => 'Staff & Role', 'icon' => 'groups', 'href' => '/backoffice/users', 'feature' => 'settings.staff_basic'],
                 ['label' => 'Integrasi', 'icon' => 'integration_instructions', 'href' => '/backoffice/settings/integrations', 'feature' => 'settings.integrations'],
+                ['label' => 'Pembayaran & Rekening', 'icon' => 'payments', 'href' => '/backoffice/settings/payment-settings', 'feature' => 'finance.bank_accounts'],
                 ['label' => 'Billing & Subscription', 'icon' => 'workspace_premium', 'href' => '/backoffice/settings/subscription', 'feature' => 'settings.subscription_billing'],
                 ['label' => 'Valuation Persediaan', 'icon' => 'monitoring', 'href' => '/backoffice/settings/inventory-valuation', 'feature' => 'settings.inventory_valuation'],
                 ['label' => 'Audit Valuation', 'icon' => 'fact_check', 'href' => '/backoffice/settings/inventory-valuation-audit', 'feature' => 'settings.inventory_valuation'],

@@ -67,13 +67,15 @@
             <div class="space-y-3 xl:col-span-2">
                 <h3 class="text-sm font-bold text-slate-900 dark:text-white">Artikel Populer</h3>
                 <div id="help-article-list" class="space-y-3">
-                    <a class="block rounded-xl border border-slate-200 bg-white p-4 text-sm shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800/40" href="#">Cara Menghubungkan Printer Bluetooth</a>
+                    <div class="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                        Artikel bantuan belum dipublikasikan.
+                    </div>
                 </div>
             </div>
             <aside class="rounded-2xl bg-slate-900 p-5 text-white">
                 <h4 class="font-bold">Dokumentasi Teknis</h4>
                 <p class="mt-2 text-xs text-slate-300">Pelajari fitur secara mendalam lewat dokumentasi lengkap.</p>
-                <button class="mt-4 w-full rounded-lg bg-primary px-3 py-2 text-xs font-bold">Buka Dokumentasi</button>
+                <button class="mt-4 w-full rounded-lg bg-slate-700 px-3 py-2 text-xs font-bold text-slate-300" type="button" disabled>Belum tersedia</button>
             </aside>
         </section>
     </div>
@@ -86,13 +88,7 @@
                 categories: document.querySelectorAll('[data-help-category]'),
             };
 
-            const articles = [
-                { title: 'Cara Menghubungkan Printer Bluetooth', category: 'penjualan', eta: '5 menit baca' },
-                { title: 'Manajemen Stok Minimum & Notifikasi', category: 'inventori', eta: '3 menit baca' },
-                { title: 'Menerima Pembayaran via QRIS', category: 'penjualan', eta: '4 menit baca' },
-                { title: 'Setup Toko Pertama Kali', category: 'memulai', eta: '6 menit baca' },
-                { title: 'Aktivasi dan Penagihan Langganan', category: 'billing', eta: '4 menit baca' },
-            ];
+            const articles = [];
 
             let activeCategory = 'all';
 
@@ -105,7 +101,7 @@
                 });
 
                 if (!filtered.length) {
-                    el.list.innerHTML = '<div class="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900">Tidak ada artikel yang cocok.</div>';
+                    el.list.innerHTML = '<div class="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900">Artikel bantuan belum dipublikasikan.</div>';
                     return;
                 }
 

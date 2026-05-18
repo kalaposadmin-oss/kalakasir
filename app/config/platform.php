@@ -4,6 +4,7 @@ return [
     'rate_limit_override_token' => env('PLATFORM_RATE_LIMIT_OVERRIDE_TOKEN', ''),
     'audit_log_retention_days' => (int) env('AUDIT_LOG_RETENTION_DAYS', 365),
     'health_alert_webhook' => env('PLATFORM_HEALTH_ALERT_WEBHOOK', ''),
+    'health_alert_timeout_seconds' => (int) env('PLATFORM_HEALTH_ALERT_TIMEOUT_SECONDS', 1),
     'api_rate_limit_per_minute' => (int) env('API_RATE_LIMIT_PER_MINUTE', 120),
     'sensitive_rate_limit_per_minute' => (int) env('SENSITIVE_RATE_LIMIT_PER_MINUTE', 30),
     'danger_rate_limit_per_hour' => (int) env('PLATFORM_DANGER_RATE_LIMIT_PER_HOUR', 10),

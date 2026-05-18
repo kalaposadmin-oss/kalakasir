@@ -7,6 +7,7 @@ use App\Models\Branch;
 use App\Models\Location;
 use App\Support\TenantContext;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -16,36 +17,38 @@ class BranchController extends Controller
     {
         $tenantId = TenantContext::id();
 
-        $branches = Branch::query()
-            ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
-            ->orderBy('name')
-            ->get(['id', 'name', 'phone', 'address', 'is_active']);
-        $locations = Location::query()
-            ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
-            ->get(['id', 'branch_id', 'name', 'is_default']);
+        $rows = Cache::remember("branches:index:{$tenantId}", now('UTC')->addMinutes(5), function () use ($tenantId) {
+            $branches = Branch::query()
+                ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
+                ->orderBy('name')
+                ->get(['id', 'name', 'phone', 'address', 'is_active']);
+            $locations = Location::query()
+                ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
+                ->get(['id', 'branch_id', 'name', 'is_default']);
 
-        $rows = $branches->map(function ($branch) use ($locations) {
-            $branchLocations = $locations->where('branch_id', $branch->id)->values();
-            $defaultLocation = $branchLocations->firstWhere('is_default', true);
+            return $branches->map(function ($branch) use ($locations) {
+                $branchLocations = $locations->where('branch_id', $branch->id)->values();
+                $defaultLocation = $branchLocations->firstWhere('is_default', true);
 
-            return [
-                'id' => $branch->id,
-                'name' => $branch->name,
-                'phone' => $branch->phone,
-                'address' => $branch->address,
-                'is_active' => (bool) $branch->is_active,
-                'locations' => $branchLocations->map(function ($location) {
-                    return [
-                        'id' => $location->id,
-                        'name' => $location->name,
-                        'is_default' => (bool) $location->is_default,
-                    ];
-                })->values(),
-                'default_location' => $defaultLocation ? [
-                    'id' => $defaultLocation->id,
-                    'name' => $defaultLocation->name,
-                ] : null,
-            ];
+                return [
+                    'id' => $branch->id,
+                    'name' => $branch->name,
+                    'phone' => $branch->phone,
+                    'address' => $branch->address,
+                    'is_active' => (bool) $branch->is_active,
+                    'locations' => $branchLocations->map(function ($location) {
+                        return [
+                            'id' => $location->id,
+                            'name' => $location->name,
+                            'is_default' => (bool) $location->is_default,
+                        ];
+                    })->values(),
+                    'default_location' => $defaultLocation ? [
+                        'id' => $defaultLocation->id,
+                        'name' => $defaultLocation->name,
+                    ] : null,
+                ];
+            });
         });
 
         return response()->json([
@@ -118,6 +121,7 @@ class BranchController extends Controller
             'name' => 'Lokasi Utama',
             'is_default' => true,
         ]);
+        Cache::forget("branches:index:{$tenantId}");
 
         return response()->json([
             'branch_id' => $branchId,
@@ -169,6 +173,7 @@ class BranchController extends Controller
                 ->where('id', $validated['default_location_id'])
                 ->update(['is_default' => true]);
         }
+        Cache::forget("branches:index:{$tenantId}");
 
         return response()->json([
             'status' => 'ok',

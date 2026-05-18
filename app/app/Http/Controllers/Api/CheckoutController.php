@@ -40,7 +40,17 @@ class CheckoutController extends Controller
             'customer_id' => ['nullable', 'uuid', $tenantId
                 ? Rule::exists('customers', 'id')->where('tenant_id', $tenantId)
                 : 'exists:customers,id'],
+            'order_holder_name' => ['nullable', 'string', 'max:120'],
+            'order_note' => ['nullable', 'string', 'max:500'],
             'transaction_date' => ['nullable', 'date'],
+            'replace_sale_id' => ['nullable', 'uuid', $tenantId
+                ? Rule::exists('sales', 'id')->where('tenant_id', $tenantId)
+                : 'exists:sales,id'],
+            'saved_order_id' => ['nullable', 'uuid', $tenantId
+                ? Rule::exists('pos_saved_orders', 'id')->where('tenant_id', $tenantId)
+                : 'exists:pos_saved_orders,id'],
+            'payment_mode' => ['nullable', 'string', Rule::in(['full', 'partial', 'receivable'])],
+            'due_date' => ['nullable', 'date'],
             'subtotal' => ['required', 'numeric', 'min:0'],
             'discount' => ['required', 'numeric', 'min:0'],
             'tax' => ['required', 'numeric', 'min:0'],
@@ -69,7 +79,7 @@ class CheckoutController extends Controller
             'transaction_discounts.*.label' => ['nullable', 'string', 'max:120'],
             'transaction_discounts.*.source' => ['nullable', 'string', 'max:60'],
             'transaction_discounts.*.reference_id' => ['nullable', 'string', 'max:120'],
-            'payments' => ['required', 'array', 'min:1'],
+            'payments' => ['nullable', 'array'],
             'payments.*.account_id' => ['required', 'uuid', $tenantId
                 ? Rule::exists('chart_of_accounts', 'id')->where('tenant_id', $tenantId)
                 : 'exists:chart_of_accounts,id'],
@@ -79,6 +89,7 @@ class CheckoutController extends Controller
                 ? Rule::exists('payment_methods', 'id')->where('tenant_id', $tenantId)
                 : 'exists:payment_methods,id'],
         ]);
+        $validated['payments'] = $validated['payments'] ?? [];
 
         try {
             $result = $this->service->handle($validated, $this->resolveActorId($request, $validated));
@@ -86,6 +97,8 @@ class CheckoutController extends Controller
             return $this->timedJsonResponse([
                 'sale_id' => $result['sale_id'],
                 'idempotent' => $result['idempotent'],
+                'receivable_id' => $result['receivable_id'] ?? null,
+                'payment_status' => $result['payment_status'] ?? 'paid',
             ], $result['idempotent'] ? 200 : 201, $startedAt, [
                 'X-Checkout-Idempotent' => $result['idempotent'] ? '1' : '0',
             ]);
@@ -133,9 +146,16 @@ class CheckoutController extends Controller
                 'details' => $exception->details(),
             ], $exception->status(), $startedAt);
         } catch (InvalidArgumentException $exception) {
+            $message = $exception->getMessage();
+            $code = match (true) {
+                str_contains($message, 'raw material') => 'INVALID_PRODUCT_TYPE',
+                str_contains($message, 'piutang'), str_contains($message, 'pembayaran'), str_contains($message, 'Customer') => 'INVALID_PAYMENT',
+                default => 'INVALID_TOTAL',
+            };
+
             return $this->timedJsonResponse([
-                'code' => 'INVALID_TOTAL',
-                'message' => $exception->getMessage(),
+                'code' => $code,
+                'message' => $message,
                 'details' => [],
             ], 422, $startedAt);
         }

@@ -22,6 +22,7 @@
     abort_unless(in_array($settingsPreferencesRole, ['warehouse', 'supervisor', 'admin', 'owner', 'superadmin'], true), 403);
 
     $canManagePreferences = in_array($settingsPreferencesRole, ['admin', 'owner', 'superadmin'], true);
+    $pickupWindow = app(\App\Services\OrderPickupWindowService::class)->resolve($settingsPreferencesTenant);
 @endphp
 
 @section('page_title', 'Preferensi Sistem - POS SaaS')
@@ -64,6 +65,53 @@
                         </div>
                     </div>
                 </section>
+
+                <form method="POST" action="/backoffice/settings/preferences" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                    @csrf
+                    <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                        <div>
+                            <h3 class="text-sm font-bold text-slate-900 dark:text-white">Jadwal Pengambilan Order Online</h3>
+                            <p class="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">Jam aktif ini dipakai di form checkout pembeli saat memilih ambil di toko.</p>
+                        </div>
+                        <label class="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 dark:border-slate-700 dark:text-slate-200">
+                            <input type="checkbox" name="pickup_window_enabled" value="1" class="rounded border-slate-300 text-primary focus:ring-primary" @checked($pickupWindow['enabled']) @disabled(! $canManagePreferences) />
+                            Aktif
+                        </label>
+                    </div>
+
+                    @if (session('status'))
+                        <div class="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-900/20 dark:text-emerald-200">
+                            {{ session('status') }}
+                        </div>
+                    @endif
+
+                    @if ($errors->has('pickup_start_time') || $errors->has('pickup_end_time'))
+                        <div class="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 dark:border-red-900/60 dark:bg-red-900/20 dark:text-red-200">
+                            {{ $errors->first('pickup_start_time') ?: $errors->first('pickup_end_time') }}
+                        </div>
+                    @endif
+
+                    <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <div>
+                            <label class="text-xs font-bold uppercase tracking-wider text-slate-500">Jam Mulai</label>
+                            <input type="time" name="pickup_start_time" value="{{ old('pickup_start_time', $pickupWindow['start_time']) }}" class="mt-2 w-full rounded-xl border-slate-200 bg-slate-50 text-sm dark:border-slate-700 dark:bg-slate-800" @disabled(! $canManagePreferences) />
+                        </div>
+                        <div>
+                            <label class="text-xs font-bold uppercase tracking-wider text-slate-500">Jam Selesai</label>
+                            <input type="time" name="pickup_end_time" value="{{ old('pickup_end_time', $pickupWindow['end_time']) }}" class="mt-2 w-full rounded-xl border-slate-200 bg-slate-50 text-sm dark:border-slate-700 dark:bg-slate-800" @disabled(! $canManagePreferences) />
+                        </div>
+                    </div>
+
+                    <p class="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:bg-slate-800">
+                        Preview checkout: <span class="font-semibold text-primary">{{ $pickupWindow['window_label'] }}</span>
+                    </p>
+
+                    @if ($canManagePreferences)
+                        <div class="mt-4 flex justify-end">
+                            <button type="submit" class="rounded-lg bg-primary px-4 py-2 text-xs font-bold text-white">Simpan Jadwal</button>
+                        </div>
+                    @endif
+                </form>
 
                 <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                     <h3 class="text-sm font-bold text-slate-900 dark:text-white">Konfigurasi Struk</h3>
@@ -143,12 +191,19 @@
             };
 
             const load = async () => {
-                const response = await fetch('/api/v1/bootstrap', { headers });
-                if (!response.ok) {
+                const bootstrap = await window.PosUi.getBootstrap({ headers, ttlMs: 20000 }).catch(async () => {
+                    const response = await fetch('/api/v1/bootstrap', { headers });
+                    if (!response.ok) {
+                        return null;
+                    }
+
+                    const payload = await response.json().catch(() => ({}));
+
+                    return window.PosUi.unwrapApiPayload(payload) || payload || null;
+                });
+                if (!bootstrap) {
                     return;
                 }
-                const payload = await response.json().catch(() => ({}));
-                const bootstrap = window.PosUi.unwrapApiPayload(payload) || {};
                 const tz = bootstrap?.tenant?.timezone || 'Asia/Jakarta';
                 const storeName = bootstrap?.tenant?.name || 'WARUNG JAYA';
 

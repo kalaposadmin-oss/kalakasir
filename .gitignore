@@ -4,8 +4,15 @@
 Thumbs.db
 .env
 .env.*
+!.env.example
+!/app/.env.example
+!/app/.env.hosting.example
 .vscode/
 .idea/
+.claude/
+Downloads/
+UI Tambahan/
+_upload-ready/
 
 # Dependencies
 /vendor/
@@ -28,8 +35,52 @@ Thumbs.db
 
 # Local web artifacts
 /app/storage/framework/testing-views/
+/app/storage/framework/sessions/*
+!/app/storage/framework/sessions/.gitignore
 /app/tmp-*.txt
 /app/tmp-*.blade.php
+/app/tmp_*.php
+/app/first()
+/app/php
+/app/select('account_code'
+/app/where('journal_entry_id'
+/app/.claude/
+/app/.env
+/app/.env.local
+/app/.env.production
+/app/.env.staging
+/app/bootstrap/cache/*
+!/app/bootstrap/cache/.gitignore
+/app/storage/app/*
+!/app/storage/app/.gitignore
+!/app/storage/app/private/
+!/app/storage/app/public/
+/app/storage/app/private/*
+!/app/storage/app/private/.gitignore
+/app/storage/app/public/*
+!/app/storage/app/public/.gitignore
+/app/storage/logs/*
+!/app/storage/logs/.gitignore
+
+# Android / APK artifacts
+/apk/
+*.apk
+
+/mobile/android/local.properties
+/mobile/android/.gradle/
+/mobile/android/app/build/
+/mobile/android/build/
+/mobile/android/**/build/
+/mobile/android/build-last.log
+/mobile/android/tmp-*
+
+/mobile-android/local.properties
+/mobile-android/.gradle/
+/mobile-android/app/build/
+/mobile-android/build/
+/mobile-android/**/build/
+/mobile-android/build-last.log
+/mobile-android/tmp-*
 
 # Local workspace reports
 /changed-files.txt
@@ -37,3 +88,5 @@ Thumbs.db
 /parity-candidate-files.txt
 /tmp-assemble-check.log
 /tmp-pos-compile.log
+/fix-dashboard*.ps1
+*.docx

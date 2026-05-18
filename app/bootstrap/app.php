@@ -6,9 +6,11 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\Request;
+use Illuminate\Session\TokenMismatchException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -42,7 +44,7 @@ return Application::configure(basePath: dirname(__DIR__))
                 }
             }
 
-            return '/login';
+            return '/';
         });
         $middleware->statefulApi();
         $middleware->append(\App\Http\Middleware\SecurityHeadersMiddleware::class);
@@ -56,9 +58,49 @@ return Application::configure(basePath: dirname(__DIR__))
             'portal' => \App\Http\Middleware\PortalSeparationMiddleware::class,
             'subscription_status' => \App\Http\Middleware\SubscriptionStatusMiddleware::class,
             'web_access' => \App\Http\Middleware\WebAccessMiddleware::class,
+            'area' => \App\Http\Middleware\EnsureAreaRoute::class,
+            'shift_open' => \App\Http\Middleware\EnsureShiftOpen::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        $handleExpiredWebSession = static function (Request $request) {
+            if ($request->is('api/*')) {
+                return response()->json([
+                    'message' => 'CSRF token mismatch.',
+                ], 419);
+            }
+
+            $target = match (true) {
+                $request->is('backoffice'), $request->is('backoffice/login') => '/backoffice',
+                $request->is('register*') => '/'.ltrim($request->path(), '/'),
+                default => '/',
+            };
+
+            $safeInput = collect($request->except([
+                '_token',
+                'password',
+                'password_confirmation',
+            ]))->toArray();
+
+            return redirect($target)
+                ->withInput($safeInput)
+                ->withErrors([
+                    'session' => 'Sesi halaman sudah habis. Muat ulang lalu coba kirim lagi.',
+                ]);
+        };
+
+        $exceptions->render(function (TokenMismatchException $exception, Request $request) {
+            return $handleExpiredWebSession($request);
+        });
+
+        $exceptions->render(function (HttpException $exception, Request $request) use ($handleExpiredWebSession) {
+            if ($exception->getStatusCode() !== 419) {
+                return null;
+            }
+
+            return $handleExpiredWebSession($request);
+        });
+
         $exceptions->render(function (AuthenticationException $exception, Request $request) {
             if ($request->is('api/*')) {
                 return response()->json([

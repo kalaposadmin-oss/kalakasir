@@ -37,12 +37,12 @@ class WebAccessMiddleware
                 return redirect('/platform/login');
             }
 
-            return redirect($requiredPortal === 'backoffice' ? '/backoffice/login' : '/pos/login');
+            return redirect($requiredPortal === 'backoffice' ? '/backoffice' : '/');
         }
 
         $activePortal = $this->resolveActivePortal($request, $requiredPortal);
         if ($requiredPortal !== '*' && $requiredPortal !== 'any' && $activePortal !== $requiredPortal) {
-            return redirect($activePortal === 'backoffice' ? '/backoffice/dashboard' : '/pos/dashboard');
+            return redirect($activePortal === 'backoffice' ? '/backoffice/dashboard' : pos_default_url(Auth::user()));
         }
 
         if ($rolesArg !== '*' && $rolesArg !== '' && ! $this->isImpersonatingSuperadmin($request)) {

@@ -6,23 +6,24 @@
 
 @section('page_title', $pageTitle ?? 'Platform Admin')
 @section('ui_mode', 'backoffice')
-@section('body_class', 'bg-background-light text-slate-900')
-@section('main_class', 'flex-1 overflow-y-auto bg-background-light lg:pl-72')
+@section('body_class', 'bg-slate-50 text-slate-900')
+@section('main_class', 'flex-1 overflow-y-auto bg-slate-50 lg:pl-72')
 
 @section('content')
-    <div class="min-h-screen bg-background-light">
+    <div class="min-h-screen bg-slate-50">
         @include('platform.partials.sidebar', ['active' => $active ?? 'dashboard'])
+        <div data-platform-sidebar-overlay class="fixed inset-0 z-20 hidden bg-slate-950/45 lg:hidden"></div>
 
         <div class="min-h-screen">
             @include('platform.partials.topbar')
 
-            <div class="space-y-6 px-6 py-6">
+            <div class="space-y-6 px-4 py-5 sm:px-6 sm:py-6">
                 @yield('platform_content')
             </div>
         </div>
     </div>
 
-    <div id="platform-toast" class="fixed bottom-6 right-6 z-50 hidden max-w-sm rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-xl">
+    <div id="platform-toast" class="fixed bottom-4 left-4 right-4 z-50 hidden rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-xl sm:left-auto sm:right-6 sm:max-w-sm">
         <p class="font-semibold" data-toast-title>Notifikasi</p>
         <p class="mt-1 text-xs text-slate-500" data-toast-message></p>
     </div>
@@ -107,6 +108,38 @@
                     showToast,
                     createIdempotencyKey,
                 };
+
+                const sidebar = document.querySelector('[data-platform-sidebar]');
+                const overlay = document.querySelector('[data-platform-sidebar-overlay]');
+                const toggles = document.querySelectorAll('[data-platform-sidebar-toggle]');
+                const closeButtons = document.querySelectorAll('[data-platform-sidebar-close]');
+
+                if (!sidebar || !overlay) {
+                    return;
+                }
+
+                const openSidebar = () => {
+                    sidebar.classList.remove('-translate-x-full');
+                    overlay.classList.remove('hidden');
+                    document.body.classList.add('overflow-hidden');
+                };
+
+                const closeSidebar = () => {
+                    sidebar.classList.add('-translate-x-full');
+                    overlay.classList.add('hidden');
+                    document.body.classList.remove('overflow-hidden');
+                };
+
+                toggles.forEach((button) => button.addEventListener('click', openSidebar));
+                closeButtons.forEach((button) => button.addEventListener('click', closeSidebar));
+                overlay.addEventListener('click', closeSidebar);
+
+                window.addEventListener('resize', () => {
+                    if (window.innerWidth >= 1024) {
+                        overlay.classList.add('hidden');
+                        document.body.classList.remove('overflow-hidden');
+                    }
+                });
             })();
         </script>
     @endonce

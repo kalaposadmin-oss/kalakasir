@@ -20,12 +20,14 @@
     }
 
     abort_unless(in_array($stockTransferRole, ['warehouse', 'supervisor', 'admin', 'owner', 'superadmin'], true), 403);
+    $stockTransferPortalPrefix = request()->is('pos/*') ? '/pos' : '/backoffice';
+    $stockTransferBackUrl = $stockTransferPortalPrefix === '/pos' ? '/pos/inventory' : '/backoffice/reports/inventory';
 @endphp
 
 @section('page_title', 'Mutasi Stok Antar Cabang')
 @section('body_class', 'bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display')
 @section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-background-light dark:bg-background-dark shadow-2xl')
-@section('main_class', 'flex-1 overflow-hidden p-0')
+@section('main_class', 'flex-1 overflow-hidden p-0 app-bottom-safe-space')
 
 @push('head')
         <style>
@@ -34,11 +36,15 @@
         </style>
 @endpush
 
+@php
+    $stockTransferCanCreate = in_array($stockTransferRole, ['admin', 'owner', 'superadmin'], true);
+@endphp
+
 @section('header')
         <header class="sticky top-0 z-50 bg-white/80 dark:bg-background-dark/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800" data-auto-center-title="true">
             <div class="flex items-center justify-between p-4 pb-2">
                 <div class="flex items-center gap-3">
-                    <button class="material-symbols-outlined text-slate-900 dark:text-slate-100 cursor-pointer" onclick="location.href='/backoffice/reports/inventory'">arrow_back_ios</button>
+                    <button class="material-symbols-outlined text-slate-900 dark:text-slate-100 cursor-pointer" onclick="location.href=@js($stockTransferBackUrl)">arrow_back_ios</button>
                     <h1 class="text-lg font-bold tracking-tight">Mutasi Stok</h1>
                 </div>
                 <div class="flex gap-2">
@@ -59,7 +65,7 @@
 @endsection
 
 @section('content')
-        <div class="flex-1 overflow-y-auto pb-32">
+        <div class="flex-1 overflow-y-auto pb-32 app-bottom-safe-space">
             <div class="flex gap-3 p-4 overflow-x-auto no-scrollbar" id="transfer-stats"></div>
             <div class="px-4 space-y-3">
                 <h3 class="text-xs font-bold text-slate-500 uppercase tracking-widest px-1">Transfer Aktif</h3>
@@ -67,10 +73,12 @@
             </div>
         </div>
         <div class="fixed bottom-24 right-[calc(50%-215px+16px)] z-40 max-w-[430px]">
-            <button class="flex items-center gap-2 bg-primary text-white py-3 px-5 rounded-full font-bold shadow-xl shadow-primary/30">
-                <span class="material-symbols-outlined">add_box</span>
-                <span>Mutasi Baru</span>
-            </button>
+            @if ($stockTransferCanCreate)
+                <button class="flex cursor-not-allowed items-center gap-2 rounded-full border border-slate-200 bg-slate-100 py-3 px-5 font-bold text-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500" disabled type="button">
+                    <span class="material-symbols-outlined">add_box</span>
+                    <span>Mutasi Baru Segera Hadir</span>
+                </button>
+            @endif
         </div>
 
         <script>
@@ -82,6 +90,7 @@
                     stats: document.getElementById('transfer-stats'),
                     list: document.getElementById('transfer-list'),
                 };
+                const detailBaseUrl = @json($stockTransferPortalPrefix.'/inventory/stock-transfers');
 
                 const formatDate = (value) => new Intl.DateTimeFormat('id-ID', {
                     day: '2-digit',
@@ -114,6 +123,7 @@
 
                     transfers.forEach((transfer) => {
                         const status = transfer.status || 'draft';
+                        const detailUrl = `${detailBaseUrl}/${encodeURIComponent(transfer.id)}`;
                         const statusMap = {
                             in_transit: 'Dalam Perjalanan',
                             pending_receive: 'Perlu Konfirmasi',
@@ -154,8 +164,8 @@
                                     <span class="text-sm font-medium text-slate-600 dark:text-slate-400">${transfer.item_count} Produk (${transfer.qty_total} pcs)</span>
                                 </div>
                                 ${status === 'pending_receive'
-                                    ? '<button class="bg-primary/10 text-primary px-3 py-1 rounded-lg text-xs font-bold">Terima Barang</button>'
-                                    : '<button class="text-primary text-xs font-bold">Detail</button>'}
+                                    ? `<a href="${detailUrl}" class="rounded-lg bg-primary/10 px-3 py-1 text-xs font-bold text-primary">Terima Barang</a>`
+                                    : `<a href="${detailUrl}" class="text-xs font-bold text-primary">Detail</a>`}
                             </div>
                         `;
                         el.list.appendChild(row);

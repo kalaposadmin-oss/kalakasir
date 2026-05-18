@@ -113,7 +113,12 @@ class InventoryOperationalReportsTest extends TestCase
     public function test_stock_card_summary_respects_range_and_type_filter(): void
     {
         [$tenant, $user] = $this->bootApiActor('admin', 'stock-card-summary@example.com', 'Admin Stock Card');
+        $tenant->forceFill(['plan' => 'P'])->save();
         $fixture = $this->seedCheckoutFixture($tenant->id, $user->id);
+        \DB::table('products')
+            ->where('tenant_id', $tenant->id)
+            ->where('id', $fixture['product_id'])
+            ->update(['unit' => 'kg']);
         $insideAt = CarbonImmutable::parse('2026-02-27 10:00:00', 'UTC');
 
         \DB::table('stock_ledger')->insert([
@@ -149,6 +154,61 @@ class InventoryOperationalReportsTest extends TestCase
             ],
         ]);
 
+        $secondaryLocationId = (string) Str::uuid();
+        $variantA = (string) Str::uuid();
+
+        \DB::table('locations')->insert([
+            'id' => $secondaryLocationId,
+            'tenant_id' => $tenant->id,
+            'branch_id' => $fixture['branch_id'],
+            'name' => 'Gudang Satelit',
+            'is_default' => false,
+        ]);
+
+        \DB::table('product_variants')->insert([
+            'id' => $variantA,
+            'tenant_id' => $tenant->id,
+            'product_id' => $fixture['product_id'],
+            'sku' => 'SKU-VAR-A',
+            'barcode' => null,
+            'name' => 'Varian A',
+            'attributes' => json_encode(['warna' => 'merah']),
+            'price_override' => null,
+            'is_active' => true,
+            'created_at' => now('UTC'),
+            'updated_at' => now('UTC'),
+        ]);
+
+        \DB::table('inventory_balances')->insert([
+            [
+                'tenant_id' => $tenant->id,
+                'location_id' => $secondaryLocationId,
+                'product_id' => $fixture['product_id'],
+                'product_variant_id' => null,
+                'qty_on_hand' => 15,
+            ],
+            [
+                'tenant_id' => $tenant->id,
+                'location_id' => $fixture['location_id'],
+                'product_id' => $fixture['product_id'],
+                'product_variant_id' => $variantA,
+                'qty_on_hand' => 7,
+            ],
+        ]);
+
+        \DB::table('inventory_cost_states')->updateOrInsert([
+            'tenant_id' => $tenant->id,
+            'product_id' => $fixture['product_id'],
+            'location_id' => $fixture['location_id'],
+            'product_variant_id' => null,
+        ], [
+            'id' => (string) Str::uuid(),
+            'qty_on_hand' => 109,
+            'average_cost' => 1234.56,
+            'last_cost' => 1500,
+            'updated_at' => now('UTC'),
+        ]);
+
         $response = $this->withHeaders($this->tenantHeaders($tenant->id))
             ->getJson(sprintf(
                 '/api/v1/stock-card?product_id=%s&location_id=%s&preset=custom&start_date=2026-02-27&end_date=2026-02-27&type=sale',
@@ -157,11 +217,20 @@ class InventoryOperationalReportsTest extends TestCase
             ));
 
         $response->assertOk()
+            ->assertJsonPath('product.unit', 'kg')
+            ->assertJsonCount(2, 'product_location_balances')
+            ->assertJsonCount(2, 'product_variant_balances')
+            ->assertJsonPath('cost_state.average_cost', 1234.56)
+            ->assertJsonPath('cost_state.stock_value', 134567.04)
             ->assertJsonPath('summary.total_in', 0)
             ->assertJsonPath('summary.total_out', 3)
             ->assertJsonPath('summary.movement_count', 1)
             ->assertJsonCount(1, 'ledger')
             ->assertJsonPath('ledger.0.reference_type', 'sale');
+
+        $this->assertSame('Gudang Satelit', $response->json('product_location_balances.1.name'));
+        $this->assertSame('Varian A', $response->json('product_variant_balances.1.name'));
+        $this->assertNotEmpty($response->json('last_cost_source.reference_id'));
     }
 
     public function test_inventory_summary_respects_location_filter_for_summary_recent_movements_and_export(): void
@@ -420,6 +489,7 @@ class InventoryOperationalReportsTest extends TestCase
     public function test_stock_card_summary_and_ledger_respect_location_filter(): void
     {
         [$tenant, $user] = $this->bootApiActor('admin', 'stock-card-location@example.com', 'Admin Stock Card Location');
+        $tenant->forceFill(['plan' => 'P'])->save();
         $fixture = $this->seedCheckoutFixture($tenant->id, $user->id);
         $insideAt = CarbonImmutable::parse('2026-02-27 10:00:00', 'UTC');
         $secondaryLocationId = (string) Str::uuid();
@@ -488,6 +558,106 @@ class InventoryOperationalReportsTest extends TestCase
             ->assertJsonPath('summary.movement_count', 1)
             ->assertJsonCount(1, 'ledger')
             ->assertJsonPath('ledger.0.location_id', $secondaryLocationId)
+            ->assertJsonPath('ledger.0.reference_type', 'sale');
+    }
+
+    public function test_stock_card_summary_and_ledger_respect_variant_filter(): void
+    {
+        [$tenant, $user] = $this->bootApiActor('admin', 'stock-card-variant@example.com', 'Admin Stock Card Variant');
+        $tenant->forceFill(['plan' => 'P'])->save();
+        $fixture = $this->seedCheckoutFixture($tenant->id, $user->id);
+
+        $variantA = (string) Str::uuid();
+        $variantB = (string) Str::uuid();
+        $insideAt = CarbonImmutable::parse('2026-02-27 10:00:00', 'UTC');
+
+        \DB::table('product_variants')->insert([
+            [
+                'id' => $variantA,
+                'tenant_id' => $tenant->id,
+                'product_id' => $fixture['product_id'],
+                'sku' => 'SKU-VAR-A',
+                'barcode' => null,
+                'name' => 'Varian A',
+                'attributes' => json_encode(['warna' => 'merah']),
+                'price_override' => null,
+                'is_active' => true,
+                'created_at' => now('UTC'),
+                'updated_at' => now('UTC'),
+            ],
+            [
+                'id' => $variantB,
+                'tenant_id' => $tenant->id,
+                'product_id' => $fixture['product_id'],
+                'sku' => 'SKU-VAR-B',
+                'barcode' => null,
+                'name' => 'Varian B',
+                'attributes' => json_encode(['warna' => 'biru']),
+                'price_override' => null,
+                'is_active' => true,
+                'created_at' => now('UTC'),
+                'updated_at' => now('UTC'),
+            ],
+        ]);
+
+        \DB::table('inventory_balances')->insert([
+            'tenant_id' => $tenant->id,
+            'location_id' => $fixture['location_id'],
+            'product_id' => $fixture['product_id'],
+            'product_variant_id' => $variantA,
+            'qty_on_hand' => 13,
+        ]);
+
+        \DB::table('stock_ledger')->insert([
+            [
+                'id' => (string) Str::uuid(),
+                'tenant_id' => $tenant->id,
+                'product_id' => $fixture['product_id'],
+                'product_variant_id' => $variantA,
+                'location_id' => $fixture['location_id'],
+                'reference_type' => 'sale',
+                'reference_id' => (string) Str::uuid(),
+                'reference_item_id' => null,
+                'qty_in' => 0,
+                'qty_out' => 2,
+                'balance_after' => 13,
+                'created_at' => $insideAt,
+                'created_by' => $user->id,
+            ],
+            [
+                'id' => (string) Str::uuid(),
+                'tenant_id' => $tenant->id,
+                'product_id' => $fixture['product_id'],
+                'product_variant_id' => $variantB,
+                'location_id' => $fixture['location_id'],
+                'reference_type' => 'sale',
+                'reference_id' => (string) Str::uuid(),
+                'reference_item_id' => null,
+                'qty_in' => 0,
+                'qty_out' => 5,
+                'balance_after' => 21,
+                'created_at' => $insideAt->addHour(),
+                'created_by' => $user->id,
+            ],
+        ]);
+
+        $response = $this->withHeaders($this->tenantHeaders($tenant->id))
+            ->getJson(sprintf(
+                '/api/v1/stock-card?product_id=%s&product_variant_id=%s&location_id=%s&preset=custom&start_date=2026-02-27&end_date=2026-02-27&type=sale',
+                $fixture['product_id'],
+                $variantA,
+                $fixture['location_id']
+            ));
+
+        $response->assertOk()
+            ->assertJsonPath('selected_variant_id', $variantA)
+            ->assertJsonPath('product_variants.0.id', $variantA)
+            ->assertJsonPath('balance', 13)
+            ->assertJsonPath('summary.total_in', 0)
+            ->assertJsonPath('summary.total_out', 2)
+            ->assertJsonPath('summary.movement_count', 1)
+            ->assertJsonCount(1, 'ledger')
+            ->assertJsonPath('ledger.0.product_variant_id', $variantA)
             ->assertJsonPath('ledger.0.reference_type', 'sale');
     }
 

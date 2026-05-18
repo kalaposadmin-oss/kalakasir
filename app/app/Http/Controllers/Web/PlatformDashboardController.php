@@ -27,7 +27,7 @@ class PlatformDashboardController extends Controller
     public function index(Request $request): RedirectResponse|Response|View
     {
         if (! Auth::check()) {
-            return redirect('/backoffice/login');
+            return redirect()->guest('/backoffice');
         }
 
         $user = $request->user();

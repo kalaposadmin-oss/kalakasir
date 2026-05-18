@@ -10,14 +10,18 @@ use App\Models\JournalEntry;
 use App\Models\JournalItem;
 use App\Models\Discount;
 use App\Models\Payment;
+use App\Models\PosSavedOrder;
 use App\Models\Product;
+use App\Models\Receivable;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\Shift;
+use App\Models\Tenant;
 use App\Models\StockLedger;
 use App\Services\LockPeriodService;
 use App\Services\InventoryValuationService;
 use App\Services\AutoConsumeOnSellService;
+use App\Services\PosSavedOrderInventoryService;
 use App\Support\Decimal;
 use App\Support\TenantContext;
 use App\Events\SaleCompleted;
@@ -26,6 +30,7 @@ use App\Services\TransactionDateService;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Database\QueryException;
 use InvalidArgumentException;
@@ -50,10 +55,7 @@ class CheckoutService
             ->first();
 
         if ($existing) {
-            return [
-                'sale_id' => $existing->id,
-                'idempotent' => true,
-            ];
+            return $this->checkoutResultForExisting($tenantId, $existing->id);
         }
 
         $now = CarbonImmutable::now('UTC');
@@ -63,13 +65,15 @@ class CheckoutService
 
         try {
             return app(DatabaseTransactionService::class)->run(function () use ($payload, $tenantId, $userId, $now, $transactionDate, $discountCalculation): array {
+                $this->releaseSavedOrderReservationIfNeeded($payload, $tenantId, $userId, $now);
+                $this->replaceExistingSaleIfNeeded($payload, $tenantId, $userId, $now);
                 $saleId = (string) Str::uuid();
                 $items = [];
                 $ledgerRows = [];
                 $discountRows = [];
-                $cogsTotal = Decimal::money(0);
                 $valuationService = app(InventoryValuationService::class);
                 $autoConsumeService = app(AutoConsumeOnSellService::class);
+                $salesCostAggregationService = app(SalesCostAggregationService::class);
 
                 foreach ($payload['items'] as $index => $item) {
                     $productId = $item['product_id'];
@@ -84,6 +88,10 @@ class CheckoutService
                         ->where('tenant_id', $tenantId)
                         ->where('id', $productId)
                         ->firstOrFail();
+
+                    if ((string) $product->item_type === 'raw_material') {
+                        throw new InvalidArgumentException('Produk raw material tidak dapat dijual melalui checkout.');
+                    }
 
                     $saleItemId = (string) Str::uuid();
 
@@ -199,11 +207,6 @@ class CheckoutService
                         );
                     }
 
-                    $cogsTotal = Decimal::add(
-                        $cogsTotal,
-                        Decimal::multiply($hppSnapshot, $qty, Decimal::MONEY_SCALE),
-                        Decimal::MONEY_SCALE
-                    );
                 }
 
                 Sale::query()->create([
@@ -213,6 +216,8 @@ class CheckoutService
                     'shift_id' => $payload['shift_id'],
                     'register_id' => $payload['register_id'],
                     'customer_id' => Arr::get($payload, 'customer_id'),
+                    'order_holder_name' => Arr::get($payload, 'order_holder_name'),
+                    'order_note' => Arr::get($payload, 'order_note'),
                     'subtotal' => Decimal::float($discountCalculation['subtotal'], Decimal::MONEY_SCALE),
                     'discount' => Decimal::float($discountCalculation['transaction_discount_total'], Decimal::MONEY_SCALE),
                     'tax' => Decimal::float($payload['tax'], Decimal::MONEY_SCALE),
@@ -227,6 +232,13 @@ class CheckoutService
 
                 SaleItem::query()->insert($items);
                 StockLedger::query()->insert($ledgerRows);
+
+                $costAggregate = $salesCostAggregationService->captureForSale(
+                    tenantId: $tenantId,
+                    saleId: $saleId,
+                    now: $now,
+                    source: 'checkout'
+                );
 
                 foreach ((array) $discountCalculation['transaction_discounts'] as $discountLine) {
                     $discountRows[] = $this->makeDiscountRow(
@@ -254,11 +266,13 @@ class CheckoutService
                 $paymentRows = [];
                 $cashTotal = Decimal::money(0);
                 $bankTotal = Decimal::money(0);
+                $paymentTotal = Decimal::money(0);
 
-                foreach ($payload['payments'] as $payment) {
+                foreach (Arr::get($payload, 'payments', []) as $payment) {
                     $amount = Decimal::money($payment['amount']);
                     $method = $payment['method'];
                     $paymentMethodId = $this->resolvePaymentMethodId($tenantId, Arr::get($payment, 'payment_method_id'), $method);
+                    $paymentTotal = Decimal::add($paymentTotal, $amount, Decimal::MONEY_SCALE);
 
                     if ($method === 'cash') {
                         $cashTotal = Decimal::add($cashTotal, $amount, Decimal::MONEY_SCALE);
@@ -277,7 +291,27 @@ class CheckoutService
                     ];
                 }
 
-                Payment::query()->insert($paymentRows);
+                if ($paymentRows !== []) {
+                    Payment::query()->insert($paymentRows);
+                }
+
+                $paymentMode = $this->resolvePaymentMode($payload);
+                $receivable = null;
+                $receivableTotal = Decimal::money(0);
+
+                if ($this->isPartialPaymentMode($paymentMode)) {
+                    $receivableTotal = Decimal::subtract(Decimal::money($payload['total']), $paymentTotal, Decimal::MONEY_SCALE);
+                    $receivable = app(ReceivableService::class)->createForSale(
+                        tenantId: $tenantId,
+                        customerId: (string) Arr::get($payload, 'customer_id'),
+                        saleId: $saleId,
+                        totalAmount: $payload['total'],
+                        paidAmount: $paymentTotal,
+                        dueDate: Arr::get($payload, 'due_date'),
+                        userId: $userId,
+                        now: $now
+                    );
+                }
 
                 $this->createJournalEntries(
                     tenantId: $tenantId,
@@ -285,7 +319,8 @@ class CheckoutService
                     total: Decimal::float($payload['total'], Decimal::MONEY_SCALE),
                     cashTotal: Decimal::float($cashTotal, Decimal::MONEY_SCALE),
                     bankTotal: Decimal::float($bankTotal, Decimal::MONEY_SCALE),
-                    cogsTotal: Decimal::float($cogsTotal, Decimal::MONEY_SCALE),
+                    receivableTotal: Decimal::float($receivableTotal, Decimal::MONEY_SCALE),
+                    cogsTotal: (float) $costAggregate['total_cogs'],
                     userId: $userId,
                     now: $now,
                     transactionDate: $transactionDate
@@ -306,6 +341,8 @@ class CheckoutService
                 return [
                     'sale_id' => $saleId,
                     'idempotent' => false,
+                    'receivable_id' => $receivable?->id,
+                    'payment_status' => $receivable ? $receivable->status : 'paid',
                 ];
             });
         } catch (QueryException $exception) {
@@ -316,10 +353,7 @@ class CheckoutService
                     ->first();
 
                 if ($existing) {
-                    return [
-                        'sale_id' => $existing->id,
-                        'idempotent' => true,
-                    ];
+                    return $this->checkoutResultForExisting($tenantId, $existing->id);
                 }
             }
 
@@ -327,11 +361,97 @@ class CheckoutService
         }
     }
 
+    private function replaceExistingSaleIfNeeded(array $payload, string $tenantId, ?string $userId, CarbonImmutable $now): void
+    {
+        $replaceSaleId = trim((string) Arr::get($payload, 'replace_sale_id', ''));
+        if ($replaceSaleId === '') {
+            return;
+        }
+
+        $sale = Sale::query()
+            ->where('tenant_id', $tenantId)
+            ->where('id', $replaceSaleId)
+            ->lockForUpdate()
+            ->firstOrFail();
+
+        if ($sale->status !== Sale::STATUS_COMPLETED) {
+            throw new InvalidArgumentException('Transaksi yang dipilih tidak bisa diedit.');
+        }
+
+        $hasPayments = Payment::query()
+            ->where('tenant_id', $tenantId)
+            ->where('sale_id', $replaceSaleId)
+            ->exists();
+
+        $hasReceivablePayments = DB::table('receivable_payments')
+            ->where('tenant_id', $tenantId)
+            ->where('sale_id', $replaceSaleId)
+            ->exists();
+
+        if ($hasPayments || $hasReceivablePayments) {
+            throw new InvalidArgumentException('Transaksi yang sudah punya pembayaran tidak bisa diedit langsung.');
+        }
+
+        $receivable = Receivable::query()
+            ->where('tenant_id', $tenantId)
+            ->where('sale_id', $replaceSaleId)
+            ->lockForUpdate()
+            ->first();
+
+        app(VoidService::class)->handle(
+            saleId: $replaceSaleId,
+            userId: $userId,
+            reason: 'Edit transaksi',
+            managerPin: null,
+            clientIp: null,
+            userAgent: null,
+            requestId: null,
+            idempotencyKey: 'replace:'.$replaceSaleId.':'.(string) Arr::get($payload, 'idempotency_key', '')
+        );
+
+        if ($receivable) {
+            $receivable->payments()->delete();
+            $receivable->delete();
+        }
+    }
+
+    private function releaseSavedOrderReservationIfNeeded(array $payload, string $tenantId, ?string $userId, CarbonImmutable $now): void
+    {
+        $savedOrderId = trim((string) Arr::get($payload, 'saved_order_id', ''));
+        if ($savedOrderId === '') {
+            return;
+        }
+
+        $order = PosSavedOrder::query()
+            ->where('tenant_id', $tenantId)
+            ->where('id', $savedOrderId)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $order) {
+            return;
+        }
+
+        $items = (array) (($order->payload ?? [])['items'] ?? []);
+
+        app(PosSavedOrderInventoryService::class)->release(
+            order: $order,
+            items: $items,
+            userId: $userId,
+            now: $now
+        );
+
+        $order->delete();
+    }
+
     private function assertShift(array $payload, string $tenantId, ?string $userId): void
     {
         if (! $userId) {
             throw new ShiftValidationException('User harus login.', 'UNAUTHENTICATED', 401);
         }
+
+        $tenant = Tenant::query()->find($tenantId);
+        app(ShiftLifecycleService::class)->autoCloseExpiredOpenShifts($tenant);
 
         $shift = Shift::query()
             ->where('tenant_id', $tenantId)
@@ -349,6 +469,10 @@ class CheckoutService
         if ($shift->branch_id !== $payload['branch_id']) {
             throw new ShiftValidationException('Shift tidak sesuai branch.', 'SHIFT_BRANCH_MISMATCH', 422);
         }
+
+        if (app(ShiftLifecycleService::class)->pendingReconciliation($tenant, $userId)) {
+            throw new ShiftValidationException('Selesaikan kas akhir shift kemarin terlebih dahulu.', 'SHIFT_RECONCILIATION_REQUIRED', 422);
+        }
     }
 
     private function isDuplicateKey(QueryException $exception): bool
@@ -364,6 +488,42 @@ class CheckoutService
         }
 
         return false;
+    }
+
+    private function checkoutResultForExisting(string $tenantId, string $saleId): array
+    {
+        if (! Schema::hasTable('receivables')) {
+            return [
+                'sale_id' => $saleId,
+                'idempotent' => true,
+                'receivable_id' => null,
+                'payment_status' => 'paid',
+            ];
+        }
+
+        $receivable = Receivable::query()
+            ->where('tenant_id', $tenantId)
+            ->where('sale_id', $saleId)
+            ->first(['id', 'status']);
+
+        return [
+            'sale_id' => $saleId,
+            'idempotent' => true,
+            'receivable_id' => $receivable?->id,
+            'payment_status' => $receivable?->status ?? 'paid',
+        ];
+    }
+
+    private function resolvePaymentMode(array $payload): string
+    {
+        $mode = strtolower(trim((string) Arr::get($payload, 'payment_mode', 'full')));
+
+        return in_array($mode, ['partial', 'receivable'], true) ? 'partial' : 'full';
+    }
+
+    private function isPartialPaymentMode(string $paymentMode): bool
+    {
+        return $paymentMode === 'partial';
     }
 
     private function assertTotals(array $payload, array $discountCalculation): void
@@ -395,8 +555,22 @@ class CheckoutService
 
         $paymentTotal = Decimal::money(0);
 
-        foreach ($payload['payments'] as $payment) {
+        foreach (Arr::get($payload, 'payments', []) as $payment) {
             $paymentTotal = Decimal::add($paymentTotal, Decimal::money($payment['amount']), Decimal::MONEY_SCALE);
+        }
+
+        $paymentMode = $this->resolvePaymentMode($payload);
+
+        if ($this->isPartialPaymentMode($paymentMode)) {
+            if (blank(Arr::get($payload, 'customer_id'))) {
+                throw new InvalidArgumentException('Customer wajib dipilih untuk transaksi piutang.');
+            }
+
+            if (Decimal::compare($paymentTotal, $payloadTotal) >= 0) {
+                throw new InvalidArgumentException('Bayar sebagian harus lebih kecil dari total transaksi.');
+            }
+
+            return;
         }
 
         if (Decimal::compare($paymentTotal, $payloadTotal) !== 0) {
@@ -410,6 +584,7 @@ class CheckoutService
         float $total,
         float $cashTotal,
         float $bankTotal,
+        float $receivableTotal,
         float $cogsTotal,
         ?string $userId,
         CarbonImmutable $now,
@@ -455,6 +630,22 @@ class CheckoutService
                 'tenant_id' => $tenantId,
                 'account_id' => $mapping->bank_account_id,
                 'debit' => $bankTotal,
+                'credit' => 0,
+                'is_reversal' => false,
+            ];
+        }
+
+        if ($receivableTotal > 0) {
+            if (! $mapping->receivable_account_id) {
+                throw new InvalidArgumentException('Mapping akun piutang belum disetel.');
+            }
+
+            $journalItems[] = [
+                'id' => (string) Str::uuid(),
+                'journal_entry_id' => $journalEntryId,
+                'tenant_id' => $tenantId,
+                'account_id' => $mapping->receivable_account_id,
+                'debit' => $receivableTotal,
                 'credit' => 0,
                 'is_reversal' => false,
             ];

@@ -13,7 +13,6 @@ class WebDashboardSmokeTest extends TestCase
         $route = Route::getRoutes()->match(Request::create('/pos/dashboard', 'GET'));
         $middleware = $route->gatherMiddleware();
         $contents = file_get_contents(resource_path('views/pos-dashboard.blade.php'));
-        $ownerPanelContents = file_get_contents(resource_path('views/partials/owner-pos-panel.blade.php'));
         $menuDrawerContents = file_get_contents(resource_path('views/partials/menu-drawer.blade.php'));
 
         $this->assertContains('web_access:pos,cashier|staff|warehouse|supervisor|admin|owner|superadmin,dash.overview', $middleware);
@@ -23,13 +22,7 @@ class WebDashboardSmokeTest extends TestCase
         $this->assertStringContainsString('/pos/history', $contents);
         $this->assertStringContainsString('/pos/shifts/open', $contents);
         $this->assertStringContainsString('/pos/shifts/close', $contents);
-        $this->assertStringContainsString("@include('partials.owner-pos-panel')", $contents);
-        $this->assertStringContainsString('Mode Owner', $ownerPanelContents);
-        $this->assertStringContainsString("request()->getPathInfo() ?: '/pos/dashboard'", $ownerPanelContents);
-        $this->assertStringContainsString('\'href\' => $ownerPanelBackofficeHref(\'/backoffice/products\')', $ownerPanelContents);
-        $this->assertStringContainsString('\'href\' => $ownerPanelBackofficeHref(\'/backoffice/inventory\')', $ownerPanelContents);
-        $this->assertStringContainsString('\'href\' => $ownerPanelBackofficeHref(\'/backoffice/reports/sales\')', $ownerPanelContents);
-        $this->assertStringContainsString('$posPortalOriginPath = $menuCurrentPath !== \'/\' ? $menuCurrentPath : \'/pos/dashboard\';', $menuDrawerContents);
+        $this->assertStringContainsString('$posPortalOriginPath = $menuCurrentPath !== \'/\' ? normalize_pos_home_url($menuCurrentPath) : $posHomeHref;', $menuDrawerContents);
         $this->assertStringContainsString('\'href\' => $posBackofficeHref(\'/backoffice/products\')', $menuDrawerContents);
         $this->assertStringContainsString('\'href\' => $posBackofficeHref(\'/backoffice/dashboard\')', $menuDrawerContents);
     }
@@ -43,6 +36,8 @@ class WebDashboardSmokeTest extends TestCase
         $this->assertContains('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview', $middleware);
         $this->assertTrue(view()->exists('backoffice-dashboard'));
         $this->assertStringContainsString('Beranda Operasional', $contents);
+        $this->assertStringContainsString('Pusat Akses Cepat', $contents);
+        $this->assertStringContainsString('backoffice-app-tile', $contents);
         $this->assertStringContainsString('/portal/switch/pos?next=/pos/checkout', $contents);
         $this->assertStringContainsString('/backoffice/reports/inventory', $contents);
         $this->assertStringContainsString('/backoffice/settings/subscription', $contents);
@@ -70,7 +65,7 @@ class WebDashboardSmokeTest extends TestCase
         $middleware = $route->gatherMiddleware();
         $contents = file_get_contents(resource_path('views/subscription-current.blade.php'));
 
-        $this->assertContains('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview', $middleware);
+        $this->assertContains('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,settings.subscription_billing', $middleware);
         $this->assertTrue(view()->exists('subscription-current'));
         $this->assertStringContainsString('Langganan & Billing', $contents);
         $this->assertStringContainsString('/backoffice/settings/subscription/change', $contents);
@@ -85,7 +80,7 @@ class WebDashboardSmokeTest extends TestCase
         $middleware = $route->gatherMiddleware();
         $contents = file_get_contents(resource_path('views/subscription-invoices.blade.php'));
 
-        $this->assertContains('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview', $middleware);
+        $this->assertContains('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,settings.subscription_billing', $middleware);
         $this->assertTrue(view()->exists('subscription-invoices'));
         $this->assertStringContainsString('Invoice & Pembayaran', $contents);
         $this->assertStringContainsString('status-filter', $contents);

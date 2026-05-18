@@ -21,6 +21,7 @@ class MaterialManagementApiTest extends TestCase
         parent::setUp();
 
         [$this->tenant] = $this->bootApiActor('admin', 'admin-materials@example.test', 'Admin Materials');
+        DB::table('tenants')->where('id', $this->tenant->id)->update(['plan' => 'M']);
     }
 
     protected function tearDown(): void
@@ -38,15 +39,25 @@ class MaterialManagementApiTest extends TestCase
             'plan' => 'S',
         ]);
 
-        DB::table('materials')->insert([
+        DB::table('products')->insert([
             [
                 'id' => (string) Str::uuid(),
+                'legacy_material_id' => (string) Str::uuid(),
                 'tenant_id' => $this->tenant->id,
+                'sku' => 'RM-GULA-PASIR',
                 'name' => 'Gula Pasir',
+                'price' => 0,
+                'hpp_average' => 15000,
                 'unit' => 'kg',
-                'unit_cost' => 15000,
                 'supplier_id' => null,
                 'is_active' => true,
+                'track_stock' => true,
+                'product_mode' => 'add_on',
+                'production_mode' => 'none',
+                'item_type' => 'raw_material',
+                'variants' => json_encode([]),
+                'bom_items' => json_encode([]),
+                'bundle_items' => json_encode([]),
                 'created_by' => null,
                 'updated_by' => null,
                 'created_at' => now('UTC'),
@@ -55,12 +66,22 @@ class MaterialManagementApiTest extends TestCase
             ],
             [
                 'id' => (string) Str::uuid(),
+                'legacy_material_id' => (string) Str::uuid(),
                 'tenant_id' => $this->tenant->id,
+                'sku' => 'RM-INACTIVE',
                 'name' => 'Bahan Tidak Aktif',
+                'price' => 0,
+                'hpp_average' => 10000,
                 'unit' => 'kg',
-                'unit_cost' => 10000,
                 'supplier_id' => null,
                 'is_active' => false,
+                'track_stock' => true,
+                'product_mode' => 'add_on',
+                'production_mode' => 'none',
+                'item_type' => 'raw_material',
+                'variants' => json_encode([]),
+                'bom_items' => json_encode([]),
+                'bundle_items' => json_encode([]),
                 'created_by' => null,
                 'updated_by' => null,
                 'created_at' => now('UTC'),
@@ -69,12 +90,22 @@ class MaterialManagementApiTest extends TestCase
             ],
             [
                 'id' => (string) Str::uuid(),
+                'legacy_material_id' => (string) Str::uuid(),
                 'tenant_id' => $otherTenant->id,
+                'sku' => 'RM-OTHER-TENANT',
                 'name' => 'Bahan Tenant Lain',
+                'price' => 0,
+                'hpp_average' => 20000,
                 'unit' => 'kg',
-                'unit_cost' => 20000,
                 'supplier_id' => null,
                 'is_active' => true,
+                'track_stock' => true,
+                'product_mode' => 'add_on',
+                'production_mode' => 'none',
+                'item_type' => 'raw_material',
+                'variants' => json_encode([]),
+                'bom_items' => json_encode([]),
+                'bundle_items' => json_encode([]),
                 'created_by' => null,
                 'updated_by' => null,
                 'created_at' => now('UTC'),
@@ -89,9 +120,80 @@ class MaterialManagementApiTest extends TestCase
         $response->assertOk()
             ->assertJsonPath('meta.count', 1)
             ->assertJsonPath('meta.limit', 20)
+            ->assertJsonPath('meta.source', 'products.raw_material')
             ->assertJsonPath('data.materials.0.name', 'Gula Pasir')
             ->assertJsonMissing(['name' => 'Bahan Tenant Lain'])
             ->assertJsonMissing(['name' => 'Bahan Tidak Aktif']);
+    }
+
+    public function test_index_exposes_products_that_use_the_material_in_recipe(): void
+    {
+        $rawMaterialId = (string) Str::uuid();
+        $finishedProductId = (string) Str::uuid();
+
+        DB::table('products')->insert([
+            [
+                'id' => $rawMaterialId,
+                'legacy_material_id' => (string) Str::uuid(),
+                'tenant_id' => $this->tenant->id,
+                'sku' => 'RM-TERIGU',
+                'name' => 'Terigu',
+                'price' => 0,
+                'hpp_average' => 12000,
+                'unit' => 'kg',
+                'supplier_id' => null,
+                'is_active' => true,
+                'track_stock' => true,
+                'product_mode' => 'add_on',
+                'production_mode' => 'none',
+                'item_type' => 'raw_material',
+                'variants' => json_encode([]),
+                'bom_items' => json_encode([]),
+                'bundle_items' => json_encode([]),
+                'created_by' => null,
+                'updated_by' => null,
+                'created_at' => now('UTC'),
+                'updated_at' => now('UTC'),
+                'deleted_at' => null,
+            ],
+            [
+                'id' => $finishedProductId,
+                'legacy_material_id' => null,
+                'tenant_id' => $this->tenant->id,
+                'sku' => 'FG-ROTI',
+                'name' => 'Roti Manis',
+                'price' => 15000,
+                'hpp_average' => 0,
+                'unit' => 'pcs',
+                'supplier_id' => null,
+                'is_active' => true,
+                'track_stock' => true,
+                'product_mode' => 'finished_good',
+                'production_mode' => 'batch_production',
+                'item_type' => null,
+                'variants' => json_encode([]),
+                'bom_items' => json_encode([
+                    [
+                        'product_id' => $rawMaterialId,
+                        'product_variant_id' => null,
+                        'qty' => 1.25,
+                    ],
+                ]),
+                'bundle_items' => json_encode([]),
+                'created_by' => null,
+                'updated_by' => null,
+                'created_at' => now('UTC'),
+                'updated_at' => now('UTC'),
+                'deleted_at' => null,
+            ],
+        ]);
+
+        $this->withHeaders($this->tenantHeaders($this->tenant->id))
+            ->getJson('/api/v1/materials')
+            ->assertOk()
+            ->assertJsonPath('data.materials.0.name', 'Terigu')
+            ->assertJsonPath('data.materials.0.used_in_count', 1)
+            ->assertJsonPath('data.materials.0.used_in_products.0', 'Roti Manis');
     }
 
     public function test_store_show_update_and_delete_material(): void
@@ -122,11 +224,13 @@ class MaterialManagementApiTest extends TestCase
             ->assertJsonPath('material.supplier_id', $supplierId);
 
         $materialId = (string) $store->json('material.id');
+        $productId = (string) $store->json('material.product_id');
 
         $this->withHeaders($headers)
             ->getJson('/api/v1/materials/'.$materialId)
             ->assertOk()
             ->assertJsonPath('material.id', $materialId)
+            ->assertJsonPath('material.product_id', $productId)
             ->assertJsonPath('material.name', 'Susu Cair');
 
         $this->withHeaders($headers)
@@ -146,15 +250,23 @@ class MaterialManagementApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('message', 'Bahan berhasil dihapus.');
 
-        $this->assertSoftDeleted('materials', [
-            'id' => $materialId,
+        $this->assertSoftDeleted('products', [
+            'id' => $productId,
             'tenant_id' => $this->tenant->id,
         ]);
 
-        $this->assertDatabaseHas('materials', [
+        $this->assertDatabaseMissing('materials', [
             'id' => $materialId,
+        ]);
+
+        $this->assertDatabaseHas('products', [
+            'id' => $productId,
             'tenant_id' => $this->tenant->id,
             'is_active' => false,
+            'item_type' => 'raw_material',
+            'product_mode' => 'add_on',
+            'unit' => 'liter',
+            'supplier_id' => $supplierId,
         ]);
     }
 
@@ -193,10 +305,21 @@ class MaterialManagementApiTest extends TestCase
     public function test_non_admin_role_cannot_manage_materials(): void
     {
         [$tenant] = $this->bootApiActor('warehouse', 'warehouse-materials@example.test', 'Warehouse Materials');
+        DB::table('tenants')->where('id', $tenant->id)->update(['plan' => 'M']);
 
         $this->withHeaders($this->tenantHeaders($tenant->id))
             ->getJson('/api/v1/materials')
             ->assertStatus(403)
             ->assertJsonPath('code', 'FORBIDDEN');
+    }
+
+    public function test_plan_s_cannot_access_materials_even_with_valid_role(): void
+    {
+        DB::table('tenants')->where('id', $this->tenant->id)->update(['plan' => 'S']);
+
+        $this->withHeaders($this->tenantHeaders($this->tenant->id))
+            ->getJson('/api/v1/materials')
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'FEATURE_NOT_ALLOWED');
     }
 }

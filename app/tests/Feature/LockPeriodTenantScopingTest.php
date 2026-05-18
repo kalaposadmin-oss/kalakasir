@@ -17,6 +17,8 @@ class LockPeriodTenantScopingTest extends TestCase
     {
         [$tenant, $user] = $this->bootApiActor('admin', 'admin+lock-period-primary@example.test');
         [$foreignTenant] = $this->bootApiActor('admin', 'admin+lock-period-foreign@example.test');
+        $tenant->forceFill(['plan' => 'P'])->save();
+        $foreignTenant->forceFill(['plan' => 'P'])->save();
 
         $this->actingAs($user, 'sanctum');
 
@@ -33,6 +35,8 @@ class LockPeriodTenantScopingTest extends TestCase
     {
         [$tenant, $user] = $this->bootApiActor('admin', 'admin+lock-period-toggle@example.test');
         [$foreignTenant] = $this->bootApiActor('admin', 'admin+lock-period-toggle-foreign@example.test');
+        $tenant->forceFill(['plan' => 'P'])->save();
+        $foreignTenant->forceFill(['plan' => 'P'])->save();
 
         $this->actingAs($user, 'sanctum');
 

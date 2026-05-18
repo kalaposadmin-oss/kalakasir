@@ -389,6 +389,7 @@ class AnalyticsMetricsService
     private function saleLineMetricsQuery(string $tenantId, string $startDate, string $endDate)
     {
         $allocationBasisExpr = $this->saleAllocationBasisExpr();
+        $itemCostTotals = $this->saleItemCostTotalsSubquery($tenantId);
         $allocationBaseSub = DB::table('sale_items')
             ->join('sales', function ($join) {
                 $join->on('sales.id', '=', 'sale_items.sale_id')
@@ -408,7 +409,8 @@ class AnalyticsMetricsService
             .$allocationBasisExpr.') / allocation_basis_totals.allocation_basis_total) else 0 end';
         $grossExpr = '(sale_items.qty * sale_items.price)';
         $netSalesBeforeTaxExpr = $grossExpr.' - sale_items.discount - '.$allocatedDiscountExpr;
-        $grossProfitExpr = $netSalesBeforeTaxExpr.' - (sale_items.qty * sale_items.hpp_snapshot)';
+        $lineCogsExpr = 'item_cost_totals.aggregated_cost';
+        $grossProfitExpr = $netSalesBeforeTaxExpr.' - '.$lineCogsExpr;
 
         return DB::table('sale_items')
             ->join('sales', function ($join) {
@@ -422,6 +424,10 @@ class AnalyticsMetricsService
             ->leftJoin('categories', function ($join) {
                 $join->on('categories.id', '=', 'products.category_id')
                     ->on('categories.tenant_id', '=', 'products.tenant_id');
+            })
+            ->joinSub($itemCostTotals, 'item_cost_totals', function ($join) {
+                $join->on('item_cost_totals.sale_item_id', '=', 'sale_items.id')
+                    ->on('item_cost_totals.tenant_id', '=', 'sale_items.tenant_id');
             })
             ->leftJoinSub($allocationBaseSub, 'allocation_basis_totals', function ($join) {
                 $join->on('allocation_basis_totals.sale_id', '=', 'sale_items.sale_id');
@@ -438,13 +444,22 @@ class AnalyticsMetricsService
             ->selectRaw('sale_items.discount as line_item_discount')
             ->selectRaw($allocatedDiscountExpr.' as line_allocated_transaction_discount')
             ->selectRaw($netSalesBeforeTaxExpr.' as line_net_sales_before_tax')
-            ->selectRaw('(sale_items.qty * sale_items.hpp_snapshot) as line_cogs')
+            ->selectRaw($lineCogsExpr.' as line_cogs')
             ->selectRaw($grossProfitExpr.' as line_gross_profit')
             ->selectRaw('sale_items.product_id as product_id')
             ->selectRaw('products.name as product_name')
             ->selectRaw('products.image_url as image_url')
             ->selectRaw('products.sku as sku')
             ->selectRaw('categories.name as category_name');
+    }
+
+    private function saleItemCostTotalsSubquery(string $tenantId)
+    {
+            return DB::table('sale_cost_components')
+                ->where('tenant_id', $tenantId)
+                ->select('tenant_id', 'sale_item_id')
+                ->selectRaw('sum(total_cost) as aggregated_cost')
+                ->groupBy('tenant_id', 'sale_item_id');
     }
 
     private function refundLineMetricsQuery(string $tenantId, string $startDate, string $endDate)

@@ -17,6 +17,7 @@ class StockTransferTenantValidationTest extends TestCase
     public function test_store_transfer_rejects_from_branch_from_other_tenant(): void
     {
         [$tenant] = $this->bootApiActor('admin', 'admin+transfer-from-branch-scope@example.test');
+        $tenant->forceFill(['plan' => 'M'])->save();
         $fixture = $this->seedTransferFixture($tenant->id);
         $otherTenant = $this->createOtherTenant('Tenant Cabang Asal Lain');
         $otherFixture = $this->seedTransferFixture($otherTenant->id);
@@ -41,6 +42,7 @@ class StockTransferTenantValidationTest extends TestCase
     public function test_store_transfer_rejects_to_branch_from_other_tenant(): void
     {
         [$tenant] = $this->bootApiActor('admin', 'admin+transfer-to-branch-scope@example.test');
+        $tenant->forceFill(['plan' => 'M'])->save();
         $fixture = $this->seedTransferFixture($tenant->id);
         $otherTenant = $this->createOtherTenant('Tenant Cabang Tujuan Lain');
         $otherFixture = $this->seedTransferFixture($otherTenant->id);
@@ -65,6 +67,7 @@ class StockTransferTenantValidationTest extends TestCase
     public function test_store_transfer_rejects_from_location_from_other_tenant(): void
     {
         [$tenant] = $this->bootApiActor('admin', 'admin+transfer-from-location-scope@example.test');
+        $tenant->forceFill(['plan' => 'M'])->save();
         $fixture = $this->seedTransferFixture($tenant->id);
         $otherTenant = $this->createOtherTenant('Tenant Lokasi Asal Lain');
         $otherFixture = $this->seedTransferFixture($otherTenant->id);
@@ -89,6 +92,7 @@ class StockTransferTenantValidationTest extends TestCase
     public function test_store_transfer_rejects_to_location_from_other_tenant(): void
     {
         [$tenant] = $this->bootApiActor('admin', 'admin+transfer-to-location-scope@example.test');
+        $tenant->forceFill(['plan' => 'M'])->save();
         $fixture = $this->seedTransferFixture($tenant->id);
         $otherTenant = $this->createOtherTenant('Tenant Lokasi Tujuan Lain');
         $otherFixture = $this->seedTransferFixture($otherTenant->id);
@@ -113,6 +117,7 @@ class StockTransferTenantValidationTest extends TestCase
     public function test_store_transfer_rejects_product_from_other_tenant(): void
     {
         [$tenant] = $this->bootApiActor('admin', 'admin+transfer-product-scope@example.test');
+        $tenant->forceFill(['plan' => 'M'])->save();
         $fixture = $this->seedTransferFixture($tenant->id);
         $otherTenant = $this->createOtherTenant('Tenant Produk Transfer Lain');
         $otherFixture = $this->seedTransferFixture($otherTenant->id);

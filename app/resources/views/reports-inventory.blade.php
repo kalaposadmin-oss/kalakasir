@@ -160,7 +160,7 @@
             </div>
             <h2 class="text-lg font-semibold text-slate-900">Laporan Persediaan Belum Tersedia di Paket Saat Ini</h2>
             <p class="mt-2 text-sm text-slate-500">Upgrade paket untuk membuka ringkasan stok dan insight persediaan.</p>
-            <a class="mt-4 inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2 text-sm font-semibold text-white" href="/backoffice/settings/inventory-valuation">
+            <a class="mt-4 inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2 text-sm font-semibold text-white" href="/backoffice/settings/subscription/change">
                 <span class="material-symbols-outlined text-base">upgrade</span>
                 Lihat Opsi Upgrade
             </a>
@@ -257,9 +257,15 @@
                 locations.forEach((location) => {
                     const option = document.createElement('option');
                     option.value = location.id;
-                    option.textContent = location.name;
+                    option.textContent = location.is_default ? `${location.name} (default)` : location.name;
                     locationFilter.appendChild(option);
                 });
+                const hasSelectedLocation = locations.some((location) => location.id === state.locationId);
+                if (!hasSelectedLocation) {
+                    const defaultLocation = locations.find((location) => location.is_default);
+                    state.locationId = defaultLocation?.id || locations[0]?.id || '';
+                }
+
                 locationFilter.value = state.locationId;
                 const label = locationFilter.options[locationFilter.selectedIndex]?.textContent || 'Semua Lokasi';
                 if (locationLabel) {
@@ -563,10 +569,8 @@
 
             (async () => {
                 try {
-                    const response = await fetch('/api/v1/bootstrap', { headers });
-                    if (response.ok) {
-                        const payload = await response.json().catch(() => ({}));
-                        const data = window.PosUi.unwrapApiPayload(payload) || {};
+                    const data = await window.PosUi.getBootstrap({ headers, ttlMs: 20000 });
+                    if (data) {
                         state.locations = Array.isArray(data.locations) ? data.locations : [];
                         buildLocationOptions(state.locations);
                     }

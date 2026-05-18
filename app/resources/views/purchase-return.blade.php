@@ -20,11 +20,13 @@
     }
 
     abort_unless(in_array($purchaseReturnRole, ['admin', 'owner', 'superadmin'], true), 403);
+    $purchaseReturnPortalPrefix = request()->is('pos/*') ? '/pos' : '/backoffice';
+    $purchaseReturnBackUrl = $purchaseReturnPortalPrefix.'/purchases';
 @endphp
 
 @section('page_title', 'Pencatatan Retur Pembelian')
 @section('body_class', 'bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display')
-@section('main_class', 'flex-1 overflow-y-auto pb-32')
+@section('main_class', 'flex-1 overflow-y-auto pb-32 app-bottom-safe-space')
 
 @push('head')
         <style type="text/tailwindcss">
@@ -36,15 +38,15 @@
 @endpush
 
 @section('header')
-    <x-page-header title="Retur Pembelian" backUrl="/backoffice/purchases/detail" :showMenuButton="true">
+    <x-page-header title="Retur Pembelian" :backUrl="$purchaseReturnBackUrl" :showMenuButton="true">
         <x-slot:actions>
-            <button class="text-primary font-semibold text-sm" onclick="location.href='/backoffice/purchases/detail'">Batal</button>
+            <button class="text-primary font-semibold text-sm" onclick="location.href=@js($purchaseReturnBackUrl)">Batal</button>
         </x-slot:actions>
     </x-page-header>
 @endsection
 
 @section('content')
-    <div class="p-4 space-y-6">
+    <div class="p-4 space-y-6 app-bottom-safe-space">
         <section class="space-y-4">
             <div class="space-y-2">
                 <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider ml-1">Pilih Pemasok / No. PO</label>
@@ -87,7 +89,7 @@
             </div>
         </section>
     </div>
-    <div class="fixed bottom-0 w-full max-w-[430px] p-4 bg-white/80 dark:bg-background-dark/80 ios-blur border-t border-slate-200 dark:border-slate-800">
+    <div class="fixed bottom-0 left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 p-4 bg-white/80 dark:bg-background-dark/80 ios-blur border-t border-slate-200 dark:border-slate-800 app-bottom-safe-footer">
         <button id="submit-return" class="w-full bg-primary text-white h-14 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-primary/30 active:scale-[0.98] transition-transform">
             <span class="material-symbols-outlined">assignment_return</span>
             Simpan Retur
@@ -267,7 +269,7 @@
                     }
 
                     alert('Retur berhasil disimpan.');
-                    window.location.href = '/backoffice/suppliers';
+                    window.location.href = @json($purchaseReturnBackUrl);
                 });
 
                 (async () => {
@@ -283,6 +285,4 @@
             })();
         </script>
     @endsection
-
-
 

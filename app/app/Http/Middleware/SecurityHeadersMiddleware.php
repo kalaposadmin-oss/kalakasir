@@ -12,6 +12,7 @@ class SecurityHeadersMiddleware
     {
         $response = $next($request);
         $nonce = bin2hex(random_bytes(16));
+        $formActionSources = implode(' ', $this->resolveFormActionSources($request));
 
         $this->applyNonceToHtmlResponse($response, $nonce);
 
@@ -20,17 +21,21 @@ class SecurityHeadersMiddleware
         $headers->set('X-Frame-Options', 'SAMEORIGIN');
         $headers->set('Referrer-Policy', 'strict-origin-when-cross-origin');
         $headers->set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
-        $headers->set('Cross-Origin-Opener-Policy', 'same-origin');
-        $headers->set('Cross-Origin-Resource-Policy', 'same-site');
+
+        if ($this->shouldSendCrossOriginIsolationHeaders($request)) {
+            $headers->set('Cross-Origin-Opener-Policy', 'same-origin');
+            $headers->set('Cross-Origin-Resource-Policy', 'same-site');
+        }
+
         $headers->set('Content-Security-Policy', implode('; ', [
             "default-src 'self'",
             "base-uri 'self'",
-            "form-action 'self'",
+            "form-action {$formActionSources}",
             "frame-ancestors 'self'",
-            "script-src 'self' 'nonce-{$nonce}' https://cdn.tailwindcss.com https://cdn.jsdelivr.net",
-            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+            "script-src 'self' 'nonce-{$nonce}'",
+            "style-src 'self' 'unsafe-inline'",
             "img-src 'self' data: https: blob:",
-            "font-src 'self' data: https://fonts.gstatic.com",
+            "font-src 'self' data:",
             "connect-src 'self'",
         ]));
 
@@ -39,6 +44,82 @@ class SecurityHeadersMiddleware
         }
 
         return $response;
+    }
+
+    private function shouldSendCrossOriginIsolationHeaders(Request $request): bool
+    {
+        if ($request->isSecure()) {
+            return true;
+        }
+
+        $host = strtolower((string) $request->getHost());
+
+        return in_array($host, ['localhost', '127.0.0.1', '::1'], true);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function resolveFormActionSources(Request $request): array
+    {
+        $sources = ["'self'"];
+        $currentOrigin = $request->getSchemeAndHttpHost();
+
+        if ($currentOrigin !== '') {
+            $sources[] = $currentOrigin;
+        }
+
+        $configuredOrigins = [config('app.url')];
+        $requestScheme = $request->getScheme();
+        $requestPort = $request->getPort();
+        $portSuffix = in_array($requestPort, [80, 443], true) ? '' : ':'.$requestPort;
+
+        foreach (array_merge(
+            (array) config('platform.portals.pos_hosts', []),
+            (array) config('platform.portals.backoffice_hosts', []),
+        ) as $host) {
+            $host = strtolower(trim((string) $host));
+            if ($host === '') {
+                continue;
+            }
+
+            $configuredOrigins[] = $requestScheme.'://'.$host.$portSuffix;
+        }
+
+        foreach ($configuredOrigins as $origin) {
+            $normalizedOrigin = $this->normalizeOrigin($origin);
+            if ($normalizedOrigin === null || in_array($normalizedOrigin, $sources, true)) {
+                continue;
+            }
+
+            $sources[] = $normalizedOrigin;
+        }
+
+        return $sources;
+    }
+
+    private function normalizeOrigin(mixed $origin): ?string
+    {
+        if (! is_string($origin)) {
+            return null;
+        }
+
+        $origin = trim($origin);
+        if ($origin === '') {
+            return null;
+        }
+
+        $parts = parse_url($origin);
+        if (! is_array($parts) || ! isset($parts['scheme'], $parts['host'])) {
+            return null;
+        }
+
+        $normalized = strtolower($parts['scheme']).'://'.strtolower($parts['host']);
+        if (isset($parts['port'])) {
+            $normalized .= ':'.$parts['port'];
+        }
+
+        return $normalized;
     }
 
     private function applyNonceToHtmlResponse(Response $response, string $nonce): void

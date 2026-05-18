@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240" role="img" aria-label="Placeholder produk">
+  <rect width="240" height="240" rx="24" fill="#f1f5f9"/>
+  <path d="M60 92h120l-12 88H72L60 92Z" fill="#dbeafe" stroke="#2563eb" stroke-width="6" stroke-linejoin="round"/>
+  <path d="M84 92c0-26 15-42 36-42s36 16 36 42" fill="none" stroke="#2563eb" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="96" cy="122" r="7" fill="#2563eb"/>
+  <circle cx="144" cy="122" r="7" fill="#2563eb"/>
+  <path d="M93 151c16 12 38 12 54 0" fill="none" stroke="#2563eb" stroke-width="6" stroke-linecap="round"/>
+</svg>

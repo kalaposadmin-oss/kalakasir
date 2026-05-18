@@ -26,15 +26,30 @@ class WebPortalResolver
             return null;
         }
 
-        $posHosts = array_map(fn ($host) => $this->normalizeHost($host), (array) config('platform.portals.pos_hosts', []));
-        $backofficeHosts = array_map(fn ($host) => $this->normalizeHost($host), (array) config('platform.portals.backoffice_hosts', []));
+        $pathPortal = $this->portalFromPath($request);
+        $posHosts = $this->configuredPortalHosts('pos');
+        $backofficeHosts = $this->configuredPortalHosts('backoffice');
 
         foreach ($this->requestHosts($request) as $host) {
-            if ($host !== '' && in_array($host, $posHosts, true)) {
+            $isPosHost = $host !== '' && in_array($host, $posHosts, true);
+            $isBackofficeHost = $host !== '' && in_array($host, $backofficeHosts, true);
+
+            if ($isPosHost && $isBackofficeHost) {
+                continue;
+            }
+
+            if ($pathPortal !== null && (
+                ($pathPortal === 'pos' && $isPosHost)
+                || ($pathPortal === 'backoffice' && $isBackofficeHost)
+            )) {
+                return $pathPortal;
+            }
+
+            if ($isPosHost && ! $isBackofficeHost) {
                 return 'pos';
             }
 
-            if ($host !== '' && in_array($host, $backofficeHosts, true)) {
+            if ($isBackofficeHost && ! $isPosHost) {
                 return 'backoffice';
             }
         }
@@ -117,7 +132,7 @@ class WebPortalResolver
         }
 
         $currentHost = $this->normalizeHost($request->getHost());
-        if ($currentHost === $canonicalHost) {
+        if (in_array($currentHost, $this->configuredPortalHosts($portal), true)) {
             return null;
         }
 
@@ -156,17 +171,41 @@ class WebPortalResolver
         return $normalizedHosts;
     }
 
-    private function configuredPortalHost(string $portal): string
+    private function portalFromPath(Request $request): ?string
+    {
+        $path = '/'.ltrim($request->path(), '/');
+
+        if ($path === '/pos' || str_starts_with($path, '/pos/')) {
+            return 'pos';
+        }
+
+        if ($path === '/backoffice' || str_starts_with($path, '/backoffice/')) {
+            return 'backoffice';
+        }
+
+        return null;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function configuredPortalHosts(string $portal): array
     {
         $configuredHosts = (array) config($portal === 'backoffice' ? 'platform.portals.backoffice_hosts' : 'platform.portals.pos_hosts', []);
+        $hosts = [];
 
         foreach ($configuredHosts as $host) {
             $normalized = $this->normalizeHost((string) $host);
-            if ($normalized !== '') {
-                return $normalized;
+            if ($normalized !== '' && ! in_array($normalized, $hosts, true)) {
+                $hosts[] = $normalized;
             }
         }
 
-        return '';
+        return $hosts;
+    }
+
+    private function configuredPortalHost(string $portal): string
+    {
+        return $this->configuredPortalHosts($portal)[0] ?? '';
     }
 }

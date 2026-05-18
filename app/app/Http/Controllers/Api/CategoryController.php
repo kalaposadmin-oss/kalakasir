@@ -7,6 +7,7 @@ use App\Models\Category;
 use App\Models\Product;
 use App\Support\TenantContext;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
 class CategoryController extends Controller
@@ -15,18 +16,20 @@ class CategoryController extends Controller
     {
         $tenantId = TenantContext::id();
 
-        $categories = Category::query()
-            ->when($tenantId, fn ($query) => $query->where('categories.tenant_id', $tenantId))
-            ->leftJoin('products', function ($join) {
-                $join->on('categories.id', '=', 'products.category_id')
-                    ->on('categories.tenant_id', '=', 'products.tenant_id')
-                    ->whereNull('products.deleted_at');
-            })
-            ->select('categories.id', 'categories.name', 'categories.description', 'categories.icon', 'categories.slug')
-            ->selectRaw('count(products.id) as product_count')
-            ->groupBy('categories.id', 'categories.name', 'categories.description', 'categories.icon', 'categories.slug')
-            ->orderBy('categories.name')
-            ->get();
+        $categories = Cache::remember("categories:index:{$tenantId}", now('UTC')->addMinutes(5), function () use ($tenantId) {
+            return Category::query()
+                ->when($tenantId, fn ($query) => $query->where('categories.tenant_id', $tenantId))
+                ->leftJoin('products', function ($join) {
+                    $join->on('categories.id', '=', 'products.category_id')
+                        ->on('categories.tenant_id', '=', 'products.tenant_id')
+                        ->whereNull('products.deleted_at');
+                })
+                ->select('categories.id', 'categories.name', 'categories.description', 'categories.icon', 'categories.slug')
+                ->selectRaw('count(products.id) as product_count')
+                ->groupBy('categories.id', 'categories.name', 'categories.description', 'categories.icon', 'categories.slug')
+                ->orderBy('categories.name')
+                ->get();
+        });
 
         return response()->json([
             'categories' => $categories,
@@ -58,6 +61,8 @@ class CategoryController extends Controller
             'icon' => $validated['icon'] ?? null,
             'slug' => $slug,
         ]);
+        Cache::forget("categories:index:{$tenantId}");
+        Cache::forget("products:index:{$tenantId}");
 
         return response()->json([
             'category' => [
@@ -119,6 +124,8 @@ class CategoryController extends Controller
             'icon' => $validated['icon'] ?? null,
             'slug' => $slug,
         ]);
+        Cache::forget("categories:index:{$tenantId}");
+        Cache::forget("products:index:{$tenantId}");
 
         return response()->json([
             'category' => [
@@ -152,6 +159,8 @@ class CategoryController extends Controller
         }
 
         $categoryRow->delete();
+        Cache::forget("categories:index:{$tenantId}");
+        Cache::forget("products:index:{$tenantId}");
 
         return response()->json([
             'message' => 'Kategori berhasil dihapus.',

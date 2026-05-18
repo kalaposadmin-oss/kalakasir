@@ -289,6 +289,9 @@ class BootstrapTenantScopingTest extends TestCase
             ->assertJsonPath('catalog.products_endpoint', '/api/v1/products?lite=1')
             ->assertJsonPath('catalog.customers_endpoint', '/api/v1/customers?lite=1');
 
+        $this->assertStringContainsString('T', (string) data_get($response->json(), 'shifts.0.opened_at'));
+        $this->assertStringContainsString('+00:00', (string) data_get($response->json(), 'shifts.0.opened_at'));
+
         $this->assertSame('1', $response->headers->get('X-Pos-Catalog-Lazy'));
         $this->assertGreaterThan(0, (int) $response->headers->get('X-Pos-Bootstrap-Bytes'));
 
@@ -302,5 +305,37 @@ class BootstrapTenantScopingTest extends TestCase
         $this->assertStringNotContainsString('foreign_sale_account', $payload);
         $this->assertStringNotContainsString('Produk Bootstrap Aktif', $payload);
         $this->assertStringNotContainsString('Customer Aktif', $payload);
+    }
+
+    public function test_bootstrap_returns_newest_open_shift_first_for_current_tenant(): void
+    {
+        [$tenant, $user] = $this->bootApiActor('admin', 'bootstrap-newest-shift@example.test', 'Bootstrap Shift');
+
+        $fixture = $this->seedCheckoutFixture($tenant->id, $user->id);
+        $newerShiftId = (string) Str::uuid();
+
+        DB::table('shifts')->insert([
+            'id' => $newerShiftId,
+            'tenant_id' => $tenant->id,
+            'branch_id' => $fixture['branch_id'],
+            'user_id' => $user->id,
+            'opened_at' => CarbonImmutable::now('UTC')->addMinutes(5),
+            'closed_at' => null,
+            'opening_cash' => 0,
+            'closing_cash' => 0,
+            'system_cash_total' => 0,
+            'difference' => 0,
+            'status' => 'open',
+        ]);
+
+        $response = $this->actingAs($user)->withHeaders([
+            'X-Tenant-Id' => $tenant->id,
+        ])->getJson('/api/v1/bootstrap');
+
+        $response->assertOk()
+            ->assertJsonPath('shifts.0.id', $newerShiftId)
+            ->assertJsonPath('shifts.1.id', $fixture['shift_id']);
+
+        $this->assertStringContainsString('+00:00', (string) data_get($response->json(), 'shifts.0.opened_at'));
     }
 }

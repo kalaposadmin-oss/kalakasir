@@ -6,12 +6,11 @@
 @section('main_class', 'flex-1 overflow-hidden p-0')
 
 @push('head')
-        <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-        <link href="https://fonts.googleapis.com/css2?family=Space+Mono&amp;display=swap" rel="stylesheet" />
+        @vite('resources/js/receipt-image.js')
         <style>
             .no-scrollbar::-webkit-scrollbar { display: none; }
             .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-            .font-receipt { font-family: "Space Mono", monospace; }
+            .font-receipt { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
             .receipt-shadow {
                 box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
             }
@@ -43,7 +42,7 @@
 
 @section('content')
         <div class="flex h-full flex-col">
-            <div class="flex-1 overflow-y-auto px-6 py-8 pb-24">
+            <div class="flex-1 overflow-y-auto px-6 py-6 no-scrollbar">
                 <div class="flex flex-col items-center mb-8">
                     <div class="w-16 h-16 bg-emerald-500/10 text-emerald-600 rounded-full flex items-center justify-center mb-3">
                         <span class="material-symbols-outlined text-4xl font-bold">check_circle</span>
@@ -51,11 +50,6 @@
                     <h2 class="text-xl font-black text-slate-900">Pembayaran Berhasil</h2>
                     <p id="receipt-invoice" class="text-slate-500 text-sm mt-1">Struk #INV-20231024-001</p>
                 </div>
-                @include('partials.owner-pos-panel', [
-                    'compact' => true,
-                    'title' => 'Mode Owner',
-                    'subtitle' => 'Setelah transaksi selesai, lanjut cek laporan atau atur katalog bila perlu.',
-                ])
                 <div id="receipt-card" class="max-w-xs mx-auto bg-white p-6 receipt-shadow relative border border-slate-100 mb-8">
                     <div class="text-center mb-6">
                         <h3 class="font-receipt font-bold text-base uppercase">Toko Retail Maju</h3>
@@ -91,7 +85,15 @@
                     <div class="space-y-1 font-receipt text-[10px] text-slate-500">
                         <div class="flex justify-between">
                             <span>Metode</span>
-                            <span id="receipt-method" class="uppercase">QRIS (ShopeePay)</span>
+                            <span id="receipt-method" class="max-w-[9rem] text-right font-semibold text-slate-700">QRIS (ShopeePay)</span>
+                        </div>
+                        <div id="receipt-due-row" class="hidden justify-between">
+                            <span>Jatuh Tempo</span>
+                            <span id="receipt-due-date" class="text-right font-semibold text-slate-700">-</span>
+                        </div>
+                        <div id="receipt-remaining-row" class="hidden justify-between">
+                            <span>Sisa Piutang</span>
+                            <span id="receipt-remaining" class="text-right font-semibold text-slate-700">Rp 0</span>
                         </div>
                         <div class="flex justify-between">
                             <span>Kasir</span>
@@ -110,22 +112,22 @@
                     </div>
                 </div>
             </div>
-            <footer class="bg-white px-4 pt-6 pb-10 space-y-3 shadow-[0_-10px_20px_-5px_rgba(0,0,0,0.05)] mb-20">
-                <div class="grid grid-cols-2 gap-3">
-                    <a class="flex items-center justify-center gap-2 py-3.5 px-4 bg-slate-100 text-slate-700 rounded-xl font-bold text-sm active:bg-slate-200 transition-colors" href="{{ $receiptBackUrl }}">
+            <footer class="shrink-0 border-t border-slate-200 bg-white px-4 py-3 app-bottom-safe-footer shadow-[0_-10px_20px_-5px_rgba(15,23,42,0.08)]">
+                <div class="grid grid-cols-2 gap-2">
+                    <a class="flex items-center justify-center gap-2 rounded-xl bg-slate-100 px-4 py-3 text-sm font-bold text-slate-700 transition-colors active:bg-slate-200" href="{{ $receiptBackUrl }}">
                         <span class="material-symbols-outlined text-xl">arrow_back</span>
                         Detail
                     </a>
-                    <button id="print-receipt" class="flex items-center justify-center gap-2 py-3.5 px-4 bg-slate-100 text-slate-700 rounded-xl font-bold text-sm active:bg-slate-200 transition-colors">
+                    <button id="print-receipt" class="flex items-center justify-center gap-2 rounded-xl bg-slate-100 px-4 py-3 text-sm font-bold text-slate-700 transition-colors active:bg-slate-200" type="button">
                         <span class="material-symbols-outlined text-xl">print</span>
                         Cetak Struk
                     </button>
-                    <button id="whatsapp-share" class="flex items-center justify-center gap-2 py-3.5 px-4 bg-[#25D366]/10 text-[#25D366] rounded-xl font-bold text-sm active:bg-[#25D366]/20 transition-colors">
+                    <button id="whatsapp-share" class="col-span-2 flex items-center justify-center gap-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-600 transition-colors active:bg-emerald-100" type="button">
                         <span class="material-symbols-outlined text-xl">chat</span>
-                        WhatsApp
+                        Kirim WhatsApp
                     </button>
                 </div>
-                <a class="w-full flex items-center justify-center gap-2 py-4 px-6 bg-primary text-white rounded-xl font-black text-base shadow-lg shadow-primary/20 active:scale-[0.98] transition-all" href="/pos/checkout">
+                <a class="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-4 text-base font-black text-white shadow-lg shadow-primary/20 transition-all active:scale-[0.98]" href="/pos/checkout">
                     <span class="material-symbols-outlined font-bold">add</span>
                     TRANSAKSI BARU
                 </a>
@@ -139,6 +141,13 @@
                     maximumFractionDigits: 0,
                 }).format(value || 0);
 
+                const escapeHtml = (value) => String(value ?? '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;');
+
                 const formatDateTime = (value) => new Intl.DateTimeFormat('id-ID', {
                     day: '2-digit',
                     month: '2-digit',
@@ -146,6 +155,19 @@
                     hour: '2-digit',
                     minute: '2-digit',
                 }).format(new Date(value));
+
+                const formatDate = (value) => {
+                    if (!value) {
+                        return '-';
+                    }
+
+                    const normalized = String(value).includes('T') ? String(value) : `${value}T00:00:00`;
+                    return new Intl.DateTimeFormat('id-ID', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                    }).format(new Date(normalized));
+                };
 
                 const els = {
                     invoice: document.getElementById('receipt-invoice'),
@@ -158,6 +180,10 @@
                     tax: document.getElementById('receipt-tax'),
                     total: document.getElementById('receipt-total'),
                     method: document.getElementById('receipt-method'),
+                    dueRow: document.getElementById('receipt-due-row'),
+                    dueDate: document.getElementById('receipt-due-date'),
+                    remainingRow: document.getElementById('receipt-remaining-row'),
+                    remaining: document.getElementById('receipt-remaining'),
                     cashier: document.getElementById('receipt-cashier'),
                     time: document.getElementById('receipt-time'),
                     print: document.getElementById('print-receipt'),
@@ -176,17 +202,55 @@
                     }
                 };
 
-                const paymentLabel = (payments) => {
-                    if (!payments || !payments.length) {
-                        return '-';
+                const normalizeMethodLabel = (method) => {
+                    const raw = String(method || '').trim();
+                    const normalized = raw.toLowerCase();
+
+                    if (!raw) return '-';
+                    if (normalized === 'receivable' || normalized === 'piutang' || normalized === 'piutang / bayar nanti') return 'Piutang / Bayar Nanti';
+                    if (normalized === 'qris') return 'QRIS';
+                    if (normalized === 'cash') return 'Tunai';
+                    if (normalized === 'bank') return 'Transfer Bank';
+
+                    return raw;
+                };
+
+                const paymentLabel = (payments, receivable = null) => {
+                    const labels = [];
+                    const methods = [...new Set((payments || []).map((item) => item.method).filter(Boolean))];
+
+                    methods.forEach((method) => {
+                        const label = normalizeMethodLabel(method);
+                        if (label !== '-' && !labels.includes(label)) {
+                            labels.push(label);
+                        }
+                    });
+
+                    if (receivable && Number(receivable.remaining_amount ?? receivable.total_amount ?? 0) > 0) {
+                        labels.push(labels.length ? 'Piutang' : 'Piutang / Bayar Nanti');
                     }
-                    const methods = [...new Set(payments.map((item) => item.method))];
-                    return methods.map((method) => {
-                        if (method === 'qris') return 'QRIS';
-                        if (method === 'cash') return 'Tunai';
-                        if (method === 'bank') return 'Debit';
-                        return method;
-                    }).join(', ');
+
+                    return labels.length ? labels.join(' + ') : '-';
+                };
+
+                const renderPaymentInfo = (receipt) => {
+                    const receivable = receipt.receivable || null;
+                    const hasReceivable = Boolean(receivable || receipt.receivable_id || String(receipt.method || '').toLowerCase() === 'receivable');
+                    const dueDate = receivable?.due_date || receipt.due_date || '';
+                    const remaining = Number(receivable?.remaining_amount ?? receipt.remaining_amount ?? 0);
+
+                    els.method.textContent = normalizeMethodLabel(receipt.method);
+                    els.dueRow?.classList.toggle('hidden', !dueDate);
+                    els.dueRow?.classList.toggle('flex', Boolean(dueDate));
+                    if (els.dueDate) {
+                        els.dueDate.textContent = formatDate(dueDate);
+                    }
+
+                    els.remainingRow?.classList.toggle('hidden', !hasReceivable || remaining <= 0);
+                    els.remainingRow?.classList.toggle('flex', hasReceivable && remaining > 0);
+                    if (els.remaining) {
+                        els.remaining.textContent = formatCurrency(remaining);
+                    }
                 };
 
                 const renderItems = (items) => {
@@ -195,12 +259,14 @@
                     }
                     els.items.innerHTML = '';
                     items.forEach((item) => {
+                        const itemNote = String(item.note || item.notes || '').trim();
                         const row = document.createElement('div');
                         row.className = 'flex justify-between font-receipt text-xs';
                         row.innerHTML = `
                             <div class="flex-1">
                                 <p>${item.name}</p>
                                 <p class="text-slate-500">${item.qty} x ${formatCurrency(item.price)}</p>
+                                ${itemNote ? `<p class="mt-1 text-[10px] text-amber-700">Note: ${escapeHtml(itemNote)}</p>` : ''}
                             </div>
                             <span class="font-bold">${formatCurrency(item.qty * item.price)}</span>
                         `;
@@ -225,7 +291,7 @@
                     els.transactionDiscount.textContent = `- ${formatCurrency(transactionDiscountTotal)}`;
                     els.tax.textContent = formatCurrency(receipt.tax);
                     els.total.textContent = formatCurrency(receipt.total);
-                    els.method.textContent = receipt.method ? receipt.method.toUpperCase() : '-';
+                    renderPaymentInfo(receipt);
                     els.cashier.textContent = receipt.cashier || '-';
                     els.time.textContent = formatDateTime(receipt.createdAt || new Date());
                     renderItems(receipt.items || []);
@@ -258,13 +324,15 @@
                                     .reduce((sum, discount) => sum + Number(discount.value || 0), 0),
                                 tax: sale.tax,
                                 total: sale.total,
-                                method: paymentLabel(data.payments),
+                                method: paymentLabel(data.payments, data.receivable),
+                                receivable: data.receivable || null,
                                 cashier: sale.cashier_name || '-',
                                 createdAt: sale.created_at || new Date().toISOString(),
                                 items: (data.items || []).map((item) => ({
                                     name: item.product_name || item.name,
                                     qty: item.qty,
                                     price: item.price,
+                                    note: item.note || item.notes || '',
                                 })),
                             };
                             els.invoice.textContent = `Struk #${saleId}`;
@@ -280,11 +348,13 @@
 
                 const buildWhatsAppMessage = () => {
                     const current = receiptState || {};
+                    const currentDueDate = current.receivable?.due_date || current.due_date || '';
                     const lines = [
                         'Terima kasih sudah berbelanja 🙏',
                         current.invoice ? `No. Struk: ${current.invoice}` : null,
                         `Total: ${formatCurrency(current.total || 0)}`,
-                        current.method ? `Metode: ${current.method}` : null,
+                        current.method ? `Metode: ${normalizeMethodLabel(current.method)}` : null,
+                        currentDueDate ? `Jatuh tempo: ${formatDate(currentDueDate)}` : null,
                         current.createdAt ? `Waktu: ${formatDateTime(current.createdAt)}` : null,
                     ].filter(Boolean);
 

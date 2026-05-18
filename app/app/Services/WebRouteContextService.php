@@ -49,6 +49,11 @@ class WebRouteContextService
             return false;
         }
 
+        $tenant = Tenant::query()->find($user->tenant_id);
+        if ($tenant) {
+            app(ShiftLifecycleService::class)->autoCloseExpiredOpenShifts($tenant);
+        }
+
         return Shift::query()
             ->where('tenant_id', $user->tenant_id)
             ->where('user_id', $user->id)

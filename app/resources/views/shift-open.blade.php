@@ -13,7 +13,7 @@
 @endpush
 
 @section('header')
-    <x-page-header title="Buka Shift" backUrl="/pos/dashboard" :showMenuButton="true">
+    <x-page-header title="Buka Shift" :backUrl="pos_default_url()" :showMenuButton="true">
         <x-slot:actions>
             <div id="shift-badge" class="text-xs font-semibold text-primary bg-primary/10 px-3 py-1 rounded-full">Shift #01</div>
         </x-slot:actions>
@@ -25,13 +25,14 @@
         <div class="size-20 bg-primary/10 rounded-3xl flex items-center justify-center mx-auto mb-4">
             <span class="material-symbols-outlined text-primary text-4xl">point_of_sale</span>
         </div>
-        <h2 class="text-2xl font-bold text-slate-900 dark:text-white">Selamat Datang</h2>
-        <p class="text-slate-500 text-sm mt-1">Silakan isi informasi modal awal untuk memulai shift Anda hari ini.</p>
+        <h2 id="opening-heading" class="text-2xl font-bold text-slate-900 dark:text-white">Selamat Datang</h2>
+        <p id="opening-subtitle" class="text-slate-500 text-sm mt-1">Silakan isi informasi modal awal untuk memulai shift Anda hari ini.</p>
     </div>
     <div class="space-y-6">
-        @include('partials.owner-pos-panel', [
-            'subtitle' => 'Buka shift dulu, lalu tetap punya jalur cepat ke katalog, stok, dan pengaturan toko.',
-        ])
+        <div id="reconciliation-guard" class="hidden rounded-2xl border border-rose-200 bg-rose-50 p-4">
+            <p class="text-sm font-semibold text-rose-800">Shift kemarin ditutup otomatis oleh sistem.</p>
+            <p id="reconciliation-copy" class="mt-1 text-xs leading-relaxed text-rose-700">Masukkan kas akhir fisik dari shift yang belum sempat ditutup manual. Ini harus diselesaikan dulu sebelum buka shift baru.</p>
+        </div>
         <div id="cash-drawer-guard" class="hidden rounded-2xl border border-amber-200 bg-amber-50 p-4">
             <p class="text-sm font-semibold text-amber-800">Akun kas default sedang belum siap.</p>
             <p class="text-xs text-amber-700 mt-1">Normalnya akun Kas dibuat otomatis saat toko didaftarkan. Muat ulang halaman dulu. Jika tetap muncul, baru cek pengaturan akun kas di Backoffice.</p>
@@ -40,7 +41,7 @@
                 Cek Akun Kas
             </a>
         </div>
-        <div class="space-y-2">
+        <div id="branch-section" class="space-y-2">
             <label id="branch-label" class="block text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Cabang Operasional</label>
             <div id="branch-select-wrap" class="relative">
                 <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
@@ -61,7 +62,7 @@
             <p id="branch-helper" class="ml-1 text-xs leading-relaxed text-slate-500">Saat pertama daftar, sistem biasanya membuat 1 cabang utama otomatis untuk toko Anda.</p>
         </div>
         <div class="space-y-2">
-            <label class="block text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Modal Awal (Kas)</label>
+            <label id="cash-label" class="block text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Modal Awal (Kas)</label>
             <div class="relative">
                 <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                     <span class="text-lg font-bold text-slate-400">Rp</span>
@@ -110,12 +111,19 @@
                 };
 
                 let shiftOpened = false;
+                let pendingReconciliation = null;
 
                 const formatTime = (value) => new Intl.DateTimeFormat('id-ID', {
                     hour: '2-digit',
                     minute: '2-digit',
                     timeZoneName: 'short',
                 }).format(new Date(value));
+
+                const formatCurrency = (value) => new Intl.NumberFormat('id-ID', {
+                    style: 'currency',
+                    currency: 'IDR',
+                    maximumFractionDigits: 0,
+                }).format(value || 0);
 
                 const loadOpeningData = async () => {
                     const response = await fetch('/api/v1/shifts/opening', { headers });
@@ -190,7 +198,13 @@
                 };
 
                 const renderQuickCash = () => {
-                    const presets = [0, 50000, 100000, 200000];
+                    const presets = pendingReconciliation
+                        ? [
+                            Math.max(0, Math.floor(pendingReconciliation.expected_cash || 0)),
+                            Math.max(0, Math.floor((pendingReconciliation.expected_cash || 0) - 5000)),
+                            Math.max(0, Math.floor((pendingReconciliation.expected_cash || 0) + 5000)),
+                        ]
+                        : [0, 50000, 100000, 200000];
                     el.quickCash.innerHTML = '';
                     presets.forEach((amount) => {
                         const button = document.createElement('button');
@@ -210,22 +224,104 @@
                     const isSingleBranchAutoSelected = el.branch.disabled && hasBranch;
                     const blocked = el.button.hasAttribute('data-hard-blocked');
                     const openingCash = Math.max(0, parseFloat(el.cash.value || '0'));
-                    const disabled = blocked || !hasBranch;
+                    const disabled = blocked || (!pendingReconciliation && !hasBranch);
                     el.button.disabled = disabled;
                     el.button.classList.toggle('opacity-60', disabled);
                     el.button.classList.toggle('cursor-not-allowed', disabled);
                     el.caption.textContent = blocked
                         ? 'Akun kas belum siap. Selesaikan setup kas terlebih dahulu.'
+                        : pendingReconciliation
+                            ? `Input kas akhir shift kemarin sebesar ${formatCurrency(openingCash)} lalu selesaikan rekonsiliasi.`
                         : !hasBranch
                             ? 'Pilih cabang terlebih dahulu.'
                             : isSingleBranchAutoSelected
-                                ? `Cabang utama dipakai otomatis. Shift akan dibuka dengan modal awal ${new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(openingCash)}.`
-                            : `Shift akan dibuka dengan modal awal ${new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(openingCash)}.`;
+                                ? `Cabang utama dipakai otomatis. Shift akan dibuka dengan modal awal ${formatCurrency(openingCash)}.`
+                            : `Shift akan dibuka dengan modal awal ${formatCurrency(openingCash)}.`;
+                };
+
+                const applyOpeningMode = (data) => {
+                    pendingReconciliation = null;
+                    el.guard.classList.toggle('hidden', Boolean(data.cash_drawer));
+                    el.button.removeAttribute('data-hard-blocked');
+                    if (!data.cash_drawer) {
+                        el.button.setAttribute('data-hard-blocked', 'true');
+                    }
+                    document.getElementById('reconciliation-guard').classList.add('hidden');
+                    document.getElementById('branch-section').classList.remove('hidden');
+                    document.getElementById('opening-heading').textContent = 'Selamat Datang';
+                    document.getElementById('opening-subtitle').textContent = 'Silakan isi informasi modal awal untuk memulai shift Anda hari ini.';
+                    document.getElementById('cash-label').textContent = 'Modal Awal (Kas)';
+                    el.button.textContent = 'Buka Shift Sekarang';
+                    el.cash.value = '0';
+                    renderBranches(data.branches || []);
+                    syncBranchCopy(data.branches || []);
+                    el.badge.textContent = `Shift #${String(data.shift_number || 1).padStart(2, '0')}`;
+                    const cashierName = data.cashier?.name || 'Kasir';
+                    const openedAt = data.opened_at ? formatTime(data.opened_at) : '-';
+                    const cashDrawerName = data.cash_drawer?.name || 'Kas Warung';
+                    el.info.innerHTML = `Saat shift dibuka, sistem akan otomatis mencatat <strong>petugas: ${cashierName}</strong>, <strong>waktu buka: ${openedAt}</strong>, dan <strong>akun kas: ${cashDrawerName}</strong>.`;
+                    renderQuickCash();
+                    updateButtonState();
+                };
+
+                const applyReconciliationMode = (data) => {
+                    pendingReconciliation = data.pending_reconciliation || null;
+                    document.getElementById('reconciliation-guard').classList.remove('hidden');
+                    document.getElementById('reconciliation-copy').textContent = pendingReconciliation?.message || 'Selesaikan kas akhir shift kemarin terlebih dahulu.';
+                    document.getElementById('branch-section').classList.add('hidden');
+                    document.getElementById('opening-heading').textContent = 'Selesaikan Shift Kemarin';
+                    document.getElementById('opening-subtitle').textContent = 'Shift sebelumnya ditutup otomatis setelah lewat 00.00. Masukkan kas akhir fisik dulu sebelum buka shift baru.';
+                    document.getElementById('cash-label').textContent = 'Kas Akhir Shift Sebelumnya';
+                    el.button.removeAttribute('data-hard-blocked');
+                    el.button.textContent = 'Simpan Kas Akhir Shift Kemarin';
+                    el.badge.textContent = 'Perlu Rekonsiliasi';
+                    el.cash.value = String(Math.max(0, Math.floor(pendingReconciliation?.expected_cash || 0)));
+                    const cashierName = data.cashier?.name || 'Kasir';
+                    el.info.innerHTML = `Shift <strong>${cashierName}</strong> yang dibuka ${pendingReconciliation?.opened_at || '-'} ditutup otomatis pada ${pendingReconciliation?.closed_at || '-'} dengan ekspektasi kas <strong>${formatCurrency(pendingReconciliation?.expected_cash || 0)}</strong>.`;
+                    renderQuickCash();
+                    updateButtonState();
                 };
 
                 el.button.addEventListener('click', async () => {
                     if (shiftOpened) {
                         location.href = '/pos/checkout';
+                        return;
+                    }
+
+                    if (pendingReconciliation?.shift_id) {
+                        const closingCash = parseFloat(el.cash.value || '0');
+                        const response = await fetch('/api/v1/shifts/reconcile-overnight', {
+                            method: 'POST',
+                            credentials: 'same-origin',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-Requested-With': 'XMLHttpRequest',
+                                ...(csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}),
+                                ...headers,
+                            },
+                            body: JSON.stringify({
+                                shift_id: pendingReconciliation.shift_id,
+                                closing_cash: closingCash,
+                            }),
+                        });
+                        if (!response.ok) {
+                            let message = 'Gagal menyimpan kas akhir shift kemarin.';
+                            try {
+                                const errorBody = await response.json();
+                                if (errorBody?.message) {
+                                    message = errorBody.message;
+                                }
+                            } catch (_) {
+                            }
+                            alert(message);
+                            return;
+                        }
+
+                        const refreshed = await loadOpeningData();
+                        if (refreshed) {
+                            applyOpeningMode(refreshed);
+                        }
                         return;
                     }
 
@@ -277,22 +373,12 @@
                         el.info.textContent = 'Gagal memuat data shift.';
                         return;
                     }
-                    if (!data.cash_drawer) {
-                        el.guard.classList.remove('hidden');
-                        el.button.setAttribute('data-hard-blocked', 'true');
+                    if (data.pending_reconciliation) {
+                        applyReconciliationMode(data);
+                        return;
                     }
-                    renderQuickCash();
-                    renderBranches(data.branches || []);
-                    syncBranchCopy(data.branches || []);
-                    el.badge.textContent = `Shift #${String(data.shift_number || 1).padStart(2, '0')}`;
-                    const cashierName = data.cashier?.name || 'Kasir';
-                    const openedAt = data.opened_at ? formatTime(data.opened_at) : '-';
-                    const cashDrawerName = data.cash_drawer?.name || 'Kas Warung';
-                    el.info.innerHTML = `Saat shift dibuka, sistem akan otomatis mencatat <strong>petugas: ${cashierName}</strong>, <strong>waktu buka: ${openedAt}</strong>, dan <strong>akun kas: ${cashDrawerName}</strong>.`;
-                    updateButtonState();
+                    applyOpeningMode(data);
                 })();
             })();
         </script>
     @endsection
-
-

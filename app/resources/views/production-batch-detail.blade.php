@@ -22,21 +22,51 @@
     abort_unless(in_array($productionBatchDetailRole, ['warehouse', 'supervisor', 'admin', 'owner', 'superadmin'], true), 403);
 
     $resolvedBatchId = (string) ($batchId ?? request()->route('batch', request()->query('batch_id', '')));
-    $productionBatchCurrentPath = $currentPath ?? '/backoffice/inventory/production-batches/'.$resolvedBatchId;
-    $productionBatchDetailBackUrl = $backUrl ?? '/backoffice/inventory/production-batches';
-    $productionBatchDetailCanViewObservability = in_array($productionBatchDetailRole, ['admin', 'owner', 'superadmin'], true);
+    $productionBatchPortalPrefix = request()->is('pos/*') ? '/pos' : '/backoffice';
+    $productionBatchCurrentPath = $currentPath ?? $productionBatchPortalPrefix.'/inventory/production-batches/'.$resolvedBatchId;
+    $productionBatchDetailBackUrl = $backUrl ?? $productionBatchPortalPrefix.'/inventory/production-batches';
+    $productionBatchDetailCanViewObservability = $productionBatchDetailTenant
+        && in_array($productionBatchDetailRole, ['admin', 'owner', 'superadmin'], true)
+        && app(\App\Services\SubscriptionService::class)->canAccessFeature($productionBatchDetailTenant, 'settings.observability');
+    $productionBatchDetailObservabilityBaseUrl = $productionBatchDetailCanViewObservability ? '/backoffice/settings/observability' : null;
     $productionBatchDetailCanResolveAnomaly = in_array($productionBatchDetailRole, ['admin', 'owner'], true);
     $productionBatchVariancePctThreshold = max(0, (float) config('services.anomaly.production_batch_yield_variance_pct_threshold', 10));
     $productionBatchVarianceQtyThreshold = max(0, (float) config('services.anomaly.production_batch_yield_variance_qty_threshold', 1));
+    $productionBatchDetailUiMode = $productionBatchPortalPrefix === '/pos' ? 'pos' : 'backoffice';
+    $productionBatchDetailMainClass = $productionBatchPortalPrefix === '/pos' ? 'flex-1 overflow-y-auto pb-24' : 'flex-1 overflow-y-auto pb-8 lg:pl-72';
+    $productionBatchDetailHeaderClass = $productionBatchPortalPrefix === '/pos'
+        ? 'sticky top-0 z-10 h-16 border-b border-slate-200 bg-white/95 px-4 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 lg:px-8'
+        : 'sticky top-0 z-10 h-16 border-b border-slate-200 bg-white/95 px-4 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 lg:px-8 lg:pl-[336px]';
 @endphp
 
 @section('page_title', 'Detail Batch Produksi')
-@section('ui_mode', 'backoffice')
+@section('ui_mode', $productionBatchDetailUiMode)
 @section('body_class', 'bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display')
-@section('main_class', 'flex-1 overflow-y-auto pb-8 lg:pl-72')
+@section('main_class', $productionBatchDetailMainClass)
+
+@push('head')
+    <style>
+        .batch-detail-tab {
+            border: 1px solid rgba(226, 232, 240, 0.95);
+            background: #ffffff;
+            color: #64748b;
+            transition: all 160ms ease;
+        }
+        .batch-detail-tab.is-active {
+            border-color: rgba(15, 118, 110, 0.2);
+            background: linear-gradient(135deg, rgba(209, 250, 229, 0.95), rgba(236, 253, 245, 0.95));
+            color: #0f766e;
+            box-shadow: 0 10px 22px -18px rgba(15, 118, 110, 0.45);
+        }
+        .batch-detail-mobile-tabs-shell {
+            background: linear-gradient(180deg, rgba(248, 250, 252, 0.96), rgba(248, 250, 252, 0.82));
+            backdrop-filter: blur(8px);
+        }
+    </style>
+@endpush
 
 @section('header')
-    <header class="sticky top-0 z-10 h-16 border-b border-slate-200 bg-white/95 px-4 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 lg:px-8 lg:pl-[336px]">
+    <header class="{{ $productionBatchDetailHeaderClass }}">
         <div class="flex h-full items-center justify-between">
             <div class="flex items-center gap-3 min-w-0">
                 <a href="{{ $productionBatchDetailBackUrl }}" class="flex items-center justify-center size-9 rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
@@ -47,7 +77,7 @@
                     <p id="batch-detail-subtitle" class="hidden text-xs text-slate-500 lg:block">Memuat data batch...</p>
                 </div>
             </div>
-            <a href="/backoffice/inventory/production-batches" class="flex items-center gap-2 rounded-full bg-slate-100 px-4 py-2 text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+            <a href="{{ $productionBatchPortalPrefix.'/inventory/production-batches' }}" class="flex items-center gap-2 rounded-full bg-slate-100 px-4 py-2 text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                 <span class="material-symbols-outlined text-sm">list_alt</span>
                 Semua Batch
             </a>
@@ -57,7 +87,14 @@
 
 @section('content')
     <div class="mx-auto w-full max-w-5xl px-4 py-4 space-y-4 lg:px-8">
-        <section class="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
+        <div id="batch-detail-mobile-tabs" class="batch-detail-mobile-tabs-shell sticky top-[4.5rem] z-[5] -mx-1 flex gap-2 overflow-x-auto rounded-2xl px-1 pb-1 pt-1 no-scrollbar lg:hidden">
+            <button class="batch-detail-tab is-active inline-flex shrink-0 items-center justify-center rounded-full px-4 py-2 text-xs font-bold uppercase tracking-[0.16em]" data-batch-tab="overview" type="button">Ringkasan</button>
+            <button class="batch-detail-tab inline-flex shrink-0 items-center justify-center rounded-full px-4 py-2 text-xs font-bold uppercase tracking-[0.16em]" data-batch-tab="materials" type="button">Bahan</button>
+            <button class="batch-detail-tab inline-flex shrink-0 items-center justify-center rounded-full px-4 py-2 text-xs font-bold uppercase tracking-[0.16em]" data-batch-tab="notes" type="button">Catatan</button>
+            <button class="batch-detail-tab inline-flex shrink-0 items-center justify-center rounded-full px-4 py-2 text-xs font-bold uppercase tracking-[0.16em]" data-batch-tab="alerts" type="button">Alert</button>
+        </div>
+
+        <section data-batch-panel="overview" class="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
             <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
                     <p id="batch-detail-reference" class="text-[11px] font-bold uppercase tracking-widest text-slate-400">Batch</p>
@@ -71,11 +108,11 @@
             </div>
             <div class="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 <div class="rounded-2xl bg-slate-50 px-4 py-3 dark:bg-slate-950">
-                    <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Expected Output</p>
+                    <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Output Harapan</p>
                     <p id="batch-detail-expected-output" class="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">0</p>
                 </div>
                 <div class="rounded-2xl bg-slate-50 px-4 py-3 dark:bg-slate-950">
-                    <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Actual Output</p>
+                    <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Hasil Aktual</p>
                     <p id="batch-detail-actual-output" class="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">0</p>
                 </div>
                 <div class="rounded-2xl bg-slate-50 px-4 py-3 dark:bg-slate-950">
@@ -83,27 +120,8 @@
                     <p id="batch-detail-variance" class="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">0</p>
                 </div>
                 <div class="rounded-2xl bg-slate-50 px-4 py-3 dark:bg-slate-950">
-                    <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Recipe Version</p>
+                    <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Jumlah Resep</p>
                     <p id="batch-detail-recipe-version" class="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">0</p>
-                </div>
-            </div>
-
-            <div id="batch-detail-anomaly-banner" class="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-emerald-800">
-                <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                    <div>
-                        <p class="text-[10px] font-bold uppercase tracking-widest text-emerald-700/80">Monitoring Alert</p>
-                        <h4 id="batch-detail-anomaly-status" class="mt-1 text-sm font-bold">Tidak ada alert batch yang terbuka.</h4>
-                        <p id="batch-detail-anomaly-meta" class="mt-1 text-sm text-emerald-700/90">Belum ada anomaly yield variance yang aktif untuk batch ini.</p>
-                    </div>
-                    <div class="flex flex-wrap gap-2">
-                        <span id="batch-detail-anomaly-count" class="rounded-full bg-white/80 px-3 py-1 text-[11px] font-bold uppercase text-emerald-700">0 open alert</span>
-                        @if ($productionBatchDetailCanViewObservability)
-                            <a id="batch-detail-observability-link" href="/backoffice/settings/observability" class="inline-flex items-center gap-2 rounded-full border border-emerald-300 bg-white px-4 py-2 text-xs font-bold text-emerald-700">
-                                <span class="material-symbols-outlined text-sm">monitoring</span>
-                                Buka Observability
-                            </a>
-                        @endif
-                    </div>
                 </div>
             </div>
 
@@ -114,24 +132,43 @@
             </div>
         </section>
 
+        <section data-batch-panel="alerts" id="batch-detail-anomaly-banner" class="rounded-3xl border border-emerald-200 bg-emerald-50 px-5 py-5 text-emerald-800 shadow-sm ring-1 ring-emerald-100/80">
+            <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                    <p class="text-[10px] font-bold uppercase tracking-widest text-emerald-700/80">Monitoring Alert</p>
+                    <h4 id="batch-detail-anomaly-status" class="mt-1 text-sm font-bold">Tidak ada alert batch yang terbuka.</h4>
+                    <p id="batch-detail-anomaly-meta" class="mt-1 text-sm text-emerald-700/90">Belum ada anomaly yield variance yang aktif untuk batch ini.</p>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <span id="batch-detail-anomaly-count" class="rounded-full bg-white/80 px-3 py-1 text-[11px] font-bold uppercase text-emerald-700">0 open alert</span>
+                    @if ($productionBatchDetailCanViewObservability)
+                        <a id="batch-detail-observability-link" href="{{ $productionBatchDetailObservabilityBaseUrl }}" class="inline-flex items-center gap-2 rounded-full border border-emerald-300 bg-white px-4 py-2 text-xs font-bold text-emerald-700">
+                            <span class="material-symbols-outlined text-sm">monitoring</span>
+                            Buka Observability
+                        </a>
+                    @endif
+                </div>
+            </div>
+        </section>
+
         <section class="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-            <div class="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
+            <section data-batch-panel="materials" class="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800 xl:row-span-2">
                 <div class="mb-4 flex items-center justify-between">
                     <h3 class="text-sm font-bold text-slate-900 dark:text-slate-100">Input Bahan Baku</h3>
                     <span id="batch-detail-input-count" class="text-xs font-bold uppercase tracking-widest text-slate-400">0 line</span>
                 </div>
                 <div id="batch-detail-inputs" class="space-y-3"></div>
-            </div>
+            </section>
 
             <div class="space-y-4">
-                <section class="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
+                <section data-batch-panel="materials" class="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
                     <div class="mb-4 flex items-center justify-between">
                         <h3 class="text-sm font-bold text-slate-900 dark:text-slate-100">Output Jadi</h3>
                     </div>
                     <div id="batch-detail-outputs" class="space-y-3"></div>
                 </section>
 
-                <section class="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
+                <section data-batch-panel="notes" class="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
                     <h3 class="text-sm font-bold text-slate-900 dark:text-slate-100">Catatan Batch</h3>
                     <dl class="mt-4 space-y-3 text-sm">
                         <div class="flex items-start justify-between gap-4">
@@ -159,7 +196,7 @@
             </div>
         </section>
 
-        <section id="batch-detail-anomaly-history-section" class="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
+        <section data-batch-panel="alerts" id="batch-detail-anomaly-history-section" class="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
             <div class="mb-4 flex items-center justify-between gap-3">
                 <div>
                     <h3 class="text-sm font-bold text-slate-900 dark:text-slate-100">Riwayat Alert Batch</h3>
@@ -207,13 +244,13 @@
                         <input id="batch-edit-date" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium dark:border-slate-700 dark:bg-slate-900" type="date" />
                     </label>
                     <label class="block">
-                        <span class="mb-1 block text-[11px] font-bold uppercase tracking-widest text-slate-400">Expected Output Qty</span>
-                        <input id="batch-edit-output" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium dark:border-slate-700 dark:bg-slate-900" min="0.0001" step="0.0001" type="number" />
+                        <span class="mb-1 block text-[11px] font-bold uppercase tracking-widest text-slate-400">Output Harapan</span>
+                        <input id="batch-edit-output" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium dark:border-slate-700 dark:bg-slate-900" min="0.0001" step="0.0001" type="number" readonly />
                     </label>
                 </div>
                 <div class="grid gap-3 md:grid-cols-2">
                     <label class="block">
-                        <span class="mb-1 block text-[11px] font-bold uppercase tracking-widest text-slate-400">Recipe Version</span>
+                        <span class="mb-1 block text-[11px] font-bold uppercase tracking-widest text-slate-400">Jumlah Resep</span>
                         <input id="batch-edit-recipe-version" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium dark:border-slate-700 dark:bg-slate-900" min="1" step="1" type="number" />
                     </label>
                     <label class="block">
@@ -322,9 +359,11 @@
     <script>
         (() => {
             const tenantId = document.querySelector('meta[name="tenant-id"]')?.content || '';
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
             const headers = tenantId ? { 'X-Tenant-Id': tenantId } : {};
             const batchId = @json($resolvedBatchId);
             const canViewObservability = Boolean(@json($productionBatchDetailCanViewObservability));
+            const observabilityBaseUrl = @json($productionBatchDetailObservabilityBaseUrl);
             const canResolveAnomaly = Boolean(@json($productionBatchDetailCanResolveAnomaly));
             const varianceThresholds = {
                 qty: Number(@json($productionBatchVarianceQtyThreshold)),
@@ -332,6 +371,7 @@
             };
 
             const el = {
+                tabNav: document.getElementById('batch-detail-mobile-tabs'),
                 subtitle: document.getElementById('batch-detail-subtitle'),
                 reference: document.getElementById('batch-detail-reference'),
                 product: document.getElementById('batch-detail-product'),
@@ -394,12 +434,17 @@
             const state = {
                 bootstrap: { products: [], branches: [], locations: [] },
                 detail: null,
+                ui: {
+                    activeTab: 'overview',
+                },
                 historyFilters: {
                     status: 'all',
                     limit: 20,
                 },
                 selectedAnomalyId: null,
             };
+            const tabButtons = Array.from(document.querySelectorAll('[data-batch-tab]'));
+            const tabPanels = Array.from(document.querySelectorAll('[data-batch-panel]'));
 
             const unwrap = (payload) => payload?.data || payload || {};
             const parsePayload = (payload) => {
@@ -415,6 +460,24 @@
                 return typeof payload === 'object' ? payload : {};
             };
             const formatNumber = (value) => new Intl.NumberFormat('id-ID', { maximumFractionDigits: 2 }).format(Number(value || 0));
+            const formatCurrency = (value) => new Intl.NumberFormat('id-ID', {
+                style: 'currency',
+                currency: 'IDR',
+                maximumFractionDigits: 0,
+            }).format(Number(value || 0));
+            const normalizeQtyValue = (value) => {
+                const numericValue = Number(value || 0);
+                if (!Number.isFinite(numericValue)) {
+                    return 0;
+                }
+
+                const nearestWhole = Math.round(numericValue);
+                if (Math.abs(numericValue - nearestWhole) <= 0.0005) {
+                    return nearestWhole;
+                }
+
+                return Number(numericValue.toFixed(4));
+            };
             const formatDate = (value, includeTime = false) => {
                 if (!value) return '-';
                 return new Intl.DateTimeFormat('id-ID', includeTime
@@ -430,6 +493,19 @@
                 posted: 'bg-emerald-100 text-emerald-700',
                 cancelled: 'bg-slate-200 text-slate-600',
             }[status] || 'bg-slate-100 text-slate-500');
+            const generateClientRequestId = () => {
+                if (typeof window !== 'undefined' && window.crypto?.randomUUID) {
+                    return window.crypto.randomUUID();
+                }
+
+                if (typeof window !== 'undefined' && window.crypto?.getRandomValues) {
+                    const buffer = new Uint32Array(4);
+                    window.crypto.getRandomValues(buffer);
+                    return Array.from(buffer, (value) => value.toString(16).padStart(8, '0')).join('');
+                }
+
+                return `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}`;
+            };
             const requiresVarianceReason = () => {
                 const expectedQty = Number(state.detail?.batch?.expected_output_qty || 0);
                 const actualQty = Number(el.postOutput.value || 0);
@@ -449,7 +525,11 @@
                     : `Variance reason opsional selama selisih hasil masih di bawah threshold monitoring (${varianceThresholds.qty} qty / ${varianceThresholds.pct}%).`;
             };
             const buildObservabilityUrl = (detail) => {
-                const baseUrl = detail?.observability_url || '/backoffice/settings/observability';
+                if (!canViewObservability || !observabilityBaseUrl) {
+                    return '';
+                }
+
+                const baseUrl = detail?.observability_url || observabilityBaseUrl;
                 const batch = detail?.batch || {};
                 const url = new URL(baseUrl, window.location.origin);
                 url.searchParams.set('type', 'production_batch_yield_variance');
@@ -465,6 +545,25 @@
                 med: 'bg-sky-100 text-sky-700',
                 low: 'bg-slate-100 text-slate-700',
             }[severity] || 'bg-slate-100 text-slate-700');
+            const applyMobileTabState = () => {
+                const activeTab = state.ui.activeTab || 'overview';
+                const isDesktop = window.matchMedia('(min-width: 1024px)').matches;
+
+                tabButtons.forEach((button) => {
+                    const matches = button.dataset.batchTab === activeTab;
+                    button.classList.toggle('is-active', matches);
+                    button.setAttribute('aria-pressed', matches ? 'true' : 'false');
+                });
+
+                tabPanels.forEach((panel) => {
+                    if (isDesktop) {
+                        panel.classList.remove('hidden');
+                        return;
+                    }
+
+                    panel.classList.toggle('hidden', panel.dataset.batchPanel !== activeTab);
+                });
+            };
             const renderAnomalySummary = (detail) => {
                 const summary = detail?.anomaly_summary || {};
                 const openCount = Number(summary.open_count || 0);
@@ -472,9 +571,9 @@
                 const totalCount = Number(summary.total_count || 0);
                 const hasOpenAlert = !!summary.has_open_alert;
 
-                el.anomalyBanner.className = `mt-5 rounded-2xl border px-4 py-4 ${hasOpenAlert
-                    ? 'border-amber-200 bg-amber-50 text-amber-900'
-                    : 'border-emerald-200 bg-emerald-50 text-emerald-800'}`;
+                el.anomalyBanner.className = `rounded-3xl border px-5 py-5 shadow-sm ring-1 ${hasOpenAlert
+                    ? 'border-amber-200 bg-amber-50 text-amber-900 ring-amber-100/80'
+                    : 'border-emerald-200 bg-emerald-50 text-emerald-800 ring-emerald-100/80'}`;
                 el.anomalyCount.className = `rounded-full px-3 py-1 text-[11px] font-bold uppercase ${hasOpenAlert
                     ? 'bg-white/80 text-amber-800'
                     : 'bg-white/80 text-emerald-700'}`;
@@ -576,13 +675,18 @@
             };
 
             const requestJson = async (url, options = {}) => {
+                const mergedHeaders = {
+                    ...headers,
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    ...(csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}),
+                    ...(options.headers || {}),
+                };
+
                 const response = await fetch(url, {
-                    headers: {
-                        ...headers,
-                        'Accept': 'application/json',
-                        ...(options.headers || {}),
-                    },
                     ...options,
+                    credentials: 'same-origin',
+                    headers: mergedHeaders,
                 });
 
                 const result = await response.json().catch(() => ({}));
@@ -592,6 +696,37 @@
                 }
 
                 return result;
+            };
+
+            const getBootstrapProducts = () => {
+                const products = state.bootstrap?.products;
+                if (Array.isArray(products)) {
+                    return products;
+                }
+
+                if (Array.isArray(products?.data)) {
+                    return products.data;
+                }
+
+                return [];
+            };
+
+            const syncEditExpectedOutput = () => {
+                const batch = state.detail?.batch || {};
+                const recipeCount = Math.max(0, Number(el.editRecipeVersion?.value || batch.recipe_count || batch.recipe_version || 0));
+                const product = getBootstrapProducts().find((item) => String(item.id || '') === String(batch.product_id || '')) || null;
+                const recipeOutputQty = normalizeQtyValue(
+                    product?.recipe_output_qty
+                    ?? product?.production_batch_eligibility?.recipe_output_qty
+                    ?? 0
+                );
+                const expectedOutputQty = recipeCount > 0 && recipeOutputQty > 0
+                    ? normalizeQtyValue(recipeCount * recipeOutputQty)
+                    : Number(batch.expected_output_qty || 0);
+
+                el.editOutput.value = expectedOutputQty > 0 ? String(expectedOutputQty) : '';
+
+                return expectedOutputQty;
             };
 
             const renderLines = (target, lines, kind) => {
@@ -604,6 +739,16 @@
                 lines.forEach((line) => {
                     const row = document.createElement('div');
                     row.className = 'rounded-2xl border border-slate-200 px-4 py-3 dark:border-slate-800';
+                    const unitCost = Number(line.unit_cost_snapshot || 0);
+                    const actualQty = Number(line.actual_qty || 0);
+                    const costSummary = kind === 'output' && unitCost > 0
+                        ? `
+                            <div class="mt-3 rounded-2xl bg-emerald-50 px-3 py-3 text-sm text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200">
+                                <p class="text-[10px] font-bold uppercase tracking-widest text-emerald-700/80 dark:text-emerald-200/80">HPP Batch</p>
+                                <p class="mt-1 font-semibold">Per unit ${formatCurrency(unitCost)} • Total ${formatCurrency(actualQty * unitCost)}</p>
+                            </div>
+                        `
+                        : '';
                     row.innerHTML = `
                         <div class="flex items-start justify-between gap-3">
                             <div>
@@ -626,6 +771,7 @@
                                 <p class="mt-1 font-semibold text-slate-900 dark:text-slate-100">${line.uom || '-'}</p>
                             </div>
                         </div>
+                        ${costSummary}
                     `;
                     target.appendChild(row);
                 });
@@ -647,7 +793,7 @@
                 el.expectedOutput.textContent = formatNumber(batch.expected_output_qty);
                 el.actualOutput.textContent = formatNumber(batch.actual_output_qty);
                 el.variance.textContent = `${formatNumber(batch.yield_variance_qty)} (${formatNumber(batch.yield_variance_pct)}%)`;
-                el.recipeVersion.textContent = batch.recipe_version || 0;
+                el.recipeVersion.textContent = batch.recipe_count || batch.recipe_version || 0;
                 el.inputCount.textContent = `${inputs.length} line`;
                 el.referenceFull.textContent = batch.reference_no || '-';
                 el.notes.textContent = batch.notes || '-';
@@ -660,9 +806,10 @@
 
                 el.editDate.value = batch.transaction_date || '';
                 el.editOutput.value = batch.expected_output_qty || '';
-                el.editRecipeVersion.value = batch.recipe_version || 1;
+                el.editRecipeVersion.value = batch.recipe_count || batch.recipe_version || 1;
                 el.editReference.value = batch.reference_no || '';
                 el.editNotes.value = batch.notes || '';
+                syncEditExpectedOutput();
                 el.postOutput.value = batch.expected_output_qty || '';
                 el.postVarianceReason.value = batch.variance_reason || '';
                 el.cancelReasonInput.value = batch.cancel_reason || '';
@@ -685,10 +832,11 @@
                 renderLines(el.inputs, inputs, 'input');
                 renderLines(el.outputs, outputs, 'output');
                 refreshVarianceHint();
+                applyMobileTabState();
             };
 
             const loadBootstrap = async () => {
-                const response = await fetch('/api/v1/bootstrap', { headers });
+                const response = await fetch(window.PosUi.bootstrapUrl({ includeInventory: true }), { headers });
                 if (!response.ok) {
                     throw new Error('Gagal memuat master data batch.');
                 }
@@ -719,13 +867,24 @@
             document.querySelectorAll('[data-close="post"]').forEach((node) => node.addEventListener('click', () => toggleModal('post', false)));
             document.querySelectorAll('[data-close="cancel"]').forEach((node) => node.addEventListener('click', () => toggleModal('cancel', false)));
             document.querySelectorAll('[data-close="resolve"]').forEach((node) => node.addEventListener('click', () => toggleModal('resolve', false)));
+            el.editRecipeVersion?.addEventListener('input', syncEditExpectedOutput);
             el.postOutput?.addEventListener('input', refreshVarianceHint);
+            el.tabNav?.addEventListener('click', (event) => {
+                const button = event.target.closest('[data-batch-tab]');
+                if (!button) {
+                    return;
+                }
+
+                state.ui.activeTab = button.dataset.batchTab || 'overview';
+                applyMobileTabState();
+            });
             el.anomalyStatusFilter?.addEventListener('change', async () => {
                 state.historyFilters.status = el.anomalyStatusFilter.value || 'all';
                 state.historyFilters.limit = 20;
                 await loadDetail();
                 render();
             });
+            window.addEventListener('resize', applyMobileTabState);
             el.anomalyLoadMore?.addEventListener('click', async () => {
                 state.historyFilters.limit += 20;
                 await loadDetail();
@@ -739,13 +898,14 @@
                 el.editSubmit.textContent = 'Menyimpan...';
 
                 try {
+                    const expectedOutputQty = syncEditExpectedOutput();
                     await requestJson(`/api/v1/production-batches/${encodeURIComponent(batchId)}`, {
                         method: 'PATCH',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             transaction_date: el.editDate.value || null,
-                            expected_output_qty: Number(el.editOutput.value || 0),
-                            recipe_version: Number(el.editRecipeVersion.value || 0),
+                            expected_output_qty: Number(expectedOutputQty || 0),
+                            recipe_count: Number(el.editRecipeVersion.value || 0),
                             reference_no: (el.editReference.value || '').trim() || null,
                             notes: (el.editNotes.value || '').trim() || null,
                         }),
@@ -786,7 +946,7 @@
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
-                            'Idempotency-Key': `web-production-post-${crypto.randomUUID()}`,
+                            'Idempotency-Key': `web-production-post-${generateClientRequestId()}`,
                         },
                         body: JSON.stringify({
                             actual_output_qty: Number(el.postOutput.value || 0),

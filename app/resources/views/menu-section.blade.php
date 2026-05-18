@@ -30,7 +30,7 @@
 @php
     $menuBackUrl = session('auth_portal', 'pos') === 'backoffice'
         ? '/backoffice/dashboard'
-        : '/pos/dashboard';
+        : pos_default_url();
 @endphp
 
 @section('header')
@@ -47,7 +47,15 @@
         @foreach ($items as $item)
             <a class="flex items-center gap-6 px-6 py-6 hover:bg-slate-50 transition-colors menu-border group" href="{{ $item['href'] }}">
                 <span class="material-symbols-outlined text-primary text-2xl">{{ $item['icon'] }}</span>
-                <span class="text-slate-900 dark:text-slate-100 font-semibold text-base">{{ $item['label'] }}</span>
+                <span class="flex flex-1 items-center justify-between gap-3">
+                    <span class="text-slate-900 dark:text-slate-100 font-semibold text-base">{{ $item['label'] }}</span>
+
+                    @if (!empty($item['badge']))
+                        <span class="shrink-0 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700">
+                            {{ $item['badge'] }}
+                        </span>
+                    @endif
+                </span>
             </a>
         @endforeach
     </div>

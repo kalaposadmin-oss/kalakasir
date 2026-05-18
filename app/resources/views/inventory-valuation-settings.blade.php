@@ -560,9 +560,35 @@
                         await loadRebuildStatus();
                         await loadReconciliation();
                         await loadReports();
-                        setInterval(() => {
-                            loadRebuildStatus().catch(() => {});
-                        }, 7000);
+                        let rebuildStatusInterval = null;
+                        const startRebuildStatusPolling = () => {
+                            if (rebuildStatusInterval || document.visibilityState === 'hidden') {
+                                return;
+                            }
+
+                            rebuildStatusInterval = setInterval(() => {
+                                if (document.visibilityState === 'visible') {
+                                    loadRebuildStatus().catch(() => {});
+                                }
+                            }, 15000);
+                        };
+                        const stopRebuildStatusPolling = () => {
+                            if (rebuildStatusInterval) {
+                                clearInterval(rebuildStatusInterval);
+                                rebuildStatusInterval = null;
+                            }
+                        };
+
+                        document.addEventListener('visibilitychange', () => {
+                            if (document.visibilityState === 'visible') {
+                                loadRebuildStatus().catch(() => {});
+                                startRebuildStatusPolling();
+                                return;
+                            }
+
+                            stopRebuildStatusPolling();
+                        });
+                        startRebuildStatusPolling();
                     } catch (error) {
                         showError(error.message || 'Gagal memuat data valuation.');
                     }

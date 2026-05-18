@@ -47,11 +47,11 @@ class SubscriptionPlanMvpTest extends TestCase
         \DB::table('tenants')->where('id', $this->tenant->id)->update(['plan' => 'M']);
 
         $response = $this->withHeaders($this->tenantHeaders($this->tenant->id))
-            ->getJson('/api/v1/subscription/entitlements?search=search.global');
+            ->getJson('/api/v1/subscription/entitlements?search=product.materials');
 
         $response->assertStatus(200)
             ->assertJsonPath('plan', 'M')
-            ->assertJsonPath('entitlements.0.key', 'search.global')
+            ->assertJsonPath('entitlements.0.key', 'product.materials')
             ->assertJsonPath('entitlements.0.allowed', true);
     }
 

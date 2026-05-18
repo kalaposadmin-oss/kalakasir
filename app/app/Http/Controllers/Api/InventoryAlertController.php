@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\InventoryBalance;
 use App\Models\Product;
 use App\Models\PurchaseItem;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Carbon\CarbonImmutable;
 use App\Support\TenantContext;
@@ -21,11 +22,22 @@ class InventoryAlertController extends Controller
                 'alerts' => [],
             ], 400);
         }
+        $payload = Cache::remember("inventory-alerts:index:{$tenantId}", now('UTC')->addMinute(), function () use ($tenantId) {
+            return $this->buildAlerts($tenantId);
+        });
+
+        return response()->json($payload);
+    }
+
+    private function buildAlerts(string $tenantId)
+    {
         $lookbackDays = 30;
         $leadTimeDays = 3;
 
         $products = Product::query()
             ->where('tenant_id', $tenantId)
+            ->where('is_active', true)
+            ->where('track_stock', true)
             ->get(['id', 'name', 'sku', 'image_url', 'min_stock']);
 
         $inventory = InventoryBalance::query()
@@ -130,9 +142,9 @@ class InventoryAlertController extends Controller
             return ($a['stock_now'] / max($a['min_stock'], 1)) <=> ($b['stock_now'] / max($b['min_stock'], 1));
         });
 
-        return response()->json([
+        return [
             'total_alerts' => count($alerts),
             'alerts' => $alerts,
-        ]);
+        ];
     }
 }

@@ -163,7 +163,7 @@ class PortalWebAccessTest extends TestCase
         ]);
 
         $this->get('/portal/switch/backoffice')
-            ->assertRedirect('/login');
+            ->assertRedirect('/');
     }
 
     public function test_guest_is_redirected_directly_to_onboarding_from_auth_protected_portal_switch_route_when_tenant_has_no_users(): void
@@ -376,7 +376,7 @@ class PortalWebAccessTest extends TestCase
             'password' => 'secret123',
         ])->assertRedirect('/pos/dashboard');
 
-        $this->post('/logout')->assertRedirect('/login');
+        $this->post('/logout')->assertRedirect('/');
 
         $this->from('/login')->post('/login', [
             'email' => $admin->email,
@@ -393,7 +393,7 @@ class PortalWebAccessTest extends TestCase
             'password' => 'secret123',
         ])->assertRedirect('/backoffice/dashboard');
 
-        $this->get('/logout')->assertRedirect('/login');
+        $this->get('/logout')->assertRedirect('/');
 
         $this->assertGuest('web');
     }
@@ -410,7 +410,7 @@ class PortalWebAccessTest extends TestCase
         $this->get('/menu/settings')
             ->assertOk()
             ->assertSee('/backoffice/dashboard', false)
-            ->assertDontSee('http://127.0.0.1:8000', false);
+            ->assertDontSee('href="http://127.0.0.1:8000/backoffice', false);
     }
 
     public function test_cashier_cannot_login_via_backoffice_login(): void
@@ -511,6 +511,32 @@ class PortalWebAccessTest extends TestCase
             ->get('/pos');
 
         $response->assertRedirect('/pos/dashboard');
+    }
+
+    public function test_cashier_with_open_shift_enters_pos_at_checkout(): void
+    {
+        [$tenant, $user] = $this->createWebActor('cashier', 'cashier-pos-open-shift@example.test');
+        $this->openShiftFor($tenant, $user);
+
+        $response = $this->actingAs($user)
+            ->withSession(['auth_portal' => 'pos'])
+            ->get('/pos');
+
+        $response->assertRedirect('/pos/checkout');
+    }
+
+    public function test_pos_back_links_use_checkout_as_home_when_shift_is_open(): void
+    {
+        [$tenant, $user] = $this->createWebActor('owner', 'owner-pos-back-open-shift@example.test');
+        $this->openShiftFor($tenant, $user);
+
+        $response = $this->actingAs($user)
+            ->withSession(['auth_portal' => 'pos'])
+            ->get('/pos/products?from=%2Fpos%2Fdashboard');
+
+        $response->assertOk();
+        $response->assertSee('href="/pos/checkout"', false);
+        $response->assertDontSee('href="/pos/dashboard"', false);
     }
 
     public function test_cashier_without_open_shift_is_redirected_to_shift_open_before_checkout(): void
@@ -637,7 +663,7 @@ class PortalWebAccessTest extends TestCase
         }
     }
 
-    public function test_owner_pos_menu_exposes_product_and_stock_management_shortcuts(): void
+    public function test_owner_pos_dashboard_no_longer_shows_owner_mode_shortcuts(): void
     {
         [, $user] = $this->createWebActor('owner', 'owner-pos-shortcuts@example.test');
 
@@ -646,13 +672,11 @@ class PortalWebAccessTest extends TestCase
             ->get('/pos/dashboard');
 
         $response->assertOk();
-        $response->assertSee('Kelola Produk');
-        $response->assertSee('Tambah Produk');
-        $response->assertSee('Stok & Inventaris');
-        $response->assertSee('Pengaturan Toko');
+        $response->assertDontSee('Mode Owner');
+        $response->assertDontSee('Tetap di alur POS, lalu buka alat manajemen saat diperlukan.');
     }
 
-    public function test_owner_pos_dashboard_exposes_management_shortcuts(): void
+    public function test_owner_pos_dashboard_does_not_render_owner_shortcut_links(): void
     {
         [, $user] = $this->createWebActor('owner', 'owner-pos-dashboard-shortcuts@example.test');
 
@@ -661,14 +685,11 @@ class PortalWebAccessTest extends TestCase
             ->get('/pos/dashboard');
 
         $response->assertOk();
-        $response->assertSee('Mode Owner');
-    $response->assertSee($this->ownerBackofficeShortcut('/pos/dashboard', '/backoffice/products'), false);
-    $response->assertSee($this->ownerBackofficeShortcut('/pos/dashboard', '/backoffice/products/new'), false);
-    $response->assertSee($this->ownerBackofficeShortcut('/pos/dashboard', '/backoffice/inventory'), false);
-    $response->assertSee($this->ownerBackofficeShortcut('/pos/dashboard', '/backoffice/settings/preferences'), false);
+        $response->assertDontSee('Mode Owner');
+        $response->assertDontSee('Tetap di alur POS, lalu buka alat manajemen saat diperlukan.');
     }
 
-    public function test_owner_pos_sales_history_exposes_management_shortcuts(): void
+    public function test_owner_pos_sales_history_no_longer_shows_owner_shortcuts(): void
     {
         [, $user] = $this->createWebActor('owner', 'owner-pos-history-shortcuts@example.test');
 
@@ -677,9 +698,8 @@ class PortalWebAccessTest extends TestCase
             ->get('/pos/history');
 
         $response->assertOk();
-        $response->assertSee('Mode Owner');
-    $response->assertSee($this->ownerBackofficeShortcut('/pos/history', '/backoffice/products'), false);
-    $response->assertSee($this->ownerBackofficeShortcut('/pos/history', '/backoffice/inventory'), false);
+        $response->assertDontSee('Mode Owner');
+        $response->assertDontSee('Pantau transaksi POS, lalu lompat cepat ke katalog, stok, atau pengaturan toko.');
     }
 
     public function test_backoffice_products_page_can_return_to_pos_dashboard_when_opened_from_pos(): void
@@ -704,6 +724,128 @@ class PortalWebAccessTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('/portal/switch/pos?next=%2Fpos%2Fdashboard', false);
+    }
+
+    public function test_plan_s_backoffice_product_create_hides_bom_editor_and_plan_m_shows_it(): void
+    {
+        [$tenant, $user] = $this->createWebActor('owner', 'owner-product-create-bom-plan-s-m@example.test');
+
+        DB::table('tenants')->where('id', $tenant->id)->update(['plan' => 'S']);
+
+        $starter = $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/backoffice/products/new');
+
+        $starter->assertOk();
+        $starter->assertSee('id="bom-locked-notice"', false);
+        $starter->assertSee('id="bom-editor-card"', false);
+        $starter->assertSee('p-4 space-y-4 hidden" id="bom-editor-card"', false);
+
+        DB::table('tenants')->where('id', $tenant->id)->update(['plan' => 'M']);
+
+        $medium = $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/backoffice/products/new');
+
+        $medium->assertOk();
+        $medium->assertSee('id="bom-locked-notice"', false);
+        $medium->assertSee('id="bom-editor-card"', false);
+        $medium->assertDontSee('p-4 space-y-4 hidden" id="bom-editor-card"', false);
+    }
+
+    public function test_plan_s_backoffice_product_edit_compiles_bom_gate_false_and_plan_m_compiles_true(): void
+    {
+        [$tenant, $user] = $this->createWebActor('owner', 'owner-product-edit-bom-plan-s-m@example.test');
+
+        DB::table('tenants')->where('id', $tenant->id)->update(['plan' => 'S']);
+
+        $starter = $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/backoffice/products/product-001/edit');
+
+        $starter->assertOk();
+        $starter->assertSee('const canManageRecipe = false;', false);
+        $starter->assertSee('id="edit-bom-card"', false);
+        $starter->assertSee('id="edit-bom-locked"', false);
+
+        DB::table('tenants')->where('id', $tenant->id)->update(['plan' => 'M']);
+
+        $medium = $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/backoffice/products/product-001/edit');
+
+        $medium->assertOk();
+        $medium->assertSee('const canManageRecipe = true;', false);
+        $medium->assertSee('id="edit-bom-card"', false);
+        $medium->assertSee('id="edit-bom-locked"', false);
+    }
+
+    public function test_product_edit_page_injects_recipe_output_qty_into_initial_product_payload(): void
+    {
+        [$tenant, $user] = $this->createWebActor('owner', 'owner-product-edit-recipe-output@example.test');
+
+        DB::table('products')->insert([
+            'id' => 'product-bom-001',
+            'tenant_id' => $tenant->id,
+            'category_id' => null,
+            'supplier_id' => null,
+            'legacy_material_id' => null,
+            'sku' => 'ROTI-001',
+            'name' => 'Roti Uji',
+            'price' => 10000,
+            'hpp_average' => 0,
+            'track_stock' => true,
+            'min_stock' => 0,
+            'unit' => null,
+            'image_url' => null,
+            'is_active' => true,
+            'product_mode' => 'bom',
+            'production_mode' => 'batch_production',
+            'item_type' => 'finished_good',
+            'recipe_output_qty' => 10,
+            'bom_items' => json_encode([]),
+            'created_at' => now('UTC'),
+            'updated_at' => now('UTC'),
+        ]);
+
+        $response = $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/backoffice/products/product-bom-001/edit');
+
+        $response->assertOk();
+        $response->assertSee('"recipe_output_qty":10', false);
+        $response->assertSee('const loadedProduct = productId', false);
+    }
+
+    public function test_raw_material_product_can_be_saved_without_selling_price(): void
+    {
+        [$tenant, $user] = $this->createWebActor('owner', 'owner-raw-material-no-price@example.test');
+
+        $response = $this->actingAs($user)
+            ->withHeaders(['X-Tenant-Id' => $tenant->id])
+            ->postJson('/api/v1/products', [
+                'name' => 'Tepung Premium',
+                'sku' => 'RAW-TEPUNG-001',
+                'unit' => 'kg',
+                'item_type' => 'raw_material',
+                'product_mode' => 'add_on',
+                'production_mode' => 'none',
+                'track_stock' => true,
+                'initial_stock' => 0,
+                'price' => null,
+                'hpp_average' => 12500,
+            ]);
+
+        $response->assertCreated();
+        $response->assertJsonPath('product.item_type', 'raw_material');
+        $response->assertJsonPath('product.price', 0);
+
+        $this->assertDatabaseHas('products', [
+            'tenant_id' => $tenant->id,
+            'sku' => 'RAW-TEPUNG-001',
+            'item_type' => 'raw_material',
+            'price' => 0,
+        ]);
     }
 
     public function test_backoffice_inventory_page_can_return_to_pos_dashboard_when_opened_from_pos(): void
@@ -731,7 +873,7 @@ class PortalWebAccessTest extends TestCase
         $response->assertDontSee('/portal/switch/backoffice?next=/backoffice/products', false);
     }
 
-    public function test_owner_pos_shift_open_exposes_management_shortcuts(): void
+    public function test_owner_pos_shift_open_no_longer_shows_management_shortcuts(): void
     {
         [, $user] = $this->createWebActor('owner', 'owner-pos-shift-open-shortcuts@example.test');
 
@@ -740,9 +882,8 @@ class PortalWebAccessTest extends TestCase
             ->get('/pos/shifts/open');
 
         $response->assertOk();
-        $response->assertSee('Mode Owner');
-    $response->assertSee($this->ownerBackofficeShortcut('/pos/shifts/open', '/backoffice/products/new'), false);
-    $response->assertSee($this->ownerBackofficeShortcut('/pos/shifts/open', '/backoffice/settings/preferences'), false);
+        $response->assertDontSee('Mode Owner');
+        $response->assertDontSee('Buka shift dulu, lalu tetap punya jalur cepat ke katalog, stok, dan pengaturan toko.');
     }
 
     public function test_cashier_can_access_pos_sales_detail_wrapper(): void
@@ -759,7 +900,7 @@ class PortalWebAccessTest extends TestCase
         $response->assertSee('id="void-refund-link"', false);
     }
 
-    public function test_owner_pos_sales_detail_exposes_management_shortcuts(): void
+    public function test_owner_pos_sales_detail_no_longer_shows_management_shortcuts(): void
     {
         [, $user] = $this->createWebActor('owner', 'owner-pos-detail-shortcuts@example.test');
 
@@ -768,9 +909,8 @@ class PortalWebAccessTest extends TestCase
             ->get('/pos/sales/sale-041?from=%2Fpos%2Fhistory');
 
         $response->assertOk();
-        $response->assertSee('Mode Owner');
-    $response->assertSee($this->ownerBackofficeShortcut('/pos/sales/sale-041', '/backoffice/reports/sales'), false);
-    $response->assertSee($this->ownerBackofficeShortcut('/pos/sales/sale-041', '/backoffice/inventory'), false);
+        $response->assertDontSee('Mode Owner');
+        $response->assertDontSee('Butuh tindakan manajemen tanpa keluar dari detail transaksi.');
     }
 
     public function test_cashier_pos_sales_detail_does_not_expose_management_shortcuts(): void
@@ -821,7 +961,7 @@ class PortalWebAccessTest extends TestCase
         $response->assertDontSee('/portal/switch/backoffice?next=/backoffice/reports/sales', false);
     }
 
-    public function test_owner_pos_void_refund_exposes_management_shortcuts(): void
+    public function test_owner_pos_void_refund_no_longer_shows_management_shortcuts(): void
     {
         [, $user] = $this->createWebActor('owner', 'owner-pos-void-shortcuts@example.test');
 
@@ -830,9 +970,8 @@ class PortalWebAccessTest extends TestCase
             ->get('/pos/sales/sale-043/void-refund?from=%2Fpos%2Fsales%2Fsale-043');
 
         $response->assertOk();
-        $response->assertSee('Mode Owner');
-    $response->assertSee($this->ownerBackofficeShortcut('/pos/sales/sale-043/void-refund', '/backoffice/products/new'), false);
-    $response->assertSee($this->ownerBackofficeShortcut('/pos/sales/sale-043/void-refund', '/backoffice/reports/sales'), false);
+        $response->assertDontSee('Mode Owner');
+        $response->assertDontSee('Tetap proses void di POS, lalu buka laporan atau stok bila butuh investigasi.');
     }
 
     public function test_backoffice_portal_cannot_open_pos_void_refund_wrapper_without_switching(): void
@@ -859,7 +998,7 @@ class PortalWebAccessTest extends TestCase
         $response->assertSee('/pos/checkout', false);
     }
 
-    public function test_owner_pos_receipt_exposes_management_shortcuts(): void
+    public function test_owner_pos_receipt_no_longer_shows_management_shortcuts(): void
     {
         [, $user] = $this->createWebActor('owner', 'owner-pos-receipt-shortcuts@example.test');
 
@@ -868,9 +1007,8 @@ class PortalWebAccessTest extends TestCase
             ->get('/pos/sales/sale-044/receipt?from=%2Fpos%2Fpayment-method');
 
         $response->assertOk();
-        $response->assertSee('Mode Owner');
-    $response->assertSee($this->ownerBackofficeShortcut('/pos/sales/sale-044/receipt', '/backoffice/reports/sales'), false);
-    $response->assertSee($this->ownerBackofficeShortcut('/pos/sales/sale-044/receipt', '/backoffice/settings/preferences'), false);
+        $response->assertDontSee('Mode Owner');
+        $response->assertDontSee('Setelah transaksi selesai, lanjut cek laporan atau atur katalog bila perlu.');
     }
 
     public function test_cashier_pos_receipt_does_not_expose_management_shortcuts(): void
@@ -898,7 +1036,7 @@ class PortalWebAccessTest extends TestCase
         $response->assertSee('/pos/sales/sale-040', false);
     }
 
-    public function test_owner_pos_payment_method_exposes_management_shortcuts(): void
+    public function test_owner_pos_payment_method_no_longer_shows_management_shortcuts(): void
     {
         [, $user] = $this->createWebActor('owner', 'owner-pos-payment-shortcuts@example.test');
 
@@ -907,9 +1045,8 @@ class PortalWebAccessTest extends TestCase
             ->get('/pos/payment-method?from=%2Fpos%2Fsales%2Fsale-046');
 
         $response->assertOk();
-        $response->assertSee('Mode Owner');
-    $response->assertSee($this->ownerBackofficeShortcut('/pos/payment-method', '/backoffice/products'), false);
-    $response->assertSee($this->ownerBackofficeShortcut('/pos/payment-method', '/backoffice/reports/sales'), false);
+        $response->assertDontSee('Mode Owner');
+        $response->assertDontSee('Akses cepat ke katalog, stok, laporan, dan preferensi saat pembayaran berjalan.');
     }
 
     public function test_cashier_pos_payment_method_does_not_expose_management_shortcuts(): void
@@ -934,7 +1071,7 @@ class PortalWebAccessTest extends TestCase
             ->get('/backoffice/purchases/purchase-001?from=%2Fbackoffice%2Fsuppliers');
 
         $response->assertOk();
-        $response->assertSee('/backoffice/suppliers', false);
+        $response->assertSee('/backoffice/purchases', false);
     }
 
     public function test_admin_can_access_backoffice_inventory_stock_card_wrapper(): void
@@ -1115,6 +1252,28 @@ class PortalWebAccessTest extends TestCase
             ->assertOk();
     }
 
+    public function test_plan_s_cannot_access_materials_or_production_pages(): void
+    {
+        [$tenant, $user] = $this->createWebActor('owner', 'owner-plan-s-production-blocked@example.test');
+
+        DB::table('tenants')->where('id', $tenant->id)->update(['plan' => 'S']);
+
+        $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/backoffice/materials')
+            ->assertStatus(403);
+
+        $this->actingAs($user)
+            ->withSession(['auth_portal' => 'pos'])
+            ->get('/pos/materials')
+            ->assertStatus(403);
+
+        $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/backoffice/inventory/production-batches')
+            ->assertStatus(403);
+    }
+
     public function test_non_admin_backoffice_roles_are_forbidden_from_admin_only_legacy_management_pages(): void
     {
         foreach ([
@@ -1126,8 +1285,6 @@ class PortalWebAccessTest extends TestCase
             foreach ([
                 '/backoffice/products/new',
                 '/backoffice/products/product-001/edit',
-                '/backoffice/materials',
-                '/backoffice/purchases/new',
                 '/backoffice/purchases/returns',
                 '/backoffice/receiving/purchase-001/action',
                 '/backoffice/categories/new',
@@ -1149,6 +1306,17 @@ class PortalWebAccessTest extends TestCase
                 } catch (HttpException $exception) {
                     $this->assertSame(403, $exception->getStatusCode());
                 }
+            }
+
+            try {
+                $this->withoutExceptionHandling()
+                    ->actingAs($user)
+                    ->withSession(['auth_portal' => 'pos'])
+                    ->get('/pos/materials');
+
+                $this->fail($role.' should not be able to access /pos/materials');
+            } catch (HttpException $exception) {
+                $this->assertSame(403, $exception->getStatusCode());
             }
         }
     }
@@ -1250,6 +1418,17 @@ class PortalWebAccessTest extends TestCase
             } catch (HttpException $exception) {
                 $this->assertSame(403, $exception->getStatusCode());
             }
+        }
+
+        try {
+            $this->withoutExceptionHandling()
+                ->actingAs($user)
+                ->withSession(['auth_portal' => 'pos'])
+                ->get('/pos/materials');
+
+            $this->fail('Cashier should not be able to access /pos/materials');
+        } catch (HttpException $exception) {
+            $this->assertSame(403, $exception->getStatusCode());
         }
     }
 
@@ -1371,6 +1550,93 @@ class PortalWebAccessTest extends TestCase
         }
     }
 
+    public function test_admin_on_plan_s_can_access_basic_inventory_method_page(): void
+    {
+        [$tenant, $user] = $this->createWebActor('admin', 'admin-inventory-method-plan-s@example.test');
+        DB::table('tenants')->where('id', $tenant->id)->update(['plan' => 'S']);
+
+        $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/backoffice/settings/inventory-method')
+            ->assertOk();
+    }
+
+    public function test_plan_s_finance_summary_hides_pdf_affordance(): void
+    {
+        [$tenant, $user] = $this->createWebActor('owner', 'owner-finance-summary-plan-s@example.test');
+
+        DB::table('tenants')->where('id', $tenant->id)->update(['plan' => 'S']);
+
+        $response = $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/backoffice/finance/summary');
+
+        $response->assertOk();
+        $response->assertDontSee('Unduh PDF');
+        $response->assertSee('PDF tersedia mulai paket Medium');
+        $response->assertSee('id="finance-summary-download-upgrade-profit"', false);
+    }
+
+    public function test_plan_s_backoffice_sales_report_hides_export_actions(): void
+    {
+        [$tenant, $user] = $this->createWebActor('owner', 'owner-sales-report-plan-s@example.test');
+
+        DB::table('tenants')->where('id', $tenant->id)->update(['plan' => 'S']);
+
+        $response = $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/backoffice/reports/sales');
+
+        $response->assertOk();
+        $response->assertDontSee('Ekspor CSV');
+        $response->assertDontSee('Unduh Laporan PDF/Excel');
+        $response->assertDontSee('Unduh PDF');
+        $response->assertSee('Export CSV tersedia mulai paket Medium');
+        $response->assertSee('Download PDF/Excel tersedia mulai paket Medium.');
+        $response->assertDontSee('id="report-modal"', false);
+    }
+
+    public function test_plan_s_pos_history_hides_export_action(): void
+    {
+        [$tenant, $user] = $this->createWebActor('owner', 'owner-pos-history-plan-s@example.test');
+
+        DB::table('tenants')->where('id', $tenant->id)->update(['plan' => 'S']);
+
+        $response = $this->actingAs($user)
+            ->withSession(['auth_portal' => 'pos'])
+            ->get('/pos/history');
+
+        $response->assertOk();
+        $response->assertDontSee('id="export-button"', false);
+        $response->assertSee('Export CSV tersedia mulai paket Medium');
+    }
+
+    public function test_admin_on_plan_s_basic_inventory_method_page_uses_subscription_upgrade_cta(): void
+    {
+        [$tenant, $user] = $this->createWebActor('admin', 'admin-inventory-method-upgrade-plan-s@example.test');
+        DB::table('tenants')->where('id', $tenant->id)->update(['plan' => 'S']);
+
+        $response = $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/backoffice/settings/inventory-method');
+
+        $response->assertOk();
+        $response->assertSee('/backoffice/settings/subscription/change', false);
+        $response->assertDontSee('/backoffice/settings/inventory-valuation', false);
+        $response->assertSee('Upgrade untuk Valuation Lanjutan');
+    }
+
+    public function test_admin_on_plan_s_can_access_refund_legacy_audit_page(): void
+    {
+        [$tenant, $user] = $this->createWebActor('admin', 'admin-refund-legacy-plan-s@example.test');
+        DB::table('tenants')->where('id', $tenant->id)->update(['plan' => 'S']);
+
+        $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/backoffice/settings/refund-legacy-audit')
+            ->assertOk();
+    }
+
     public function test_admin_with_past_due_subscription_is_forbidden_from_valuation_pages(): void
     {
         [$tenant, $user] = $this->createWebActor('admin', 'admin-valuation-past-due@example.test');
@@ -1416,8 +1682,185 @@ class PortalWebAccessTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('/backoffice/products', false);
-        $response->assertSee('/backoffice/inventory/products/${encodeURIComponent(productId)}/stock-card', false);
+        $response->assertSee('const productDetailPortalPrefix = "\/backoffice";', false);
+        $response->assertSee('inventory/products/${encodeURIComponent(productId)}/stock-card', false);
         $response->assertSee('const productId = "product-001"', false);
+    }
+
+    public function test_admin_can_access_pos_product_detail_wrapper(): void
+    {
+        [, $user] = $this->createWebActor('admin', 'admin-pos-product-detail@example.test');
+
+        $response = $this->actingAs($user)
+            ->withSession(['auth_portal' => 'pos'])
+            ->get('/pos/products/product-001?from=%2Fpos%2Fproducts');
+
+        $response->assertOk();
+        $response->assertSee('const productDetailPortalPrefix = "\/pos";', false);
+        $response->assertSee('inventory/products/${encodeURIComponent(productId)}/stock-card', false);
+        $response->assertSee('const productId = "product-001"', false);
+    }
+
+    public function test_plan_m_backoffice_product_detail_hides_stock_card_shortcut(): void
+    {
+        [$tenant, $user] = $this->createWebActor('admin', 'admin-product-detail-plan-m@example.test');
+
+        DB::table('tenants')->where('id', $tenant->id)->update(['plan' => 'M']);
+
+        $response = $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/backoffice/products/product-001?from=%2Fbackoffice%2Fproducts');
+
+        $response->assertOk();
+        $response->assertDontSee('Riwayat Mutasi Stok');
+        $response->assertDontSee('id="stock-history-btn"', false);
+        $response->assertDontSee('/backoffice/inventory/products/${encodeURIComponent(productId)}/stock-card', false);
+    }
+
+    public function test_plan_m_cannot_access_stock_card_web_pages(): void
+    {
+        [$tenant, $user] = $this->createWebActor('admin', 'admin-stock-card-plan-m@example.test');
+
+        DB::table('tenants')->where('id', $tenant->id)->update(['plan' => 'M']);
+
+        $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/backoffice/reports/inventory/stock-card')
+            ->assertStatus(403);
+
+        $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/backoffice/inventory/products/product-001/stock-card?from=%2Fbackoffice%2Fproducts%2Fproduct-001')
+            ->assertStatus(403);
+    }
+
+    public function test_plan_m_backoffice_reports_page_hides_stock_card_shortcuts(): void
+    {
+        [$tenant, $user] = $this->createWebActor('admin', 'admin-reports-plan-m@example.test');
+
+        DB::table('tenants')->where('id', $tenant->id)->update(['plan' => 'M']);
+
+        $response = $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/backoffice/reports');
+
+        $response->assertOk();
+        $response->assertDontSee('Audit Kartu Stok');
+        $response->assertDontSee('>Kartu Stok<', false);
+        $response->assertDontSee('/backoffice/reports/inventory/stock-card', false);
+    }
+
+    public function test_plan_s_menu_sections_hide_plan_gated_legacy_entries(): void
+    {
+        [$tenant, $user] = $this->createWebActor('owner', 'owner-menu-plan-s@example.test');
+
+        DB::table('tenants')->where('id', $tenant->id)->update(['plan' => 'S']);
+
+        $management = $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/menu/management');
+
+        $management->assertOk();
+        $management->assertSee('Supplier');
+        $management->assertDontSee('Pelanggan');
+        $management->assertDontSee('Marketing');
+        $management->assertDontSee('Diskon, Pajak, dan Biaya');
+
+        $purchases = $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/menu/purchases');
+
+        $purchases->assertOk();
+        $purchases->assertDontSee('Retur Pembelian');
+
+        $reports = $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/menu/reports');
+
+        $reports->assertOk();
+        $reports->assertSee('/reports/inventory', false);
+        $reports->assertDontSee('Kartu Stok');
+        $reports->assertDontSee('/stock-card', false);
+
+        $settings = $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/menu/settings');
+
+        $settings->assertOk();
+        $settings->assertDontSee('Manajemen Staff');
+        $settings->assertDontSee('Valuation Persediaan');
+        $settings->assertDontSee('Audit Valuation');
+        $settings->assertDontSee('Observability');
+    }
+
+    public function test_plan_s_owner_pos_dashboard_keeps_owner_shortcuts_removed(): void
+    {
+        [$tenant, $user] = $this->createWebActor('owner', 'owner-pos-plan-s-shortcuts@example.test');
+
+        DB::table('tenants')->where('id', $tenant->id)->update(['plan' => 'S']);
+
+        $response = $this->actingAs($user)
+            ->withSession(['auth_portal' => 'pos'])
+            ->get('/pos/dashboard');
+
+        $response->assertOk();
+        $response->assertDontSee('Mode Owner');
+        $response->assertDontSee('Tetap di alur POS, lalu buka alat manajemen saat diperlukan.');
+    }
+
+    public function test_plan_m_owner_pos_dashboard_keeps_owner_shortcuts_removed(): void
+    {
+        [$tenant, $user] = $this->createWebActor('owner', 'owner-pos-plan-m-shortcuts@example.test');
+
+        DB::table('tenants')->where('id', $tenant->id)->update(['plan' => 'M']);
+
+        $response = $this->actingAs($user)
+            ->withSession(['auth_portal' => 'pos'])
+            ->get('/pos/dashboard');
+
+        $response->assertOk();
+        $response->assertDontSee('Mode Owner');
+        $response->assertDontSee('Tetap di alur POS, lalu buka alat manajemen saat diperlukan.');
+    }
+
+    public function test_plan_m_menu_settings_hide_pro_only_entries_but_keep_medium_features(): void
+    {
+        [$tenant, $user] = $this->createWebActor('owner', 'owner-menu-plan-m@example.test');
+
+        DB::table('tenants')->where('id', $tenant->id)->update(['plan' => 'M']);
+
+        $settings = $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/menu/settings');
+
+        $settings->assertOk();
+        $settings->assertSee('Manajemen Staff');
+        $settings->assertSee('Pengaturan Transaksi');
+        $settings->assertDontSee('Valuation Persediaan');
+        $settings->assertDontSee('Audit Valuation');
+        $settings->assertDontSee('Observability');
+    }
+
+    public function test_plan_m_production_batch_pages_hide_observability_shortcuts(): void
+    {
+        [$tenant, $user] = $this->createWebActor('admin', 'admin-production-observability-plan-m@example.test');
+
+        DB::table('tenants')->where('id', $tenant->id)->update(['plan' => 'M']);
+
+        $list = $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/backoffice/inventory/production-batches');
+
+        $list->assertOk();
+        $list->assertDontSee('/backoffice/settings/observability', false);
+
+        $detail = $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/backoffice/inventory/production-batches/batch-001');
+
+        $detail->assertOk();
+        $detail->assertDontSee('Buka Observability');
+        $detail->assertDontSee('/backoffice/settings/observability', false);
     }
 
     public function test_admin_and_owner_can_access_product_material_and_purchase_management_pages(): void
@@ -1441,6 +1884,11 @@ class PortalWebAccessTest extends TestCase
             $this->actingAs($user)
                 ->withSession(['auth_portal' => 'backoffice'])
                 ->get('/backoffice/materials')
+                ->assertOk();
+
+            $this->actingAs($user)
+                ->withSession(['auth_portal' => 'pos'])
+                ->get('/pos/materials')
                 ->assertOk();
 
             $this->actingAs($user)
@@ -1550,6 +1998,20 @@ class PortalWebAccessTest extends TestCase
         ]);
     }
 
+    public function test_owner_can_open_pos_user_management_with_role_rules_and_csrf_header(): void
+    {
+        [, $user] = $this->createWebActor('owner', 'owner-pos-users-page@example.test');
+
+        $this->actingAs($user)
+            ->withSession(['auth_portal' => 'pos'])
+            ->get('/pos/users')
+            ->assertOk()
+            ->assertSee('Manajemen Pengguna')
+            ->assertSee('Role dan Hak Akses')
+            ->assertSee('Tambah user')
+            ->assertSee('X-CSRF-TOKEN', false);
+    }
+
     public function test_admin_can_access_backoffice_receiving_action_wrapper(): void
     {
         [, $user] = $this->createWebActor('admin', 'admin-receiving-action@example.test');
@@ -1571,7 +2033,7 @@ class PortalWebAccessTest extends TestCase
             ->get('/backoffice/receiving');
 
         $response->assertOk();
-        $response->assertSee('/backoffice/suppliers', false);
+        $response->assertSee('/backoffice/purchases', false);
         $response->assertSee('id="purchase-list"', false);
     }
 
@@ -1585,7 +2047,7 @@ class PortalWebAccessTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('/backoffice/receiving', false);
-        $response->assertSee('/backoffice/receiving/${encodeURIComponent(selectedPurchaseId)}/action', false);
+        $response->assertSee('${portalPrefix}/receiving/${encodeURIComponent(selectedPurchaseId)}/action?from=', false);
         $response->assertSee('const currentPath = "\\/backoffice\\/receiving\\/purchase-001"', false);
     }
 
@@ -1713,6 +2175,29 @@ class PortalWebAccessTest extends TestCase
         $response->assertRedirect('/backoffice/purchases/purchase-020?from=%2Fbackoffice%2Fsuppliers');
     }
 
+    public function test_legacy_pos_purchase_detail_redirects_to_canonical_receiving_route(): void
+    {
+        [, $user] = $this->createWebActor('admin', 'admin-legacy-pos-purchase@example.test');
+
+        $response = $this->actingAs($user)
+            ->withSession(['auth_portal' => 'pos'])
+            ->get('/pos/purchases/850f465e-f041-421d-b162-5b049da4de2d?from=%2Fpos%2Fpurchases');
+
+        $response->assertRedirect('/pos/receiving/850f465e-f041-421d-b162-5b049da4de2d?from=%2Fpos%2Fpurchases');
+    }
+
+    public function test_legacy_pos_purchase_returns_page_remains_accessible(): void
+    {
+        [, $user] = $this->createWebActor('admin', 'admin-legacy-pos-purchase-returns@example.test');
+
+        $response = $this->actingAs($user)
+            ->withSession(['auth_portal' => 'pos'])
+            ->get('/pos/purchases/returns');
+
+        $response->assertOk();
+        $response->assertSee('Retur Pembelian');
+    }
+
     public function test_legacy_product_detail_redirects_to_canonical_backoffice_route(): void
     {
         [, $user] = $this->createWebActor('admin', 'admin-legacy-product@example.test');
@@ -1733,6 +2218,17 @@ class PortalWebAccessTest extends TestCase
             ->get('/stock-card?product_id=product-020&from=%2Fbackoffice%2Fproducts%2Fdetail');
 
         $response->assertRedirect('/backoffice/inventory/products/product-020/stock-card?from=%2Fbackoffice%2Fproducts%2Fdetail');
+    }
+
+    public function test_legacy_stock_card_redirects_to_canonical_pos_route(): void
+    {
+        [, $user] = $this->createWebActor('admin', 'admin-legacy-pos-stock@example.test');
+
+        $response = $this->actingAs($user)
+            ->withSession(['auth_portal' => 'pos'])
+            ->get('/stock-card?product_id=product-020&from=%2Fpos%2Fproducts%2Fdetail');
+
+        $response->assertRedirect('/pos/inventory/products/product-020/stock-card?from=%2Fpos%2Fproducts%2Fdetail');
     }
 
     public function test_legacy_receiving_action_redirects_to_canonical_backoffice_route(): void
@@ -1945,6 +2441,7 @@ class PortalWebAccessTest extends TestCase
         [, $cashier] = $this->createWebActor('cashier', 'cashier-legacy-fallbacks@example.test');
 
         $backofficeCases = [
+            '/reports/inventory?from=%2Fbackoffice%2Freports' => '/backoffice/reports/inventory?from=%2Fbackoffice%2Freports',
             '/stock-card?from=%2Fbackoffice%2Freports%2Finventory' => '/backoffice/reports/inventory/stock-card?from=%2Fbackoffice%2Freports%2Finventory',
             '/products/detail?from=%2Fbackoffice%2Fproducts' => '/backoffice/products/detail?from=%2Fbackoffice%2Fproducts',
             '/receiving/action?from=%2Fbackoffice%2Freceiving' => '/backoffice/receiving/action?from=%2Fbackoffice%2Freceiving',
@@ -2044,6 +2541,31 @@ class PortalWebAccessTest extends TestCase
         $separator = str_contains($targetPath, '?') ? '&' : '?';
 
         return '/portal/switch/backoffice?next='.rawurlencode($targetPath.$separator.'from='.rawurlencode($currentPath));
+    }
+
+    private function openShiftFor(Tenant $tenant, User $user): void
+    {
+        $branchId = (string) Str::uuid();
+
+        DB::table('branches')->insert([
+            'id' => $branchId,
+            'tenant_id' => $tenant->id,
+            'name' => 'Main Branch',
+        ]);
+
+        DB::table('shifts')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $tenant->id,
+            'branch_id' => $branchId,
+            'user_id' => $user->id,
+            'opened_at' => now('UTC')->subHour(),
+            'closed_at' => null,
+            'opening_cash' => 0,
+            'closing_cash' => 0,
+            'system_cash_total' => 0,
+            'difference' => 0,
+            'status' => 'open',
+        ]);
     }
 
     private function createWebActor(string $role, string $email, string $name = 'Portal User'): array

@@ -7,14 +7,17 @@ use App\Models\InventoryBalance;
 use App\Models\Location;
 use App\Models\Product;
 use App\Models\ProductPriceTier;
-use App\Models\StockLedger;
-use App\Services\InventoryValuationService;
+use App\Services\OpeningBalancePostingService;
+use App\Services\ProductionEligibilityService;
 use App\Services\ProductItemTypeMapper;
 use App\Services\ProductItemTypeValidator;
+use App\Services\SubscriptionService;
+use App\Support\Decimal;
 use App\Support\TenantContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -42,29 +45,33 @@ class ProductController extends Controller
             return $this->indexLite($request, $tenantId);
         }
 
-        $products = Product::query()
-            ->leftJoin('categories', function ($join) {
-                $join->on('products.category_id', '=', 'categories.id')
-                    ->on('products.tenant_id', '=', 'categories.tenant_id');
-            })
-            ->select([
-                'products.id',
-                'products.sku',
-                'products.name',
-                'products.price',
-                'products.hpp_average',
-                'products.image_url',
-                'products.category_id',
-                'products.product_mode',
-                'products.production_mode',
-                'products.item_type',
-                'products.track_stock',
-                'categories.name as category_name',
-            ])
-            ->where('products.tenant_id', $tenantId)
-            ->where('products.is_active', true)
-            ->orderBy('products.name')
-            ->get();
+        $products = Cache::remember("products:index:{$tenantId}", now('UTC')->addSeconds(60), function () use ($tenantId) {
+            return Product::query()
+                ->leftJoin('categories', function ($join) {
+                    $join->on('products.category_id', '=', 'categories.id')
+                        ->on('products.tenant_id', '=', 'categories.tenant_id');
+                })
+                ->select([
+                    'products.id',
+                    'products.sku',
+                    'products.name',
+                    'products.price',
+                    'products.hpp_average',
+                    'products.unit',
+                    'products.supplier_id',
+                    'products.image_url',
+                    'products.category_id',
+                    'products.product_mode',
+                    'products.production_mode',
+                    'products.item_type',
+                    'products.track_stock',
+                    'categories.name as category_name',
+                ])
+                ->where('products.tenant_id', $tenantId)
+                ->where('products.is_active', true)
+                ->orderBy('products.name')
+                ->get();
+        });
 
         return response()->json([
             'products' => $products,
@@ -98,6 +105,7 @@ class ProductController extends Controller
                 'products.sku',
                 'products.name',
                 'products.price',
+                'products.unit',
                 'products.image_url',
                 'products.category_id',
                 'products.production_mode',
@@ -105,7 +113,15 @@ class ProductController extends Controller
                 'categories.name as category_name',
             ])
             ->where('products.tenant_id', $tenantId)
-            ->where('products.is_active', true);
+            ->where('products.is_active', true)
+            ->where(function ($query) {
+                $query->whereNull('products.item_type')
+                    ->orWhere('products.item_type', '!=', 'raw_material');
+            })
+            ->where(function ($query) {
+                $query->whereNull('products.product_mode')
+                    ->orWhere('products.product_mode', '!=', 'add_on');
+            });
 
         if ($categoryId) {
             $query->where('products.category_id', $categoryId);
@@ -189,6 +205,8 @@ class ProductController extends Controller
                 'sku' => $product->sku,
                 'name' => $product->name,
                 'price' => (float) $product->price,
+                'hpp_average' => (float) ($product->hpp_average ?? 0),
+                'unit' => $product->unit,
                 'image_url' => $product->image_url,
                 'category_id' => $product->category_id,
                 'category_name' => $product->category_name,
@@ -218,19 +236,22 @@ class ProductController extends Controller
                 'name' => ['required', 'string', 'max:150'],
                 'sku' => ['required', 'string', 'max:100'],
                 'category_id' => ['nullable', 'uuid', Rule::exists('categories', 'id')->where('tenant_id', $tenantId)],
-                'price' => ['required', 'numeric', 'min:0'],
+                'unit' => ['nullable', 'string', 'max:30'],
+                'supplier_id' => ['nullable', 'uuid', Rule::exists('suppliers', 'id')->where('tenant_id', $tenantId)],
+                'price' => ['nullable', 'numeric', 'min:0'],
                 'hpp_average' => ['nullable', 'numeric', 'min:0'],
                 'initial_stock' => ['nullable', 'numeric', 'min:0'],
                 'initial_stock_lines' => ['nullable', 'array'],
                 'initial_stock_lines.*.product_variant_id' => ['nullable', 'uuid'],
                 'initial_stock_lines.*.qty' => ['required_with:initial_stock_lines', 'numeric', 'min:0.0001'],
-                'initial_stock_lines.*.unit_cost' => ['nullable', 'numeric', 'min:0'],
+                'initial_stock_lines.*.unit_cost' => ['nullable', 'numeric', 'min:0.01'],
                 'image_url' => ['nullable', 'string', 'max:255'],
                 'image_base64' => ['nullable', 'string'],
                 'track_stock' => ['nullable', 'boolean'],
                 'product_mode' => ['nullable', Rule::in(ProductItemTypeMapper::PRODUCT_MODES)],
                 'production_mode' => ['nullable', Rule::in(Product::PRODUCTION_MODES)],
                 'item_type' => ['nullable', Rule::in(ProductItemTypeMapper::ITEM_TYPES)],
+                'recipe_output_qty' => ['nullable', 'numeric', 'min:0.0001'],
                 'variants' => ['nullable', 'array'],
                 'variants.*.id' => ['nullable', 'uuid'],
                 'variants.*.sku' => ['required_with:variants', 'string', 'max:100'],
@@ -251,13 +272,29 @@ class ProductController extends Controller
             $itemType = ProductItemTypeMapper::resolve($payload['item_type'] ?? null, $productMode);
             $trackStock = (bool) ($payload['track_stock'] ?? true);
             $productionMode = $this->resolveProductionMode($payload, $productMode, null);
+            if ($productionMode === Product::PRODUCTION_MODE_BATCH && $itemType === 'finished_good') {
+                $trackStock = true;
+            }
             $variantPayload = $this->normalizeVariantPayload($payload['variants'] ?? []);
             $requestedInitialStock = $trackStock ? (float) ($payload['initial_stock'] ?? 0) : 0.0;
             $requestedInitialStockLines = $trackStock ? ($payload['initial_stock_lines'] ?? []) : [];
 
+            if ($response = $this->ensureRecipeManagementAccess($productMode, $productionMode, $payload['bom_items'] ?? [])) {
+                return $response;
+            }
+
             ProductItemTypeValidator::assertModeItemTypeValid($productMode, $itemType);
             ProductItemTypeValidator::assertServiceTrackStockValid($itemType, $trackStock);
             ProductItemTypeValidator::assertProductionModeValid($productionMode, $itemType, $trackStock);
+
+            $price = (float) ($payload['price'] ?? 0);
+            if ($itemType !== 'raw_material' && $price <= 0) {
+                return response()->json(['message' => 'Harga jual harus lebih dari 0.'], 422);
+            }
+
+            if ($itemType === 'raw_material') {
+                $price = max(0.0, $price);
+            }
 
             if ($this->requiresRecipeValidation($productMode, $productionMode)) {
                 ProductItemTypeValidator::assertBomComponentsValid($tenantId, $payload['bom_items'] ?? []);
@@ -274,14 +311,16 @@ class ProductController extends Controller
                 $imageUrl = $this->storeBase64Image($payload['image_base64']);
             }
 
-            $product = DB::transaction(function () use ($payload, $tenantId, $location, $now, $request, $imageUrl, $trackStock, $productMode, $productionMode, $itemType, $variantPayload, $requestedInitialStock, $requestedInitialStockLines) {
+            $product = DB::transaction(function () use ($payload, $tenantId, $location, $now, $request, $imageUrl, $trackStock, $productMode, $productionMode, $itemType, $variantPayload, $requestedInitialStock, $requestedInitialStockLines, $price) {
                 $product = Product::query()->create([
                     'tenant_id' => $tenantId,
                     'category_id' => $payload['category_id'] ?? null,
                     'sku' => $payload['sku'],
                     'name' => $payload['name'],
-                    'price' => (float) $payload['price'],
+                    'price' => $price,
                     'hpp_average' => (float) ($payload['hpp_average'] ?? 0),
+                    'unit' => $payload['unit'] ?? null,
+                    'supplier_id' => $payload['supplier_id'] ?? null,
                     'image_url' => $imageUrl,
                     'is_active' => true,
                     'track_stock' => $trackStock,
@@ -289,6 +328,7 @@ class ProductController extends Controller
                     'production_mode' => $productionMode,
                     'item_type' => $itemType,
                     'bom_items' => json_encode($payload['bom_items'] ?? []),
+                    'recipe_output_qty' => isset($payload['recipe_output_qty']) ? $this->normalizeRecipeOutputQty($payload['recipe_output_qty']) : null,
                     'bundle_items' => json_encode($payload['bundle_items'] ?? []),
                     'variants' => json_encode($variantPayload),
                     'created_by' => $request->user()?->id,
@@ -327,18 +367,24 @@ class ProductController extends Controller
                 }
 
                 if ($location && ! empty($initialStockReceipts)) {
-                    $this->postInitialStockReceipts(
+                    app(OpeningBalancePostingService::class)->postInventoryOnlyOpening(
                         tenantId: $tenantId,
-                        productId: (string) $product->id,
+                        openingDate: $now->toDateString(),
                         locationId: (string) $location->id,
+                        productId: (string) $product->id,
                         receipts: $initialStockReceipts,
-                        now: $now,
-                        actorUserId: $request->user()?->id
+                        actorId: $request->user()?->id,
+                        context: [
+                            'source' => 'product_initial_stock',
+                            'reference_note' => 'Initial stock from product create',
+                        ]
                     );
                 }
 
                 return $product;
             });
+
+            $this->forgetProductLookupCaches($tenantId);
 
             return response()->json([
                 'product' => $product,
@@ -364,20 +410,30 @@ class ProductController extends Controller
                 $join->on('products.category_id', '=', 'categories.id')
                     ->on('products.tenant_id', '=', 'categories.tenant_id');
             })
+            ->leftJoin('suppliers', function ($join) {
+                $join->on('products.supplier_id', '=', 'suppliers.id')
+                    ->on('products.tenant_id', '=', 'suppliers.tenant_id');
+            })
             ->select([
                 'products.id',
                 'products.sku',
                 'products.name',
                 'products.price',
                 'products.hpp_average',
+                'products.min_stock',
+                'products.unit',
+                'products.supplier_id',
+                'products.legacy_material_id',
                 'products.image_url',
                 'products.category_id',
                 'products.product_mode',
                 'products.production_mode',
                 'products.item_type',
                 'products.bom_items',
+                'products.recipe_output_qty',
                 'products.track_stock',
                 'categories.name as category_name',
+                'suppliers.name as supplier_name',
             ])
             ->where('products.tenant_id', $tenantId)
             ->where('products.id', $product)
@@ -421,8 +477,39 @@ class ProductController extends Controller
 
         $productPayload = $productRow->toArray();
         $productPayload['bom_items'] = $bomItems;
+        $productPayload['recipe_output_qty'] = $productRow->recipe_output_qty !== null
+            ? $this->normalizeRecipeOutputQty($productRow->recipe_output_qty)
+            : null;
         $productPayload['product_variants'] = $productVariants;
         $productPayload['has_variants'] = $productVariants->isNotEmpty();
+        $productPayload['production_batch_eligibility'] = app(ProductionEligibilityService::class)
+            ->summarizeBatchEligibility($tenantId, $productPayload);
+        $productPayload['production_batch_eligible'] = (bool) ($productPayload['production_batch_eligibility']['eligible'] ?? false);
+        $productPayload['product_location_balances'] = InventoryBalance::query()
+            ->leftJoin('locations', function ($join) {
+                $join->on('inventory_balances.location_id', '=', 'locations.id')
+                    ->on('inventory_balances.tenant_id', '=', 'locations.tenant_id');
+            })
+            ->where('inventory_balances.tenant_id', $tenantId)
+            ->where('inventory_balances.product_id', $product)
+            ->orderByDesc('inventory_balances.qty_on_hand')
+            ->orderBy('locations.name')
+            ->get([
+                'inventory_balances.location_id as id',
+                'locations.branch_id',
+                'locations.name',
+                'locations.is_default',
+                'inventory_balances.qty_on_hand',
+            ])
+            ->map(fn ($balance) => [
+                'id' => $balance->id,
+                'branch_id' => $balance->branch_id,
+                'name' => $balance->name,
+                'is_default' => (bool) $balance->is_default,
+                'qty_on_hand' => (float) $balance->qty_on_hand,
+            ])
+            ->values()
+            ->all();
 
         return response()->json([
             'product' => $productPayload,
@@ -447,6 +534,11 @@ class ProductController extends Controller
         return '/storage/'.$path;
     }
 
+    private function normalizeRecipeOutputQty(mixed $value): float
+    {
+        return Decimal::float(Decimal::snappedQty($value), Decimal::QTY_SCALE);
+    }
+
     public function update(Request $request, string $product)
     {
         $tenantId = TenantContext::id();
@@ -459,18 +551,21 @@ class ProductController extends Controller
                 'name' => ['required', 'string', 'max:150'],
                 'sku' => ['required', 'string', 'max:100'],
                 'category_id' => ['nullable', 'uuid', Rule::exists('categories', 'id')->where('tenant_id', $tenantId)],
-                'price' => ['required', 'numeric', 'min:0'],
+                'unit' => ['nullable', 'string', 'max:30'],
+                'supplier_id' => ['nullable', 'uuid', Rule::exists('suppliers', 'id')->where('tenant_id', $tenantId)],
+                'price' => ['nullable', 'numeric', 'min:0'],
                 'hpp_average' => ['nullable', 'numeric', 'min:0'],
                 'initial_stock' => ['nullable', 'numeric', 'min:0'],
                 'initial_stock_lines' => ['nullable', 'array'],
                 'initial_stock_lines.*.product_variant_id' => ['nullable', 'uuid', Rule::exists('product_variants', 'id')->where('tenant_id', $tenantId)],
                 'initial_stock_lines.*.qty' => ['required_with:initial_stock_lines', 'numeric', 'min:0.0001'],
-                'initial_stock_lines.*.unit_cost' => ['nullable', 'numeric', 'min:0'],
+                'initial_stock_lines.*.unit_cost' => ['nullable', 'numeric', 'min:0.01'],
                 'is_active' => ['nullable', Rule::in([true, false])],
                 'track_stock' => ['nullable', 'boolean'],
                 'product_mode' => ['nullable', Rule::in(ProductItemTypeMapper::PRODUCT_MODES)],
                 'production_mode' => ['nullable', Rule::in(Product::PRODUCTION_MODES)],
                 'item_type' => ['nullable', Rule::in(ProductItemTypeMapper::ITEM_TYPES)],
+                'recipe_output_qty' => ['nullable', 'numeric', 'min:0.0001'],
                 'variants' => ['nullable', 'array'],
                 'variants.*.id' => ['nullable', 'uuid'],
                 'variants.*.sku' => ['required_with:variants', 'string', 'max:100'],
@@ -492,15 +587,35 @@ class ProductController extends Controller
             $itemType = ProductItemTypeMapper::resolve($payload['item_type'] ?? null, $productMode);
             $trackStock = (bool) ($payload['track_stock'] ?? $productRow->track_stock);
             $productionMode = $this->resolveProductionMode($payload, $productMode, (string) ($productRow->production_mode ?? Product::PRODUCTION_MODE_NONE));
+            if ($productionMode === Product::PRODUCTION_MODE_BATCH && $itemType === 'finished_good') {
+                $trackStock = true;
+            }
             $variantPayload = array_key_exists('variants', $payload)
                 ? $this->normalizeVariantPayload($payload['variants'] ?? [])
                 : null;
             $requestedInitialStock = $trackStock ? (float) ($payload['initial_stock'] ?? 0) : 0.0;
             $requestedInitialStockLines = $trackStock ? ($payload['initial_stock_lines'] ?? []) : [];
+            $effectiveBomItems = array_key_exists('bom_items', $payload)
+                ? ($payload['bom_items'] ?? [])
+                : $this->decodeBomItems($productRow->bom_items);
+
+            if ($response = $this->ensureRecipeManagementAccess($productMode, $productionMode, $effectiveBomItems)) {
+                return $response;
+            }
 
             ProductItemTypeValidator::assertModeItemTypeValid($productMode, $itemType);
             ProductItemTypeValidator::assertServiceTrackStockValid($itemType, $trackStock);
             ProductItemTypeValidator::assertProductionModeValid($productionMode, $itemType, $trackStock);
+            ProductItemTypeValidator::assertNotProducedForAutoConsume($tenantId, $product, $productionMode);
+
+            $price = (float) ($payload['price'] ?? $productRow->price ?? 0);
+            if ($itemType !== 'raw_material' && $price <= 0) {
+                return response()->json(['message' => 'Harga harus lebih dari 0.'], 422);
+            }
+
+            if ($itemType === 'raw_material') {
+                $price = max(0.0, $price);
+            }
 
             if ($this->requiresRecipeValidation($productMode, $productionMode)) {
                 ProductItemTypeValidator::assertBomComponentsValid($tenantId, $payload['bom_items'] ?? []);
@@ -511,21 +626,26 @@ class ProductController extends Controller
                 return response()->json(['message' => 'Lokasi stok tidak ditemukan.'], 422);
             }
 
-            $responseProduct = DB::transaction(function () use ($payload, $productRow, $tenantId, $request, $trackStock, $productMode, $productionMode, $itemType, $variantPayload, $requestedInitialStock, $requestedInitialStockLines, $location) {
+            $responseProduct = DB::transaction(function () use ($payload, $productRow, $tenantId, $request, $trackStock, $productMode, $productionMode, $itemType, $variantPayload, $requestedInitialStock, $requestedInitialStockLines, $location, $price) {
                 $now = CarbonImmutable::now('UTC');
 
                 $productRow->update([
                     'name' => $payload['name'],
                     'sku' => $payload['sku'],
                     'category_id' => $payload['category_id'] ?? null,
-                    'price' => (float) $payload['price'],
+                    'price' => $price,
                     'hpp_average' => (float) ($payload['hpp_average'] ?? $productRow->hpp_average ?? 0),
+                    'unit' => array_key_exists('unit', $payload) ? $payload['unit'] : $productRow->unit,
+                    'supplier_id' => array_key_exists('supplier_id', $payload) ? $payload['supplier_id'] : $productRow->supplier_id,
                     'is_active' => $payload['is_active'] ?? $productRow->is_active,
                     'track_stock' => $trackStock,
                     'product_mode' => $productMode,
                     'production_mode' => $productionMode,
                     'item_type' => $itemType,
                     'bom_items' => array_key_exists('bom_items', $payload) ? json_encode($payload['bom_items'] ?? []) : $productRow->bom_items,
+                    'recipe_output_qty' => array_key_exists('recipe_output_qty', $payload)
+                        ? $this->normalizeRecipeOutputQty($payload['recipe_output_qty'])
+                        : $productRow->recipe_output_qty,
                     'variants' => $variantPayload !== null ? json_encode($variantPayload) : $productRow->variants,
                     'updated_by' => $request->user()?->id,
                 ]);
@@ -544,18 +664,24 @@ class ProductController extends Controller
                 );
 
                 if ($location && ! empty($initialStockReceipts)) {
-                    $this->postInitialStockReceipts(
+                    app(OpeningBalancePostingService::class)->postInventoryOnlyOpening(
                         tenantId: $tenantId,
-                        productId: (string) $productRow->id,
+                        openingDate: $now->toDateString(),
                         locationId: (string) $location->id,
+                        productId: (string) $productRow->id,
                         receipts: $initialStockReceipts,
-                        now: $now,
-                        actorUserId: $request->user()?->id
+                        actorId: $request->user()?->id,
+                        context: [
+                            'source' => 'product_initial_stock_update',
+                            'reference_note' => 'Initial stock from product update',
+                        ]
                     );
                 }
 
                 return $productRow->fresh();
             });
+
+            $this->forgetProductLookupCaches($tenantId);
 
             return response()->json([
                 'product' => $responseProduct,
@@ -604,6 +730,52 @@ class ProductController extends Controller
                 Product::PRODUCTION_MODE_AUTO_CONSUME_ON_SELL,
                 Product::PRODUCTION_MODE_BATCH,
             ], true);
+    }
+
+    private function ensureRecipeManagementAccess(string $productMode, string $productionMode, array $bomItems)
+    {
+        if (! $this->usesRecipeOrProduction($productMode, $productionMode, $bomItems)) {
+            return null;
+        }
+
+        $tenant = TenantContext::get();
+        if ($tenant && app(SubscriptionService::class)->canAccessFeature($tenant, 'product.recipe_management')) {
+            return null;
+        }
+
+        return response()->json([
+            'code' => 'FEATURE_NOT_ALLOWED',
+            'message' => 'Fitur resep dan produksi hanya tersedia mulai paket Medium.',
+            'details' => [
+                'feature' => 'product.recipe_management',
+                'required_plan' => 'M',
+            ],
+        ], 403);
+    }
+
+    private function usesRecipeOrProduction(string $productMode, string $productionMode, array $bomItems): bool
+    {
+        return $productMode === 'bom'
+            || ! empty($bomItems)
+            || in_array($productionMode, [
+                Product::PRODUCTION_MODE_AUTO_CONSUME_ON_SELL,
+                Product::PRODUCTION_MODE_BATCH,
+            ], true);
+    }
+
+    private function decodeBomItems(mixed $bomItems): array
+    {
+        if (is_array($bomItems)) {
+            return $bomItems;
+        }
+
+        if (is_string($bomItems)) {
+            $decoded = json_decode($bomItems, true);
+
+            return is_array($decoded) ? $decoded : [];
+        }
+
+        return [];
     }
 
     private function normalizeVariantPayload(array $variants): array
@@ -749,6 +921,12 @@ class ProductController extends Controller
                 }
             }
 
+            if ($scalarInitialStock > 0 && $fallbackUnitCost <= 0) {
+                throw ValidationException::withMessages([
+                    'hpp_average' => 'Unit cost opening stock wajib lebih dari 0 saat qty stok awal diisi.',
+                ]);
+            }
+
             return $scalarInitialStock > 0
                 ? [[
                     'reference_item_id' => null,
@@ -787,114 +965,26 @@ class ProductController extends Controller
                 continue;
             }
 
+            $resolvedUnitCost = array_key_exists('unit_cost', $line) && $line['unit_cost'] !== null
+                ? (float) $line['unit_cost']
+                : $fallbackUnitCost;
+
+            if ($resolvedUnitCost <= 0) {
+                throw ValidationException::withMessages([
+                    "initial_stock_lines.$index.unit_cost" => 'Unit cost opening stock wajib lebih dari 0 saat qty stok awal diisi.',
+                ]);
+            }
+
             $seenVariantIds[$variantId] = true;
             $receipts[] = [
                 'reference_item_id' => $variantId,
                 'product_variant_id' => $variantId,
                 'qty' => $qty,
-                'unit_cost' => array_key_exists('unit_cost', $line) && $line['unit_cost'] !== null
-                    ? (float) $line['unit_cost']
-                    : $fallbackUnitCost,
+                'unit_cost' => $resolvedUnitCost,
             ];
         }
 
         return $receipts;
-    }
-
-    private function postInitialStockReceipts(
-        string $tenantId,
-        string $productId,
-        string $locationId,
-        array $receipts,
-        CarbonImmutable $now,
-        ?string $actorUserId
-    ): void {
-        $valuationService = app(InventoryValuationService::class);
-        $ledgerRows = [];
-
-        foreach ($receipts as $receipt) {
-            $variantId = $receipt['product_variant_id'] ?? null;
-            $qty = (float) ($receipt['qty'] ?? 0);
-
-            if ($qty <= 0) {
-                continue;
-            }
-
-            $this->ensureInventoryBalanceBucket($tenantId, $productId, $variantId, $locationId);
-            $this->incrementInventoryBalance($tenantId, $productId, $variantId, $locationId, $qty);
-
-            $balanceAfter = (float) $this->inventoryBalanceQuery($tenantId, $productId, $variantId, $locationId)
-                ->value('qty_on_hand');
-
-            $ledgerRows[] = [
-                'id' => (string) Str::uuid(),
-                'tenant_id' => $tenantId,
-                'product_id' => $productId,
-                'product_variant_id' => $variantId,
-                'location_id' => $locationId,
-                'reference_type' => 'initial_stock',
-                'reference_id' => $productId,
-                'reference_item_id' => $receipt['reference_item_id'] ?? null,
-                'qty_in' => $qty,
-                'qty_out' => 0,
-                'balance_after' => $balanceAfter,
-                'created_at' => $now,
-                'created_by' => $actorUserId,
-            ];
-
-            $valuationService->receive(
-                tenantId: $tenantId,
-                productId: $productId,
-                productVariantId: $variantId,
-                locationId: $locationId,
-                qty: $qty,
-                unitCost: (float) ($receipt['unit_cost'] ?? 0),
-                sourceType: 'initial_stock',
-                sourceId: $productId,
-                sourceItemId: null,
-                at: $now
-            );
-        }
-
-        if (! empty($ledgerRows)) {
-            StockLedger::query()->insert($ledgerRows);
-        }
-    }
-
-    private function ensureInventoryBalanceBucket(string $tenantId, string $productId, ?string $productVariantId, string $locationId): void
-    {
-        InventoryBalance::query()->firstOrCreate(
-            [
-                'tenant_id' => $tenantId,
-                'product_id' => $productId,
-                'product_variant_id' => $productVariantId,
-                'location_id' => $locationId,
-            ],
-            [
-                'qty_on_hand' => 0,
-            ]
-        );
-    }
-
-    private function incrementInventoryBalance(string $tenantId, string $productId, ?string $productVariantId, string $locationId, float $qty): void
-    {
-        $this->inventoryBalanceQuery($tenantId, $productId, $productVariantId, $locationId)
-            ->update([
-                'qty_on_hand' => DB::raw('qty_on_hand + '.(float) $qty),
-            ]);
-    }
-
-    private function inventoryBalanceQuery(string $tenantId, string $productId, ?string $productVariantId, string $locationId)
-    {
-        return InventoryBalance::query()
-            ->where('tenant_id', $tenantId)
-            ->where('product_id', $productId)
-            ->where('location_id', $locationId)
-            ->when($productVariantId, function ($query) use ($productVariantId) {
-                $query->where('product_variant_id', $productVariantId);
-            }, function ($query) {
-                $query->whereNull('product_variant_id');
-            });
     }
 
     public function destroy(Request $request, string $product)
@@ -916,8 +1006,17 @@ class ProductController extends Controller
 
         $productRow->delete();
 
+        $this->forgetProductLookupCaches($tenantId);
+
         return response()->json([
             'message' => 'Produk berhasil dihapus.',
         ]);
+    }
+
+    private function forgetProductLookupCaches(string $tenantId): void
+    {
+        Cache::forget("products:index:{$tenantId}");
+        Cache::forget("categories:index:{$tenantId}");
+        Cache::forget("inventory-alerts:index:{$tenantId}");
     }
 }

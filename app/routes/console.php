@@ -14,6 +14,8 @@ use App\Services\PurchaseHistoryBackfillService;
 use App\Services\ValuationRebuildStateService;
 use App\Services\ValuationComparisonExportService;
 use App\Services\ValuationAuditService;
+use App\Services\PurchaseJournalRepairService;
+use App\Services\ShiftLifecycleService;
 use App\Jobs\MonitorQueueHealthJob;
 use App\Jobs\ReconcileDailySalesJob;
 use App\Jobs\ReconcileInventorySummaryJob;
@@ -25,6 +27,7 @@ use App\Jobs\DetectInvalidTransactionDateSpikeJob;
 use App\Jobs\DetectValuationDriftJob;
 use App\Jobs\DetectSupplierDebtDueJob;
 use App\Jobs\DetectInventoryInvariantJob;
+use App\Jobs\RunFinancialConsistencyAuditJob;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
@@ -354,6 +357,36 @@ Artisan::command('valuation:backfill-purchase-layer-source-items {--tenant_id=} 
     }
 })->purpose('Audit and optionally backfill legacy purchase inventory_layers.source_item_id without guessing ambiguous history');
 
+Artisan::command('purchase:repair-journals {--tenant_id=} {--from=} {--to=} {--limit=1000} {--confirm=}', function () {
+    $tenantId = trim((string) $this->option('tenant_id'));
+    $from = trim((string) $this->option('from'));
+    $to = trim((string) $this->option('to'));
+    $limit = max(1, (int) $this->option('limit'));
+    $confirm = trim((string) $this->option('confirm'));
+    $service = app(PurchaseJournalRepairService::class);
+
+    $scope = $tenantId !== '' ? $tenantId : 'ALL';
+    $audit = $service->audit($tenantId !== '' ? $tenantId : null, $from !== '' ? $from : null, $to !== '' ? $to : null, $limit);
+
+    $this->info('Purchase journal repair scope: '.$scope);
+    $this->line('purchase_rows: '.$audit['summary']['total']);
+    $this->line('cash_mismatch_rows: '.$audit['summary']['cash_mismatch']);
+    $this->line('tempo_mismatch_rows: '.$audit['summary']['tempo_mismatch']);
+    $this->line('missing_journal_rows: '.$audit['summary']['missing_journal']);
+    $this->line('missing_cash_account_rows: '.$audit['summary']['missing_cash_account']);
+    $this->line('repairable_rows: '.$audit['summary']['repairable']);
+
+    if ($confirm !== 'REPAIR_ACK') {
+        $this->warn('Dry run only. Tambahkan --confirm=REPAIR_ACK untuk apply repair jurnal purchase historis.');
+        return;
+    }
+
+    $result = $service->repair($tenantId !== '' ? $tenantId : null, $from !== '' ? $from : null, $to !== '' ? $to : null, $limit, true);
+
+    $this->info('Updated rows: '.$result['updated']);
+    $this->line('Skipped rows: '.$result['skipped']);
+})->purpose('Audit and repair purchase journal credits so cash purchases credit cash and tempo purchases credit payable');
+
 Artisan::command('inventory:rebuild-valuation {--tenant_id=} {--confirm=}', function () {
     $tenantId = (string) $this->option('tenant_id');
     $confirm = (string) $this->option('confirm');
@@ -667,7 +700,18 @@ Artisan::command('inventory:prune-valuation-cache {--hours=168}', function () {
     $this->info('Deleted valuation cache keys: '.$deleted);
 })->purpose('Prune stale valuation async/idempotency cache keys from database cache store');
 
+Artisan::command('shifts:auto-close-overnight', function () {
+    $service = app(ShiftLifecycleService::class);
+
+    Tenant::query()->orderBy('name')->get()->each(function (Tenant $tenant) use ($service): void {
+        $service->autoCloseExpiredOpenShifts($tenant);
+    });
+
+    $this->info('Overnight shift auto-close scan completed.');
+})->purpose('Auto-close shifts that passed local midnight and mark them for next-day cash reconciliation');
+
 Schedule::job(new MonitorQueueHealthJob())->everyMinute();
+Schedule::command('shifts:auto-close-overnight')->everyTenMinutes()->withoutOverlapping()->runInBackground();
 Schedule::job(new ReconcileDailySalesJob())->dailyAt('00:30');
 Schedule::job(new ReconcileInventorySummaryJob())->weeklyOn(1, '01:00');
 Schedule::job(new DetectVoidSpikeJob())->hourly();
@@ -680,3 +724,7 @@ Schedule::job(new DetectInventoryInvariantJob())->hourly();
 Schedule::job(new DetectSupplierDebtDueJob())->dailyAt('08:00');
 Schedule::command('inventory:prune-valuation-reports')->dailyAt('02:15');
 Schedule::command('inventory:prune-valuation-cache')->dailyAt('02:25');
+Schedule::command('system-health:scan-sales-cost')->dailyAt('01:15')->withoutOverlapping()->runInBackground();
+Schedule::command('system-health:scan-report-consistency')->dailyAt('01:45')->withoutOverlapping()->runInBackground();
+Schedule::job(new RunFinancialConsistencyAuditJob())->dailyAt('03:10')->withoutOverlapping();
+Schedule::command('system-health:notify-open-critical')->everyThirtyMinutes()->withoutOverlapping()->runInBackground();

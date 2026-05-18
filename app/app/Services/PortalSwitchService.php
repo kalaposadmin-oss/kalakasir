@@ -37,7 +37,7 @@ class PortalSwitchService
         $targetPath = $this->portalResolver->sanitizeNextPath(
             (string) $request->query('next', ''),
             $portal,
-            $this->portalDashboard($portal)
+            $this->portalDashboard($portal, $user)
         );
 
         return $this->portalResolver->portalUrl($portal, $targetPath, $request);
@@ -92,8 +92,8 @@ class PortalSwitchService
         return null;
     }
 
-    private function portalDashboard(string $portal): string
+    private function portalDashboard(string $portal, ?User $user = null): string
     {
-        return $portal === 'backoffice' ? '/backoffice/dashboard' : '/pos/dashboard';
+        return $portal === 'backoffice' ? '/backoffice/dashboard' : pos_default_url($user);
     }
 }

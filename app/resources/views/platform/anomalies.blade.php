@@ -4,6 +4,9 @@
     $pageTitle = 'Anomalies';
     $active = 'anomalies';
     $anomalies = $anomalies ?? [];
+    $filters = $filters ?? [];
+    $page = (int) ($page ?? 1);
+    $lastPage = (int) ($lastPage ?? 1);
 @endphp
 
 @section('platform_content')
@@ -12,21 +15,30 @@
             <h1 class="text-2xl font-bold text-slate-900">Anomalies</h1>
             <p class="mt-1 text-sm text-slate-500">Deteksi data tidak normal dan tindak lanjut.</p>
         </div>
-        <div class="flex flex-wrap items-center gap-2">
-            <button class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600">Export CSV</button>
-            <button class="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white shadow-sm">Bulk Resolve</button>
-        </div>
+        <a href="/superadmin/system-health" class="inline-flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50">
+            <span class="material-symbols-outlined text-[18px]">monitoring</span>
+            System health
+        </a>
     </div>
 
-    <div class="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4">
-        <div class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
-            <span class="material-symbols-outlined text-[18px]">search</span>
-            <span>Cari reference atau tenant</span>
+    <form method="GET" action="/superadmin/anomalies" class="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm lg:grid-cols-[repeat(3,minmax(0,0.9fr))_auto]">
+        <input name="tenant_id" value="{{ $filters['tenant_id'] ?? '' }}" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700" placeholder="Tenant ID" />
+        <select name="severity" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+            <option value="">Semua severity</option>
+            @foreach (['critical', 'high', 'medium', 'low'] as $severity)
+                <option value="{{ $severity }}" @selected(($filters['severity'] ?? '') === $severity)>{{ ucfirst($severity) }}</option>
+            @endforeach
+        </select>
+        <select name="resolved" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+            <option value="">Semua status</option>
+            <option value="false" @selected(($filters['resolved'] ?? '') === 'false')>Open</option>
+            <option value="true" @selected(($filters['resolved'] ?? '') === 'true')>Resolved</option>
+        </select>
+        <div class="flex items-center gap-2">
+            <button class="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white" type="submit">Filter</button>
+            <a href="/superadmin/anomalies" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600">Reset</a>
         </div>
-        <div class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">Severity: High</div>
-        <div class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">Resolved: No</div>
-        <button class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600">Reset</button>
-    </div>
+    </form>
 
     <section class="rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div class="flex items-center justify-between border-b border-slate-100 px-6 py-4">
@@ -34,7 +46,7 @@
                 <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Anomaly List</p>
                 <h3 class="text-sm font-bold text-slate-900">{{ number_format((int) ($total ?? 0)) }} anomaly ditemukan</h3>
             </div>
-            <button class="text-xs font-semibold text-primary">Lihat semua</button>
+            <span class="text-xs font-semibold text-slate-500">Live data</span>
         </div>
         <div class="overflow-x-auto">
             <table class="min-w-full text-left text-sm">
@@ -81,9 +93,8 @@
                 </tbody>
             </table>
         </div>
+        @include('platform.partials.pagination')
     </section>
-
-    @include('platform.partials.states')
 
     <div id="anomaly-resolve-modal" class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-900/20 px-4">
         <div class="pointer-events-auto w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\AccountMapping;
 use App\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -86,6 +87,72 @@ class PurchaseTenantValidationTest extends TestCase
             ]);
 
         $this->assertValidationErrorKey($response, 'items.0.product_id');
+    }
+
+    public function test_store_purchase_persists_mapped_cash_account_for_tunai_payment(): void
+    {
+        [$tenant, $user] = $this->bootApiActor('admin', 'admin+purchase-cash-account@example.test');
+        $fixture = $this->seedCheckoutFixture($tenant->id, $user->id);
+        $supplierId = $this->insertSupplier($tenant->id, 'Supplier Tunai');
+
+        $cashAccountId = (string) DB::table('chart_of_accounts')
+            ->where('tenant_id', $tenant->id)
+            ->where('type', 'asset')
+            ->orderBy('code')
+            ->value('id');
+
+        $this->assertNotSame('', $cashAccountId);
+
+        $journalEntryId = (string) Str::uuid();
+        $postedAt = now('UTC');
+        DB::table('journal_entries')->insert([
+            'id' => $journalEntryId,
+            'tenant_id' => $tenant->id,
+            'reference_type' => 'cash_seed',
+            'reference_id' => (string) Str::uuid(),
+            'date' => '2026-02-27',
+            'description' => 'Seed saldo kas pembelian',
+            'status' => 'posted',
+            'posted_at' => $postedAt,
+            'created_by' => $user->id,
+            'created_at' => $postedAt,
+        ]);
+
+        DB::table('journal_items')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $tenant->id,
+            'journal_entry_id' => $journalEntryId,
+            'account_id' => $cashAccountId,
+            'debit' => 10000000,
+            'credit' => 0,
+            'is_reversal' => false,
+        ]);
+
+        $response = $this->withHeaders($this->tenantHeaders($tenant->id))
+            ->postJson('/api/v1/purchases', [
+                'supplier_id' => $supplierId,
+                'location_id' => $fixture['location_id'],
+                'payment_method' => 'tunai',
+                'cash_account_id' => $cashAccountId,
+                'items' => [
+                    [
+                        'product_id' => $fixture['product_id'],
+                        'qty' => 1,
+                        'price' => 10000,
+                    ],
+                ],
+            ]);
+
+        $response->assertCreated();
+
+        $purchaseId = (string) $response->json('purchase_id');
+
+        $this->assertDatabaseHas('purchases', [
+            'id' => $purchaseId,
+            'tenant_id' => $tenant->id,
+            'payment_method' => 'tunai',
+            'cash_account_id' => $cashAccountId,
+        ]);
     }
 
     public function test_receive_purchase_rejects_product_from_other_tenant(): void

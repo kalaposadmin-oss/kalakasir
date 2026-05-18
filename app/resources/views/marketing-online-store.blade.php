@@ -22,6 +22,21 @@
     abort_unless(in_array($marketingOnlineStoreRole, ['warehouse', 'supervisor', 'admin', 'owner', 'superadmin'], true), 403);
 
     $canManageOnlineStore = in_array($marketingOnlineStoreRole, ['admin', 'owner', 'superadmin'], true);
+    $marketingOnlineStoreTodayOrders = 0;
+    $marketingOnlineStoreProductCount = 0;
+
+    if ($marketingOnlineStoreTenant) {
+        $marketingOnlineStoreTimezone = $marketingOnlineStoreTenant->timezone ?: config('app.timezone', 'Asia/Jakarta');
+        $marketingOnlineStoreStart = now($marketingOnlineStoreTimezone)->startOfDay()->utc();
+        $marketingOnlineStoreEnd = now($marketingOnlineStoreTimezone)->endOfDay()->utc();
+        $marketingOnlineStoreTodayOrders = \App\Models\OnlineOrder::query()
+            ->where('tenant_id', $marketingOnlineStoreTenant->id)
+            ->whereBetween('created_at', [$marketingOnlineStoreStart, $marketingOnlineStoreEnd])
+            ->count();
+        $marketingOnlineStoreProductCount = \App\Models\Product::query()
+            ->where('tenant_id', $marketingOnlineStoreTenant->id)
+            ->count();
+    }
 @endphp
 
 @section('page_title', 'Integrasi Toko Online - POS SaaS')
@@ -43,55 +58,29 @@
         <section class="grid grid-cols-1 gap-4 md:grid-cols-3">
             <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                 <p class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Order Online Hari Ini</p>
-                <p id="online-kpi-orders" class="mt-2 text-3xl font-bold text-primary">0</p>
+                <p class="mt-2 text-3xl font-bold text-primary">{{ number_format($marketingOnlineStoreTodayOrders, 0, ',', '.') }}</p>
             </div>
             <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                <p class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Produk Tersinkron</p>
-                <p id="online-kpi-products" class="mt-2 text-3xl font-bold text-slate-900 dark:text-white">0 SKU</p>
+                <p class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Produk Toko</p>
+                <p class="mt-2 text-3xl font-bold text-slate-900 dark:text-white">{{ number_format($marketingOnlineStoreProductCount, 0, ',', '.') }} SKU</p>
             </div>
             <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                 <p class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Aksi</p>
                 @if ($canManageOnlineStore)
-                    <button class="mt-2 rounded-lg bg-primary px-4 py-2 text-xs font-bold text-white">Sinkron Sekarang</button>
+                    <button class="mt-2 rounded-lg bg-slate-200 px-4 py-2 text-xs font-bold text-slate-500 dark:bg-slate-800 dark:text-slate-400" type="button" disabled>Integrasi belum aktif</button>
                 @endif
             </div>
         </section>
 
         <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div class="mb-4 flex items-center justify-between">
-                <h3 class="text-sm font-bold text-slate-900 dark:text-white">Saluran Penjualan Terhubung</h3>
+                <h3 class="text-sm font-bold text-slate-900 dark:text-white">Saluran Penjualan</h3>
                 @if ($canManageOnlineStore)
-                    <button class="text-xs font-bold text-primary hover:underline">+ Tambah Saluran</button>
+                    <button class="text-xs font-bold text-slate-400" type="button" disabled>Tambah Saluran</button>
                 @endif
             </div>
-            <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
-                <div class="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
-                    <p class="font-bold">Shopee Indonesia</p>
-                    <p class="mt-1 text-xs text-emerald-600">Terhubung</p>
-                    @if ($canManageOnlineStore)
-                        <div class="mt-3 flex gap-2">
-                            <button class="rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-semibold dark:border-slate-700">Konfigurasi</button>
-                            <button class="rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-semibold dark:border-slate-700">Mapping</button>
-                        </div>
-                    @endif
-                </div>
-                <div class="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
-                    <p class="font-bold">Tokopedia</p>
-                    <p class="mt-1 text-xs text-emerald-600">Terhubung</p>
-                    @if ($canManageOnlineStore)
-                        <div class="mt-3 flex gap-2">
-                            <button class="rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-semibold dark:border-slate-700">Konfigurasi</button>
-                            <button class="rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-semibold dark:border-slate-700">Mapping</button>
-                        </div>
-                    @endif
-                </div>
-                <div class="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
-                    <p class="font-bold">Website WooCommerce</p>
-                    <p class="mt-1 text-xs text-amber-600">Terputus</p>
-                    @if ($canManageOnlineStore)
-                        <button class="mt-3 rounded-lg bg-primary px-3 py-1.5 text-[11px] font-bold text-white">Hubungkan</button>
-                    @endif
-                </div>
+            <div class="rounded-xl border border-dashed border-slate-300 p-5 text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                Belum ada saluran penjualan yang dikonfigurasi. Modul integrasi marketplace akan menampilkan channel asli setelah endpoint integrasi tersedia.
             </div>
         </section>
 
@@ -122,17 +111,17 @@
 
             <aside class="space-y-3 xl:col-span-1">
                 @if ($canManageOnlineStore)
-                    <button class="w-full rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-primary dark:border-slate-800 dark:bg-slate-900">
+                    <button class="w-full rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm dark:border-slate-800 dark:bg-slate-900" type="button" disabled>
                         <p class="text-sm font-bold">Mapping Produk</p>
-                        <p class="mt-1 text-xs text-slate-500">Hubungkan SKU antar channel</p>
+                        <p class="mt-1 text-xs text-slate-500">Tersedia setelah channel aktif</p>
                     </button>
-                    <button class="w-full rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-primary dark:border-slate-800 dark:bg-slate-900">
+                    <button class="w-full rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm dark:border-slate-800 dark:bg-slate-900" type="button" disabled>
                         <p class="text-sm font-bold">Konfigurasi</p>
-                        <p class="mt-1 text-xs text-slate-500">Atur margin dan pembulatan</p>
+                        <p class="mt-1 text-xs text-slate-500">Belum ada konfigurasi</p>
                     </button>
-                    <button class="w-full rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-primary dark:border-slate-800 dark:bg-slate-900">
+                    <button class="w-full rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm dark:border-slate-800 dark:bg-slate-900" type="button" disabled>
                         <p class="text-sm font-bold">Aturan Otomasi</p>
-                        <p class="mt-1 text-xs text-slate-500">Jadwal sinkron otomatis</p>
+                        <p class="mt-1 text-xs text-slate-500">Menunggu integrasi aktif</p>
                     </button>
                 @endif
             </aside>
@@ -141,16 +130,9 @@
 
     <script>
         (() => {
-            const tenantId = document.querySelector('meta[name="tenant-id"]')?.content;
-            const headers = tenantId ? { 'X-Tenant-Id': tenantId } : {};
-
             const el = {
-                orders: document.getElementById('online-kpi-orders'),
-                products: document.getElementById('online-kpi-products'),
                 logBody: document.getElementById('online-sync-log'),
             };
-
-            const number = (value) => new Intl.NumberFormat('id-ID').format(Number(value || 0));
 
             const renderLogs = (rows) => {
                 if (!rows.length) {
@@ -173,34 +155,11 @@
                 }).join('');
             };
 
-            const fallbackLogs = () => renderLogs([
-                { activity: 'Sinkron Stok', channel: 'Shopee', time: 'Hari ini 10:45', payload: '1,240 Produk', status: 'ok' },
-                { activity: 'Order Masuk', channel: 'Tokopedia', time: 'Hari ini 10:42', payload: '12 Pesanan', status: 'ok' },
-                { activity: 'Update Harga', channel: 'Shopee', time: 'Hari ini 09:15', payload: '45 SKU', status: 'failed' },
-            ]);
-
-            const load = async () => {
-                const [analyticsRes, productsRes] = await Promise.all([
-                    fetch('/api/v1/analytics?preset=today', { headers }),
-                    fetch('/api/v1/products', { headers }),
-                ]);
-
-                if (analyticsRes.ok) {
-                    const analytics = await analyticsRes.json();
-                    el.orders.textContent = number(analytics?.orders?.today ?? 0);
-                }
-
-                if (productsRes.ok) {
-                    const productsPayload = await productsRes.json().catch(() => ({}));
-                    const products = window.PosUi.unwrapApiList(productsPayload, 'products');
-                    el.products.textContent = `${number(products.length)} SKU`;
-                }
-
-                // Endpoint khusus integrasi belum tersedia, jadi log diambil dari fallback terstruktur.
-                fallbackLogs();
+            const load = () => {
+                renderLogs([]);
             };
 
-            load().catch(() => fallbackLogs());
+            load();
         })();
     </script>
 @endsection

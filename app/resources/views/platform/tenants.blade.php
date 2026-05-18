@@ -4,6 +4,9 @@
     $pageTitle = 'Tenants';
     $active = 'tenants';
     $tenants = $tenants ?? [];
+    $filters = $filters ?? [];
+    $page = (int) ($page ?? 1);
+    $lastPage = (int) ($lastPage ?? 1);
 @endphp
 
 @section('platform_content')
@@ -12,28 +15,43 @@
             <h1 class="text-2xl font-bold text-slate-900">Tenants</h1>
             <p class="mt-1 text-sm text-slate-500">Kelola status tenant dan kesehatan billing.</p>
         </div>
-        <div class="flex flex-wrap items-center gap-2">
-            <button class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600">Export CSV</button>
-            <button class="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white shadow-sm">Tambah Tenant</button>
-        </div>
+        <a href="/superadmin/system-health/tenants" class="inline-flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50">
+            <span class="material-symbols-outlined text-[18px]">monitoring</span>
+            Matriks kesehatan
+        </a>
     </div>
 
-    <div class="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4">
-        <div class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
-            <span class="material-symbols-outlined text-[18px]">search</span>
-            <span>Cari nama tenant atau ID</span>
+    <form method="GET" action="/superadmin/tenants" class="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm lg:grid-cols-[minmax(0,1.4fr)_repeat(4,minmax(0,0.8fr))_auto]">
+        <input name="q" value="{{ $filters['q'] ?? '' }}" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700" placeholder="Cari tenant" />
+        <select name="status" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+            <option value="">Semua status</option>
+            <option value="active" @selected(($filters['status'] ?? '') === 'active')>Active</option>
+            <option value="suspended" @selected(($filters['status'] ?? '') === 'suspended')>Suspended</option>
+        </select>
+        <select name="plan" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+            <option value="">Semua plan</option>
+            @foreach (['S', 'M', 'P'] as $plan)
+                <option value="{{ $plan }}" @selected(($filters['plan'] ?? '') === $plan)>Plan {{ $plan }}</option>
+            @endforeach
+        </select>
+        <select name="health" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+            <option value="">Semua health</option>
+            <option value="healthy" @selected(($filters['health'] ?? '') === 'healthy')>Healthy</option>
+            <option value="billing_issue" @selected(($filters['health'] ?? '') === 'billing_issue')>Billing issue</option>
+            <option value="inactive" @selected(($filters['health'] ?? '') === 'inactive')>Inactive</option>
+            <option value="suspended" @selected(($filters['health'] ?? '') === 'suspended')>Suspended</option>
+        </select>
+        <select name="sort_by" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+            <option value="created_at" @selected(($filters['sort_by'] ?? 'created_at') === 'created_at')>Terbaru</option>
+            <option value="name" @selected(($filters['sort_by'] ?? '') === 'name')>Nama</option>
+            <option value="last_active_at" @selected(($filters['sort_by'] ?? '') === 'last_active_at')>Last active</option>
+            <option value="user_count" @selected(($filters['sort_by'] ?? '') === 'user_count')>Jumlah user</option>
+        </select>
+        <div class="flex items-center gap-2">
+            <button class="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white" type="submit">Filter</button>
+            <a href="/superadmin/tenants" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600">Reset</a>
         </div>
-        <div class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
-            Status: Active
-        </div>
-        <div class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
-            Plan: Growth
-        </div>
-        <div class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
-            Health: Billing Issue
-        </div>
-        <button class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600">Reset</button>
-    </div>
+    </form>
 
     <section class="rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div class="flex items-center justify-between border-b border-slate-100 px-6 py-4">
@@ -41,7 +59,7 @@
                 <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Tenant List</p>
                 <h3 class="text-sm font-bold text-slate-900">{{ number_format((int) ($total ?? 0)) }} tenants ditemukan</h3>
             </div>
-            <button class="text-xs font-semibold text-primary">Lihat semua</button>
+            <span class="text-xs font-semibold text-slate-500">Live data</span>
         </div>
         <div class="overflow-x-auto">
             <table class="min-w-full text-left text-sm">
@@ -84,7 +102,7 @@
                             <td class="px-6 py-4 text-xs text-slate-500">{{ $tenant['last_active_at'] ?? '-' }}</td>
                             <td class="px-6 py-4">
                                 <div class="flex items-center gap-2 text-xs">
-                                    <a href="/platform/tenants/{{ $tenant['tenant_id'] ?? '' }}" class="font-semibold text-primary">Detail</a>
+                                    <a href="/superadmin/tenants/{{ $tenant['tenant_id'] ?? '' }}" class="font-semibold text-primary">Detail</a>
                                     <button
                                         class="rounded-lg border border-slate-200 bg-white px-2 py-1 text-slate-600 js-tenant-action"
                                         data-tenant-id="{{ $tenant['tenant_id'] ?? '' }}"
@@ -102,9 +120,8 @@
                 </tbody>
             </table>
         </div>
+        @include('platform.partials.pagination')
     </section>
-
-    @include('platform.partials.states')
 
     <div id="tenant-action-modal" class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-900/20 px-4">
         <div class="pointer-events-auto w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
@@ -183,7 +200,7 @@
 
             const updateHint = () => {
                 if (el.action.value === 'impersonate') {
-                    el.hint.textContent = 'Impersonate akan memiliki expiry otomatis (±30 menit).';
+                    el.hint.textContent = 'Impersonate akan memiliki expiry otomatis (+/-30 menit).';
                 } else {
                     el.hint.textContent = 'Alasan akan dicatat di audit log.';
                 }
