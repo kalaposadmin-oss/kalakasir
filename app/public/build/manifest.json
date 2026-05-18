@@ -1,0 +1,33 @@
+{
+  "node_modules/material-symbols/material-symbols-outlined.woff2": {
+    "file": "assets/material-symbols-outlined-NzYEeyps.woff2",
+    "src": "node_modules/material-symbols/material-symbols-outlined.woff2"
+  },
+  "resources/css/app.css": {
+    "file": "assets/app-DcQDxDCV.css",
+    "src": "resources/css/app.css",
+    "isEntry": true,
+    "name": "app",
+    "names": [
+      "app.css"
+    ]
+  },
+  "resources/js/app.js": {
+    "file": "assets/app-C800YXFi.js",
+    "name": "app",
+    "src": "resources/js/app.js",
+    "isEntry": true
+  },
+  "resources/js/pages/pos-kasir-page.js": {
+    "file": "assets/pos-kasir-page-AbHXvgR2.js",
+    "name": "pos-kasir-page",
+    "src": "resources/js/pages/pos-kasir-page.js",
+    "isEntry": true
+  },
+  "resources/js/receipt-image.js": {
+    "file": "assets/receipt-image-pbiUFRTQ.js",
+    "name": "receipt-image",
+    "src": "resources/js/receipt-image.js",
+    "isEntry": true
+  }
+}
