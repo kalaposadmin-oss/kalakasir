@@ -39,6 +39,15 @@
                 <span class="material-symbols-outlined text-lg">barcode_scanner</span>
             </button>
         </div>
+        <div class="mt-3 flex items-center justify-between gap-2.5">
+            <div>
+                <p id="shift-status" class="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Shift Tutup</p>
+            </div>
+            <a id="quick-close-shift" href="/pos/shifts/close" class="inline-flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-2 text-[11px] font-bold text-slate-700 hidden" title="Tutup Shift">
+                <span class="material-symbols-outlined text-base">lock_clock</span>
+                Endshift
+            </a>
+        </div>
     </header>
 @endsection
 
