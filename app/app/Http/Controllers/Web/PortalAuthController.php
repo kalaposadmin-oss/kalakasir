@@ -22,15 +22,15 @@ class PortalAuthController extends Controller
 {
     public function showRoot(Request $request)
     {
-        if ($this->shouldStartOnboarding()) {
-            return redirect('/register/step-1');
-        }
-
-        return $this->renderPosLogin($request, '/', true);
+        return $this->showGeneric($request);
     }
 
     public function showGeneric(Request $request)
     {
+        if ($this->shouldStartOnboarding()) {
+            return redirect('/register/step-1');
+        }
+
         if (Auth::check()) {
             $activePortal = $this->resolvePreferredPortal($request, Auth::user());
             $request->session()->put('auth_portal', $activePortal);
@@ -52,6 +52,10 @@ class PortalAuthController extends Controller
 
     public function showPos(Request $request)
     {
+        if ($this->shouldStartOnboarding()) {
+            return redirect('/register/step-1');
+        }
+
         if (! Auth::check()) {
             return redirect('/');
         }
@@ -70,6 +74,10 @@ class PortalAuthController extends Controller
 
     public function showBackoffice(Request $request)
     {
+        if ($this->shouldStartOnboarding()) {
+            return redirect('/register/step-1');
+        }
+
         if (! Auth::check()) {
             return redirect('/backoffice');
         }
