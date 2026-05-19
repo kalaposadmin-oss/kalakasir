@@ -388,6 +388,12 @@ Route::middleware(['canonical_portal_host:backoffice', 'web_access:backoffice,wa
 Route::middleware(['canonical_portal_host:backoffice'])->group(function () {
     Route::get('/backoffice/products', [TenantViewController::class, 'show'])->defaults('view', 'products')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,product.list');
     Route::get('/backoffice/products/new', [TenantViewController::class, 'show'])->defaults('view', 'product-create')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,admin|owner|superadmin,product.list');
+
+    // Product import (CSV)
+    Route::get('/backoffice/products/import', [\App\Http\Controllers\Web\ProductImportController::class, 'showImportForm'])->middleware('web_access:backoffice,admin|owner|superadmin,product.list');
+    Route::post('/backoffice/products/import', [\App\Http\Controllers\Web\ProductImportController::class, 'handleImport'])->middleware('web_access:backoffice,admin|owner|superadmin,product.list');
+    Route::post('/backoffice/products/import/process', [\App\Http\Controllers\Web\ProductImportController::class, 'processImport'])->middleware('web_access:backoffice,admin|owner|superadmin,product.list');
+
     Route::get('/backoffice/products/detail', [TenantViewController::class, 'show'])->defaults('view', 'product-detail')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,product.list');
     Route::get('/backoffice/products/{product}', [BackofficePageController::class, 'productDetail'])->middleware('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,product.list');
     Route::get('/backoffice/products/{product}/edit', [TenantViewController::class, 'showWithRouteParam'])

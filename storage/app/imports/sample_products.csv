@@ -1,0 +1,4 @@
+sku,name,price,qty,track_stock,category
+SKU001,Tempe Goreng,12000,10,TRUE,Makanan
+SKU002,Nasi Uduk,9000,5,TRUE,Makanan
+SKU003,Kopi Tubruk,6000,50,TRUE,Minuman

@@ -80,6 +80,12 @@
                         <select id="edit-category" class="w-full px-4 py-3 rounded-lg border-slate-200 focus:ring-primary focus:border-primary appearance-none"></select>
                     </div>
                     <div class="space-y-1.5">
+                        <label class="text-xs font-bold text-slate-500 uppercase">Supplier</label>
+                        <select id="edit-supplier" class="w-full px-4 py-3 rounded-lg border-slate-200 focus:ring-primary focus:border-primary appearance-none">
+                            <option value="">Pilih supplier</option>
+                        </select>
+                    </div>
+                    <div class="space-y-1.5">
                         <label class="text-xs font-bold text-slate-500 uppercase">Tipe Produk</label>
                         <select id="edit-type" class="w-full px-4 py-3 rounded-lg border-slate-200 focus:ring-primary focus:border-primary appearance-none">
                             <option value="finished_good">Barang Jual</option>
@@ -169,7 +175,7 @@
                         <div id="edit-production-readiness-body" class="space-y-3">
                             <div id="edit-production-readiness-summary" class="flex flex-wrap gap-2"></div>
                             <div id="edit-production-readiness-checklist" class="space-y-2 text-xs text-teal-900"></div>
-                            <p class="text-[11px] text-teal-700">Kalau BOM disimpan, stok aktif akan dipaksa menyala otomatis agar produk langsung siap diproduksi.</p>
+                            <p class="text-[11px] text-teal-700">Checklist ini hanya muncul untuk mode produksi batch yang memakai stok produk jadi.</p>
                             <p class="text-[11px] font-semibold text-teal-800">Checklist ini mengikuti perubahan di form saat ini. Status di modul batch baru ikut berubah setelah Anda menekan Simpan Perubahan.</p>
                         </div>
                     </div>
@@ -189,6 +195,13 @@
                             <div class="rounded-xl bg-amber-50 px-3 py-3 text-xs leading-relaxed text-amber-900">
                                 Untuk raw material non-variant, payload akan mengirim <span class="font-semibold">product_variant_id = null</span>. Untuk raw material variant-capable, variant wajib dipilih.
                             </div>
+                            <label class="block space-y-1.5">
+                                <span class="text-sm font-bold text-slate-800">Mode Resep</span>
+                                <select id="edit-recipe-production-mode" class="w-full rounded-xl border-slate-200 text-sm text-slate-900">
+                                    <option value="auto_consume_on_sell">Langsung jual, tanpa stok produk jadi</option>
+                                    <option value="batch_production">Produksi batch, pakai stok produk jadi</option>
+                                </select>
+                            </label>
                             <label class="block space-y-1.5">
                                 <span class="text-sm font-bold text-slate-800">Hasil Standar per 1 Resep</span>
                                 <input id="edit-recipe-output-qty" class="w-full rounded-xl border-slate-200 text-sm text-slate-900" type="number" min="0.0001" step="0.0001" placeholder="Contoh: 10" />
@@ -233,6 +246,7 @@
                     editSku: document.getElementById('edit-sku'),
                     editPrice: document.getElementById('edit-price'),
                     editCategory: document.getElementById('edit-category'),
+                    editSupplier: document.getElementById('edit-supplier'),
                     editType: document.getElementById('edit-type'),
                     editTypeNote: document.getElementById('edit-type-note'),
                     rawMaterialMeta: document.getElementById('edit-raw-material-meta'),
@@ -263,6 +277,7 @@
                     bomUnavailable: document.getElementById('edit-bom-unavailable'),
                     bomLocked: document.getElementById('edit-bom-locked'),
                     bomEditor: document.getElementById('edit-bom-editor'),
+                    recipeProductionMode: document.getElementById('edit-recipe-production-mode'),
                     recipeOutputQty: document.getElementById('edit-recipe-output-qty'),
                     bomHint: document.getElementById('edit-bom-hint'),
                     bomInlineError: document.getElementById('edit-bom-inline-error'),
@@ -284,6 +299,25 @@
                 const rawMaterialUnitOptions = ['gram', 'kg', 'mg', 'liter', 'ml', 'pcs', 'box', 'pack', 'roll', 'meter', 'cm', 'dozen', 'lusin', 'sachet', 'bungkus'];
 
                 const getSelectedProductType = () => String(el.editType?.value || 'finished_good');
+                const normalizeRecipeProductionMode = (value) => {
+                    const mode = String(value || '').trim();
+                    return ['auto_consume_on_sell', 'batch_production'].includes(mode)
+                        ? mode
+                        : 'auto_consume_on_sell';
+                };
+                const getSelectedRecipeProductionMode = () => normalizeRecipeProductionMode(el.recipeProductionMode?.value);
+                const recipeAutoConsumesOnSell = () => Boolean(
+                    canManageRecipe
+                    && getSelectedProductType() === 'finished_good'
+                    && el.enableBom?.checked
+                    && getSelectedRecipeProductionMode() === 'auto_consume_on_sell'
+                );
+                const recipeUsesFinishedStock = () => Boolean(
+                    canManageRecipe
+                    && getSelectedProductType() === 'finished_good'
+                    && el.enableBom?.checked
+                    && getSelectedRecipeProductionMode() === 'batch_production'
+                );
 
                 const normalizeRecipeOutputQtyValue = (value) => {
                     const parsed = Number(value ?? 0);
@@ -323,6 +357,28 @@
                     }
                 };
 
+                const syncRecipeStockState = () => {
+                    const productType = getSelectedProductType();
+                    const autoConsume = recipeAutoConsumesOnSell();
+                    const batchProduction = recipeUsesFinishedStock();
+
+                    if (batchProduction) {
+                        el.trackStock.checked = true;
+                    }
+
+                    if (autoConsume) {
+                        el.trackStock.checked = false;
+                    }
+
+                    const recipeOutputWrap = el.recipeOutputQty?.closest('label');
+                    recipeOutputWrap?.classList.toggle('hidden', !batchProduction);
+                    if (!batchProduction && el.recipeOutputQty) {
+                        el.recipeOutputQty.value = '';
+                    }
+
+                    setToggleDisabled(el.trackStock, productType === 'service' || autoConsume || batchProduction);
+                };
+
                 const renderCategoryOptions = (categories, selectedCategoryId = '', selectedCategoryName = '') => {
                     el.editCategory.innerHTML = '<option value="">Pilih kategori</option>';
 
@@ -354,6 +410,37 @@
                     }
                 };
 
+                const renderSupplierOptions = (suppliers, selectedSupplierId = '', selectedSupplierName = '') => {
+                    el.editSupplier.innerHTML = '<option value="">Pilih supplier</option>';
+
+                    const normalizedSelectedId = String(selectedSupplierId || '');
+                    const existingSupplier = suppliers.find((supplier) => String(supplier.id) === normalizedSelectedId);
+                    const label = String(selectedSupplierName || existingSupplier?.name || '').trim();
+
+                    if (normalizedSelectedId && label) {
+                        const selectedOption = document.createElement('option');
+                        selectedOption.value = normalizedSelectedId;
+                        selectedOption.textContent = label;
+                        selectedOption.selected = true;
+                        el.editSupplier.appendChild(selectedOption);
+                    }
+
+                    suppliers.forEach((supplier) => {
+                        if (String(supplier.id) === normalizedSelectedId) {
+                            return;
+                        }
+
+                        const option = document.createElement('option');
+                        option.value = supplier.id;
+                        option.textContent = supplier.name;
+                        el.editSupplier.appendChild(option);
+                    });
+
+                    if (!normalizedSelectedId) {
+                        el.editSupplier.value = '';
+                    }
+                };
+
                 const productUsesRecipeManagement = (product) => {
                     const bomItems = Array.isArray(product?.bom_items) ? product.bom_items : [];
                     return String(product?.product_mode || '') === 'bom'
@@ -382,6 +469,15 @@
                     }
                     const data = await response.json();
                     return data.categories || [];
+                };
+
+                const loadSuppliers = async () => {
+                    const response = await fetch('/api/v1/suppliers', { headers });
+                    if (!response.ok) {
+                        return [];
+                    }
+                    const data = await response.json();
+                    return data.suppliers || [];
                 };
 
                 const renderRawMaterialUnits = (selectedUnit = '') => {
@@ -560,12 +656,12 @@
 
                 const updateInitialStockEditors = (product) => {
                     const productType = getSelectedProductType();
-                    const trackStockEnabled = Boolean(el.trackStock?.checked);
-
-                    setToggleDisabled(el.trackStock, productType === 'service');
                     if (productType === 'service') {
                         el.trackStock.checked = false;
                     }
+
+                    syncRecipeStockState();
+                    const trackStockEnabled = Boolean(el.trackStock?.checked);
 
                     if (productType === 'service') {
                         el.stockSection.classList.add('hidden');
@@ -631,7 +727,12 @@
                 const buildProductionDraft = () => {
                     const productType = getSelectedProductType();
                     const useBom = Boolean(canManageRecipe && productType === 'finished_good' && el.enableBom.checked);
-                    const trackStock = productType === 'service' ? false : Boolean(el.trackStock?.checked || useBom);
+                    const productionMode = useBom ? getSelectedRecipeProductionMode() : 'none';
+                    const trackStock = productType === 'service'
+                        ? false
+                        : (useBom
+                            ? productionMode === 'batch_production'
+                            : Boolean(el.trackStock?.checked));
 
                     return {
                         is_active: Boolean(el.isActive?.checked),
@@ -643,7 +744,7 @@
                                 : (useBom ? 'bom' : 'default')),
                         production_mode: productType === 'service' || productType === 'raw_material'
                             ? 'none'
-                            : (useBom ? 'batch_production' : 'none'),
+                            : productionMode,
                         track_stock: trackStock,
                         recipe_output_qty: useBom ? Number(el.recipeOutputQty?.value || 0) : 0,
                         bom_items: useBom ? inspectBomItems() : [],
@@ -655,6 +756,7 @@
                         canManageRecipe
                         && getSelectedProductType() === 'finished_good'
                         && el.enableBom?.checked
+                        && getSelectedRecipeProductionMode() === 'batch_production'
                     );
                 };
 
@@ -957,6 +1059,7 @@
                     el.bomLocked.classList.add('hidden');
                     el.bomCard.classList.remove('hidden');
                     el.bomEditor.classList.toggle('hidden', !el.enableBom.checked);
+                    syncRecipeStockState();
                     if (submitButton) {
                         submitButton.disabled = false;
                     }
@@ -1135,20 +1238,22 @@
                     el.editSku.value = product.sku || '';
                     el.editPrice.value = product.price || 0;
                     renderCategoryOptions([], product.category_id || '', product.category_name || '');
+                    renderSupplierOptions([], product.supplier_id || '', product.supplier_name || '');
                     el.editType.value = String(product.item_type || 'finished_good');
                     renderRawMaterialUnits(product.unit || '');
                     el.isActive.checked = product.is_active !== false;
                     el.trackStock.checked = product.track_stock !== false;
+                    el.recipeProductionMode.value = normalizeRecipeProductionMode(product.production_mode);
                     el.recipeOutputQty.value = normalizeRecipeOutputQtyValue(product.recipe_output_qty);
                     updateTypeNote();
                     updateRawMaterialMetaVisibility();
-                    el.stock.value = '0';
-                    updateInitialStockEditors(product);
 
                     const isFinishedGood = getSelectedProductType() === 'finished_good';
                     const isBomMode = isFinishedGood && String(product.product_mode || '') === 'bom';
                     el.enableBom.checked = isBomMode;
                     updateBomEditorVisibility();
+                    el.stock.value = '0';
+                    updateInitialStockEditors(product);
                     el.recipeOutputQty.value = normalizeRecipeOutputQtyValue(product.recipe_output_qty);
                     refreshProductionReadiness();
 
@@ -1196,12 +1301,15 @@
                         return;
                     }
 
-                    if (el.enableBom.checked) {
-                        el.trackStock.checked = true;
-                    }
-
+                    syncRecipeStockState();
                     updateBomEditorVisibility();
+                    updateInitialStockEditors(currentProduct);
                     updateBomLineCountHint();
+                    refreshProductionReadiness();
+                });
+                el.recipeProductionMode?.addEventListener('change', () => {
+                    syncRecipeStockState();
+                    updateInitialStockEditors(currentProduct);
                     refreshProductionReadiness();
                 });
                 el.recipeOutputQty?.addEventListener('input', refreshProductionReadiness);
@@ -1314,7 +1422,7 @@
                         category_id: el.editCategory.value || null,
                         hpp_average: currentProduct.hpp_average || 0,
                         unit: currentProduct.unit || null,
-                        supplier_id: currentProduct.supplier_id || null,
+                        supplier_id: el.editSupplier.value || null,
                         initial_stock: currentProduct?.has_variants || getSelectedProductType() === 'service' ? 0 : Number(el.stock.value || 0),
                         track_stock: el.trackStock.checked,
                         is_active: el.isActive.checked,
@@ -1367,14 +1475,22 @@
                                 return;
                             }
 
-                            payload.recipe_output_qty = Number(el.recipeOutputQty?.value || 0);
-                            if (!(payload.recipe_output_qty > 0)) {
-                                showError('Hasil standar per 1 resep wajib lebih dari 0 saat BOM aktif.');
+                            const productionMode = getSelectedRecipeProductionMode();
+                            payload.recipe_output_qty = productionMode === 'batch_production'
+                                ? Number(el.recipeOutputQty?.value || 0)
+                                : null;
+                            if (productionMode === 'batch_production' && !(payload.recipe_output_qty > 0)) {
+                                showError('Hasil standar per 1 resep wajib lebih dari 0 untuk produksi batch.');
                                 return;
                             }
                             payload.product_mode = 'bom';
                             payload.item_type = 'finished_good';
-                            payload.production_mode = 'batch_production';
+                            payload.production_mode = productionMode;
+                            payload.track_stock = productionMode === 'batch_production';
+                            if (!payload.track_stock) {
+                                payload.initial_stock = 0;
+                                payload.initial_stock_lines = [];
+                            }
                             payload.bom_items = collectBomItems();
                         } else if (String(currentProduct.product_mode || '') === 'bom') {
                             payload.recipe_output_qty = null;
@@ -1395,7 +1511,7 @@
                         payload.production_mode = 'none';
                     }
 
-                    if (payload.product_mode === 'bom') {
+                    if (payload.product_mode === 'bom' && payload.production_mode === 'batch_production') {
                         payload.track_stock = true;
                     }
 
@@ -1475,13 +1591,17 @@
                         showError('Produk ini memakai recipe/produksi dan hanya bisa diubah mulai paket Medium.');
                     }
 
-                    const [categoriesResult, rawMaterialsResult] = await Promise.allSettled([
+                    const [categoriesResult, suppliersResult, rawMaterialsResult] = await Promise.allSettled([
                         loadCategories(),
+                        loadSuppliers(),
                         loadRawMaterialProducts(),
                     ]);
 
                     const categories = categoriesResult.status === 'fulfilled'
                         ? categoriesResult.value
+                        : [];
+                    const suppliers = suppliersResult.status === 'fulfilled'
+                        ? suppliersResult.value
                         : [];
                     rawMaterialProducts = rawMaterialsResult.status === 'fulfilled'
                         ? rawMaterialsResult.value
@@ -1491,6 +1611,12 @@
                         categories,
                         currentProduct?.category_id || resolvedProduct.category_id || '',
                         currentProduct?.category_name || resolvedProduct.category_name || ''
+                    );
+
+                    renderSupplierOptions(
+                        suppliers,
+                        currentProduct?.supplier_id || resolvedProduct.supplier_id || '',
+                        currentProduct?.supplier_name || resolvedProduct.supplier_name || ''
                     );
 
                     if (rawMaterialsResult.status === 'rejected' && el.enableBom?.checked) {

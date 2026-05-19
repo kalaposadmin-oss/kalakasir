@@ -21,6 +21,31 @@ class Product extends TenantModel
 
     public $timestamps = true;
 
+    protected $fillable = [
+        'tenant_id',
+        'category_id',
+        'sku',
+        'name',
+        'price',
+        'hpp_average',
+        'qty_on_hand',
+        'min_stock',
+        'unit',
+        'supplier_id',
+        'image_url',
+        'is_active',
+        'track_stock',
+        'product_mode',
+        'production_mode',
+        'item_type',
+        'bom_items',
+        'recipe_output_qty',
+        'bundle_items',
+        'variants',
+        'created_by',
+        'updated_by',
+    ];
+
     protected $casts = [
         'track_stock' => 'bool',
         'bom_items' => 'array',
