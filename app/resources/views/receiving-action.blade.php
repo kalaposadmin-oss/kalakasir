@@ -330,7 +330,7 @@
                         <div class="flex justify-between items-start mb-3">
                             <div class="flex-1">
                                 <h4 class="font-bold text-slate-900 dark:text-slate-100">${item.product_name}</h4>
-                                <p class="text-xs text-slate-500">SKU: ${item.product_sku || '-'} • Satuan: ${item.unit || 'Pcs'}</p>
+                                <p class="text-xs text-slate-500">SKU: ${item.product_sku || '-'} • Satuan beli: ${item.purchase_unit || item.unit || 'Pcs'} • Stok: ${item.unit || 'Pcs'}</p>
                                 ${item.product_variant_name ? `<p class="text-xs text-slate-500">Varian: ${item.product_variant_name}</p>` : ''}
                             </div>
                             <div class="bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded text-right">
@@ -341,11 +341,11 @@
                         <div class="grid grid-cols-2 gap-3 mb-3">
                             <div class="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-2">
                                 <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Harga Satuan</p>
-                                <p class="text-sm font-bold text-slate-900 dark:text-slate-100">${formatCurrency(item.price)}</p>
+                                <p class="text-sm font-bold text-slate-900 dark:text-slate-100">${formatCurrency(item.purchase_price || item.price)}</p>
                             </div>
                             <div class="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-2 text-right">
                                 <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Subtotal Item</p>
-                                <p class="text-sm font-bold text-slate-900 dark:text-slate-100">${formatCurrency(Number(item.qty || 0) * Number(item.price || 0))}</p>
+                                <p class="text-sm font-bold text-slate-900 dark:text-slate-100">${formatCurrency(Number(item.qty || 0) * Number(item.purchase_price || item.price || 0))}</p>
                             </div>
                         </div>
                         <div class="flex items-center gap-4 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-lg border border-dashed border-slate-200 dark:border-slate-700">
@@ -397,8 +397,8 @@
                         currentPriceIndex = index;
                         const item = items[index];
                         el.priceModalTitle.textContent = item.product_name;
-                        el.priceModalSubtitle.textContent = `${formatQuantity(item.qty)} item • ${item.product_variant_name || 'Varian belum dipilih'} • harga saat ini ${formatCurrency(item.price)}`;
-                        el.priceInput.value = Number(item.price || 0);
+                        el.priceModalSubtitle.textContent = `${formatQuantity(item.qty)} ${item.purchase_unit || item.unit || 'item'} • ${item.product_variant_name || 'Varian belum dipilih'} • harga saat ini ${formatCurrency(item.purchase_price || item.price)}`;
+                        el.priceInput.value = Number(item.purchase_price || item.price || 0);
                         el.priceFeedback.classList.add('hidden');
                         el.priceFeedback.textContent = '';
                         el.priceModal.classList.remove('hidden');
@@ -533,6 +533,7 @@
                         items: items.map((item) => ({
                             product_id: item.product_id,
                             qty: Number(item.received || 0),
+                            purchase_unit: item.purchase_unit || item.unit || null,
                         })),
                     };
 
@@ -574,8 +575,11 @@
                     el.subtitle.textContent = `PO #${String(data.purchase.id).slice(0, 6).toUpperCase()} - ${data.supplier?.name || 'Pemasok'} - Lokasi: ${data.purchase.location_name || '-'}`;
                     items = (data.items || []).map((item) => ({
                         ...item,
-                        qty: Number(item.qty || 0),
-                        received: Number(item.qty || 0),
+                        base_qty: Number(item.qty || 0),
+                        qty: Number(item.purchase_qty ?? item.qty ?? 0),
+                        received: Number(item.remaining_purchase_qty ?? item.purchase_qty ?? item.qty ?? 0),
+                        price: Number(item.price || 0),
+                        purchase_price: Number(item.purchase_price ?? item.price ?? 0),
                     }));
                     el.saveReceiving.disabled = !canReceivePurchase();
                     el.saveReceiving.title = canReceivePurchase() ? '' : getReceiveBlockMessage();

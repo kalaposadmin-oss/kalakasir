@@ -6,6 +6,7 @@ use App\Models\AccountMapping;
 use App\Models\InventoryBalance;
 use App\Models\JournalEntry;
 use App\Models\JournalItem;
+use App\Models\Product;
 use App\Models\Purchase;
 use App\Models\PurchaseItem;
 use App\Models\StockLedger;
@@ -22,6 +23,7 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use RuntimeException;
 
 class PurchaseService
@@ -253,8 +255,14 @@ class PurchaseService
                 throw new RuntimeException('Harga hanya bisa diubah sebelum penerimaan barang dimulai.');
             }
 
+            $multiplier = Decimal::qty($item->purchase_unit_multiplier ?? 1);
+            if (Decimal::compare($multiplier, '0') <= 0) {
+                $multiplier = Decimal::qty(1);
+            }
+
             $item->update([
-                'price' => $price,
+                'price' => Decimal::float(Decimal::divide($price, $multiplier, Decimal::COST_SCALE), Decimal::COST_SCALE),
+                'purchase_price' => $price,
             ]);
 
             $purchaseTotal = (float) (PurchaseItem::query()
@@ -314,14 +322,45 @@ class PurchaseService
             'transaction_date' => $payload['transaction_date'] ?? CarbonImmutable::now('UTC')->toDateString(),
         ] + (Schema::hasColumn('purchases', 'purchase_mode') ? ['purchase_mode' => $purchaseMode] : []));
 
-        $items = collect($payload['items'] ?? [])->map(function ($item) use ($tenantId, $purchaseId) {
+        $conversion = app(UnitConversionService::class);
+        $productIds = collect($payload['items'] ?? [])->pluck('product_id')->filter()->unique()->values()->all();
+        $products = Product::query()
+            ->where('tenant_id', $tenantId)
+            ->whereIn('id', $productIds)
+            ->get(['id', 'unit'])
+            ->keyBy('id');
+
+        $items = collect($payload['items'] ?? [])->map(function ($item, int $index) use ($tenantId, $purchaseId, $products, $conversion) {
+            $product = $products->get($item['product_id']);
+            if (! $product) {
+                throw ValidationException::withMessages([
+                    "items.$index.product_id" => 'Produk tidak ditemukan untuk tenant aktif.',
+                ]);
+            }
+
+            $purchaseQty = Decimal::qty($item['qty'] ?? 0);
+            $baseUnit = $product->unit ?: null;
+            $purchaseUnit = $conversion->displayUnit($item['purchase_unit'] ?? $baseUnit) ?: $baseUnit;
+            $baseQty = $conversion->convertQuantity($purchaseQty, $purchaseUnit, $baseUnit, "items.$index.purchase_unit");
+            $multiplier = Decimal::compare($purchaseQty, '0') > 0
+                ? Decimal::divide($baseQty, $purchaseQty, Decimal::QTY_SCALE)
+                : Decimal::qty(1);
+            $purchasePrice = Decimal::money($item['price'] ?? 0);
+            $baseUnitCost = Decimal::compare($multiplier, '0') > 0
+                ? Decimal::divide($purchasePrice, $multiplier, Decimal::COST_SCALE)
+                : Decimal::cost($purchasePrice);
+
             return [
                 'id' => (string) Str::uuid(),
                 'tenant_id' => $tenantId,
                 'purchase_id' => $purchaseId,
                 'product_id' => $item['product_id'],
-                'qty' => (float) $item['qty'],
-                'price' => (float) $item['price'],
+                'qty' => Decimal::float($baseQty, Decimal::QTY_SCALE),
+                'price' => Decimal::float($baseUnitCost, Decimal::COST_SCALE),
+                'purchase_qty' => Decimal::float($purchaseQty, Decimal::QTY_SCALE),
+                'purchase_unit' => $purchaseUnit,
+                'purchase_unit_multiplier' => Decimal::float($multiplier, Decimal::QTY_SCALE),
+                'purchase_price' => Decimal::float($purchasePrice, Decimal::MONEY_SCALE),
             ];
         })->all();
 
@@ -377,6 +416,12 @@ class PurchaseService
             throw new RuntimeException('Semua item purchase harus dikirim saat penerimaan.');
         }
 
+        $productUnits = Product::query()
+            ->where('tenant_id', $tenantId)
+            ->whereIn('id', $items->pluck('product_id')->unique()->values()->all())
+            ->pluck('unit', 'id');
+        $conversion = app(UnitConversionService::class);
+
         $ledgerRows = [];
         $totalReceivedValue = Decimal::money(0);
         $receivedCount = 0;
@@ -387,7 +432,17 @@ class PurchaseService
                 continue;
             }
 
-            $receiveQty = Decimal::qty($requested->get($item->product_id)['qty'] ?? 0);
+            $requestItem = $requested->get($item->product_id) ?? [];
+            $productUnit = $productUnits->get($item->product_id);
+            $receiveUnit = $requestItem['purchase_unit']
+                ?? $item->purchase_unit
+                ?? $productUnit;
+            $receiveQty = $conversion->convertQuantity(
+                $requestItem['qty'] ?? 0,
+                $receiveUnit,
+                $productUnit,
+                'items.qty'
+            );
 
             if (Decimal::compare($receiveQty, 0) <= 0) {
                 continue;
@@ -439,6 +494,8 @@ class PurchaseService
                 'qty_in' => $receiveQty,
                 'qty_out' => 0,
                 'balance_after' => $balanceAfter,
+                'unit_cost' => Decimal::float($item->price, Decimal::COST_SCALE),
+                'total_cost' => Decimal::float(Decimal::multiply($receiveQty, $item->price, Decimal::MONEY_SCALE), Decimal::MONEY_SCALE),
                 'created_at' => $now,
                 'created_by' => $userId,
             ];

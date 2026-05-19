@@ -36,9 +36,9 @@ class ProductImportServiceTest extends TestCase
         $this->insertProduct($tenant->id, $localProductId, 'EXIST-1', 'Produk Lama', 10000);
 
         $path = $this->writeImportCsv(implode("\n", [
-            'SKU,Nama Produk,Harga Jual,HPP,Kategori,Satuan,Gunakan Stok,Supplier',
-            'EXIST-1,Produk Baru Dari Import,25000,12000,Minuman,cup,true,Supplier Import',
-            ',Teh Tawar,5000,2000,Minuman,gelas,false,Supplier Import',
+            'SKU,Nama Produk,Tipe Produk,Harga Jual,HPP,Kategori,Satuan,Gunakan Stok,Supplier',
+            'EXIST-1,Produk Baru Dari Import,Barang Jual,25000,12000,Minuman,cup,true,Supplier Import',
+            ',Cuci Loyang,Jasa / Service,15000,0,Layanan,kali,true,Supplier Import',
         ]));
 
         $summary = app(ProductImportService::class)->importProducts(
@@ -47,12 +47,13 @@ class ProductImportServiceTest extends TestCase
             mapping: [
                 0 => 'sku',
                 1 => 'name',
-                2 => 'price',
-                3 => 'hpp_average',
-                4 => 'category',
-                5 => 'unit',
-                6 => 'track_stock',
-                7 => 'supplier',
+                2 => 'item_type',
+                3 => 'price',
+                4 => 'hpp_average',
+                5 => 'category',
+                6 => 'unit',
+                7 => 'track_stock',
+                8 => 'supplier',
             ],
             userId: (string) $user->id,
         );
@@ -87,15 +88,19 @@ class ProductImportServiceTest extends TestCase
         $this->assertSame($categoryId, $updatedProduct->category_id);
         $this->assertSame($supplierId, $updatedProduct->supplier_id);
         $this->assertSame('cup', $updatedProduct->unit);
+        $this->assertSame('finished_good', $updatedProduct->item_type);
+        $this->assertSame('default', $updatedProduct->product_mode);
 
         $createdProduct = DB::table('products')
             ->where('tenant_id', $tenant->id)
-            ->where('name', 'Teh Tawar')
+            ->where('name', 'Cuci Loyang')
             ->first();
 
         $this->assertNotNull($createdProduct);
         $this->assertNotSame('', (string) $createdProduct->sku);
         $this->assertSame(0, (int) $createdProduct->track_stock);
+        $this->assertSame('service', $createdProduct->item_type);
+        $this->assertSame('default', $createdProduct->product_mode);
         $this->assertSame($supplierId, $createdProduct->supplier_id);
 
         $foreignProduct = DB::table('products')
@@ -151,6 +156,7 @@ class ProductImportServiceTest extends TestCase
         $this->assertSame([
             'sku',
             'name',
+            'item_type',
             'price',
             'hpp_average',
             'qty_on_hand',

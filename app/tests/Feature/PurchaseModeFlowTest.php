@@ -69,6 +69,72 @@ class PurchaseModeFlowTest extends TestCase
         ]);
     }
 
+    public function test_purchase_unit_is_converted_to_product_stock_unit(): void
+    {
+        [$tenant, $user] = $this->bootApiActor('admin', 'purchase-unit-conversion@example.test');
+        $fixture = $this->seedCheckoutFixture($tenant->id, $user->id);
+        $supplierId = $this->insertSupplier($tenant->id, 'Supplier Unit Conversion');
+
+        DB::table('products')
+            ->where('id', $fixture['product_id'])
+            ->update([
+                'name' => 'Gandum',
+                'unit' => 'gram',
+                'item_type' => 'raw_material',
+                'price' => 0,
+            ]);
+
+        $response = $this->withHeaders($this->tenantHeaders($tenant->id))
+            ->postJson('/api/v1/purchases', [
+                'supplier_id' => $supplierId,
+                'location_id' => $fixture['location_id'],
+                'purchase_mode' => PurchaseMode::SIMPLE,
+                'status' => PurchaseStatus::SUBMITTED,
+                'payment_method' => 'tempo',
+                'items' => [
+                    [
+                        'product_id' => $fixture['product_id'],
+                        'qty' => 1,
+                        'purchase_unit' => 'kg',
+                        'price' => 12000,
+                    ],
+                ],
+            ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('status', PurchaseStatus::RECEIVED)
+            ->assertJsonPath('received_total', 12000);
+
+        $purchaseId = (string) $response->json('purchase_id');
+        $item = DB::table('purchase_items')->where('purchase_id', $purchaseId)->first();
+
+        $this->assertSame(1000.0, (float) $item->qty);
+        $this->assertSame(1000.0, (float) $item->received_qty);
+        $this->assertSame(1.0, (float) $item->purchase_qty);
+        $this->assertSame('kg', $item->purchase_unit);
+        $this->assertSame(1000.0, (float) $item->purchase_unit_multiplier);
+        $this->assertSame(12000.0, (float) $item->purchase_price);
+        $this->assertSame(12.0, (float) $item->price);
+
+        $this->assertDatabaseHas('inventory_balances', [
+            'tenant_id' => $tenant->id,
+            'location_id' => $fixture['location_id'],
+            'product_id' => $fixture['product_id'],
+            'qty_on_hand' => 1100,
+        ]);
+
+        $detail = $this->withHeaders($this->tenantHeaders($tenant->id))
+            ->getJson('/api/v1/purchases/'.$purchaseId);
+
+        $detail->assertOk()
+            ->assertJsonPath('items.0.qty', 1000)
+            ->assertJsonPath('items.0.unit', 'gram')
+            ->assertJsonPath('items.0.purchase_qty', 1)
+            ->assertJsonPath('items.0.purchase_unit', 'kg')
+            ->assertJsonPath('items.0.purchase_price', 12000)
+            ->assertJsonPath('items.0.received_purchase_qty', 1);
+    }
+
     public function test_po_short_mode_can_be_received_without_approval(): void
     {
         [$tenant, $user] = $this->bootApiActor('admin', 'purchase-mode-po-short@example.test');

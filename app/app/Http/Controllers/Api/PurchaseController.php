@@ -23,6 +23,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
 use RuntimeException;
 
@@ -118,17 +119,35 @@ class PurchaseController extends Controller
                 'purchase_items.qty',
                 'purchase_items.received_qty',
                 'purchase_items.price',
+                'purchase_items.purchase_qty',
+                'purchase_items.purchase_unit',
+                'purchase_items.purchase_unit_multiplier',
+                'purchase_items.purchase_price',
                 'purchase_items.product_variant_id',
                 'products.id as product_id',
                 'products.name as product_name',
                 'products.sku as product_sku',
+                'products.unit as unit',
                 'products.image_url as product_image',
                 'product_variants.name as product_variant_name',
                 'product_variants.sku as product_variant_sku',
             ])
             ->where('purchase_items.tenant_id', $tenantId)
             ->where('purchase_items.purchase_id', $purchaseRow->id)
-            ->get();
+            ->get()
+            ->map(function ($item) {
+                $multiplier = (float) ($item->purchase_unit_multiplier ?: 1);
+                $receivedQty = (float) ($item->received_qty ?? 0);
+                $purchaseQty = $item->purchase_qty !== null ? (float) $item->purchase_qty : (float) $item->qty;
+
+                $item->purchase_qty = $purchaseQty;
+                $item->purchase_unit = $item->purchase_unit ?: $item->unit;
+                $item->purchase_price = $item->purchase_price !== null ? (float) $item->purchase_price : (float) $item->price;
+                $item->received_purchase_qty = $multiplier > 0 ? round($receivedQty / $multiplier, 4) : $receivedQty;
+                $item->remaining_purchase_qty = max(0, round($purchaseQty - $item->received_purchase_qty, 4));
+
+                return $item;
+            });
 
         return response()->json([
             'purchase' => [
@@ -194,8 +213,13 @@ class PurchaseController extends Controller
                 'pi.product_id',
                 'pi.product_variant_id',
                 'pi.qty as ordered_qty',
+                'pi.purchase_qty',
+                'pi.purchase_unit',
+                'pi.purchase_unit_multiplier',
+                'pi.purchase_price',
                 'p.name as product_name',
                 'p.sku as product_sku',
+                'p.unit as unit',
                 'pv.name as product_variant_name',
                 'pv.sku as product_variant_sku',
             ])
@@ -212,21 +236,30 @@ class PurchaseController extends Controller
                     'received_by' => $row->created_by,
                     'received_by_name' => $row->created_by_name ?: 'Sistem',
                     'total_qty' => 0.0,
+                    'total_purchase_qty' => 0.0,
                     'items' => [],
                 ];
             }
 
             $grouped[$groupKey]['total_qty'] += (float) $row->qty_in;
+            $receivedPurchaseQty = ((float) ($row->purchase_unit_multiplier ?? 1)) > 0
+                ? round(((float) $row->qty_in) / ((float) $row->purchase_unit_multiplier), 4)
+                : (float) $row->qty_in;
+            $grouped[$groupKey]['total_purchase_qty'] += $receivedPurchaseQty;
             $grouped[$groupKey]['items'][] = [
                 'product_id' => $row->product_id,
-                    'product_variant_id' => $row->product_variant_id,
+                'product_variant_id' => $row->product_variant_id,
                 'product_name' => $row->product_name,
                 'product_sku' => $row->product_sku,
-                    'product_variant_name' => $row->product_variant_name,
-                    'product_variant_sku' => $row->product_variant_sku,
+                'product_variant_name' => $row->product_variant_name,
+                'product_variant_sku' => $row->product_variant_sku,
                 'ordered_qty' => (float) $row->ordered_qty,
+                'ordered_purchase_qty' => (float) ($row->purchase_qty ?? $row->ordered_qty),
+                'purchase_unit' => $row->purchase_unit ?: $row->unit,
                 'received_qty' => (float) $row->qty_in,
+                'received_purchase_qty' => $receivedPurchaseQty,
                 'unit_cost' => (float) $row->unit_cost,
+                'purchase_price' => (float) ($row->purchase_price ?? $row->unit_cost),
                 'total_cost' => (float) $row->total_cost,
             ];
         }
@@ -259,6 +292,7 @@ class PurchaseController extends Controller
                 ? Rule::exists('products', 'id')->where('tenant_id', $tenantId)
                 : 'exists:products,id'],
             'items.*.qty' => ['required', 'numeric', 'min:0.01'],
+            'items.*.purchase_unit' => ['nullable', 'string', 'max:30'],
             'items.*.price' => ['required', 'numeric', 'min:0'],
         ]);
         $purchaseModeProvided = array_key_exists('purchase_mode', $validated);
@@ -390,6 +424,12 @@ class PurchaseController extends Controller
             }
 
             return response()->json($result, 201);
+        } catch (ValidationException $exception) {
+            return response()->json([
+                'code' => 'VALIDATION_ERROR',
+                'message' => 'Data tidak valid.',
+                'details' => $exception->errors(),
+            ], 422);
         } catch (RuntimeException $exception) {
             return response()->json([
                 'code' => 'PURCHASE_CREATE_FAILED',
@@ -565,6 +605,7 @@ class PurchaseController extends Controller
                 ? Rule::exists('products', 'id')->where('tenant_id', $tenantId)
                 : 'exists:products,id'],
             'items.*.qty' => ['required', 'numeric', 'min:0.01'],
+            'items.*.purchase_unit' => ['nullable', 'string', 'max:30'],
         ]);
 
         try {
@@ -594,6 +635,12 @@ class PurchaseController extends Controller
                 'code' => 'INVALID_TRANSACTION_DATE',
                 'message' => $exception->getMessage(),
                 'details' => [],
+            ], 422);
+        } catch (ValidationException $exception) {
+            return response()->json([
+                'code' => 'VALIDATION_ERROR',
+                'message' => 'Data tidak valid.',
+                'details' => $exception->errors(),
             ], 422);
         } catch (RuntimeException $exception) {
             return response()->json([

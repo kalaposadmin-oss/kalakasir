@@ -106,6 +106,7 @@
                         <tbody class="divide-y divide-slate-100 text-slate-700">
                             <tr><td class="px-3 py-2 font-mono text-xs">name</td><td class="px-3 py-2">Wajib</td></tr>
                             <tr><td class="px-3 py-2 font-mono text-xs">sku</td><td class="px-3 py-2">Opsional, dibuat otomatis jika kosong</td></tr>
+                            <tr><td class="px-3 py-2 font-mono text-xs">item_type</td><td class="px-3 py-2">Tipe produk: barang_jual, bahan_baku, atau jasa</td></tr>
                             <tr><td class="px-3 py-2 font-mono text-xs">price</td><td class="px-3 py-2">Harga jual</td></tr>
                             <tr><td class="px-3 py-2 font-mono text-xs">hpp_average</td><td class="px-3 py-2">Wajib jika stok awal diisi</td></tr>
                             <tr><td class="px-3 py-2 font-mono text-xs">qty_on_hand</td><td class="px-3 py-2">Stok awal</td></tr>

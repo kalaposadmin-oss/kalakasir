@@ -292,13 +292,33 @@
                     return String(product?.unit || 'Pcs').trim() || 'Pcs';
                 };
 
+                const unitGroups = [
+                    ['mg', 'gram', 'kg'],
+                    ['ml', 'liter'],
+                    ['cm', 'meter'],
+                    ['pcs', 'unit', 'dozen', 'lusin'],
+                ];
+
+                const getCompatibleUnits = (unit) => {
+                    const normalized = String(unit || '').trim().toLowerCase();
+                    const group = unitGroups.find((items) => items.includes(normalized));
+                    return group || (normalized ? [normalized] : ['Pcs']);
+                };
+
                 const updateRowUnit = (wrapper, productId) => {
-                    const unitLabel = wrapper.querySelector('.item-unit-label');
-                    if (!unitLabel) {
+                    const unitSelect = wrapper.querySelector('.item-purchase-unit');
+                    if (!unitSelect) {
                         return;
                     }
 
-                    unitLabel.textContent = getProductUnit(productId);
+                    const stockUnit = getProductUnit(productId);
+                    unitSelect.innerHTML = getCompatibleUnits(stockUnit)
+                        .map((unit) => `<option value="${unit}">${unit}</option>`)
+                        .join('');
+                    unitSelect.value = String(stockUnit).trim().toLowerCase();
+                    if (!unitSelect.value && unitSelect.options.length) {
+                        unitSelect.selectedIndex = 0;
+                    }
                 };
 
                 const syncTaxFields = () => {
@@ -326,12 +346,14 @@
                             <div class="space-y-1.5">
                                 <label class="block text-xs font-medium text-slate-400 ml-1">Jumlah</label>
                                 <div class="flex items-center">
-                                    <input class="item-qty w-full h-12 bg-slate-50 dark:bg-slate-800 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-primary/20" placeholder="0" type="number" value="1" min="1" />
-                                    <span class="item-unit-label ml-2 text-xs text-slate-500 font-medium">Pcs</span>
+                                    <input class="item-qty w-full h-12 bg-slate-50 dark:bg-slate-800 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-primary/20" placeholder="0" type="number" value="1" min="0.0001" step="0.0001" />
+                                    <select class="item-purchase-unit ml-2 h-12 rounded-xl border-0 bg-slate-50 px-2 text-xs font-bold text-slate-600 focus:ring-2 focus:ring-primary/20 dark:bg-slate-800 dark:text-slate-300">
+                                        <option value="Pcs">Pcs</option>
+                                    </select>
                                 </div>
                             </div>
                             <div class="space-y-1.5">
-                                <label class="block text-xs font-medium text-slate-400 ml-1">Harga Beli</label>
+                                <label class="block text-xs font-medium text-slate-400 ml-1">Harga Beli / Satuan</label>
                                 <div class="relative">
                                     <span class="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">Rp</span>
                                     <input class="item-price w-full h-12 bg-slate-50 dark:bg-slate-800 border-none rounded-xl pl-10 pr-4 text-sm font-bold focus:ring-2 focus:ring-primary/20" placeholder="0" type="number" value="0" min="0" />
@@ -493,6 +515,7 @@
                         items.push({
                             product_id: select.value,
                             qty: parseFloat(qtyInput.value || '0'),
+                            purchase_unit: wrapper.querySelector('.item-purchase-unit')?.value || getProductUnit(select.value),
                             price: parseFloat(priceInput.value || '0'),
                         });
                     });

@@ -36,7 +36,7 @@ class ProductImportWebTest extends TestCase
         $this->assertStringContainsString('attachment', (string) $response->headers->get('content-disposition'));
         $this->assertStringContainsString('sample_products.csv', (string) $response->headers->get('content-disposition'));
         $this->assertStringContainsString('sep=;', $response->getContent());
-        $this->assertStringContainsString('sku;name;price;hpp_average;qty_on_hand;track_stock;category;supplier;unit;min_stock', $response->getContent());
+        $this->assertStringContainsString('sku;name;item_type;price;hpp_average;qty_on_hand;track_stock;category;supplier;unit;min_stock', $response->getContent());
         $this->assertStringNotContainsString('<!DOCTYPE html>', $response->getContent());
     }
 

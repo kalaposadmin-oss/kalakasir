@@ -470,7 +470,7 @@
                                     <p class="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">${formatDate(receipt.received_at)}</p>
                                     <p class="mt-1 text-xs text-slate-500">Oleh ${receipt.received_by_name || 'Sistem'}</p>
                                 </div>
-                                <span class="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold uppercase text-emerald-700">${formatQuantity(receipt.total_qty || 0)} item</span>
+                                <span class="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold uppercase text-emerald-700">${formatQuantity(receipt.total_purchase_qty || receipt.total_qty || 0)} item</span>
                             </div>
                             <div class="mt-3 space-y-2">
                                 ${(receipt.items || []).map((item) => `
@@ -480,7 +480,7 @@
                                             <p class="text-xs text-slate-500">SKU: ${item.product_sku || '-'}</p>
                                             ${item.product_variant_name ? `<p class="text-xs text-slate-500">Varian: ${item.product_variant_name}</p>` : ''}
                                         </div>
-                                        <span class="shrink-0 font-bold text-primary">${formatQuantity(item.received_qty)} / ${formatQuantity(item.ordered_qty)}</span>
+                                        <span class="shrink-0 font-bold text-primary">${formatQuantity(item.received_purchase_qty ?? item.received_qty)} / ${formatQuantity(item.ordered_purchase_qty ?? item.ordered_qty)} ${item.purchase_unit || ''}</span>
                                     </div>
                                 `).join('')}
                             </div>
@@ -499,19 +499,19 @@
                             <div class="flex justify-between items-start mb-2">
                                 <div class="flex-1 pr-3">
                                     <h4 class="font-bold text-sm">${item.product_name}</h4>
-                                    <p class="text-xs text-slate-500">SKU: ${item.product_sku || '-'} • Qty: ${item.qty} ${item.unit || 'Pcs'}</p>
+                                    <p class="text-xs text-slate-500">SKU: ${item.product_sku || '-'} • Qty beli: ${formatQuantity(item.purchase_qty ?? item.qty)} ${item.purchase_unit || item.unit || 'Pcs'} • Stok masuk: ${formatQuantity(item.qty)} ${item.unit || 'Pcs'}</p>
                                     ${item.product_variant_name ? `<p class="text-xs text-slate-500">Varian: ${item.product_variant_name}</p>` : ''}
                                 </div>
-                                <span class="text-xs font-bold text-primary">${formatCurrency(item.price)}</span>
+                                <span class="text-xs font-bold text-primary">${formatCurrency(item.purchase_price ?? item.price)}</span>
                             </div>
                             <div class="grid grid-cols-2 gap-3">
                                 <div class="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-2">
                                     <span class="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Harga Satuan</span>
-                                    <span class="mt-1 block text-sm font-bold text-slate-900 dark:text-slate-100">${formatCurrency(item.price)}</span>
+                                    <span class="mt-1 block text-sm font-bold text-slate-900 dark:text-slate-100">${formatCurrency(item.purchase_price ?? item.price)}</span>
                                 </div>
                                 <div class="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-2 text-right">
                                     <span class="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Subtotal Item</span>
-                                    <span class="mt-1 block text-sm font-bold text-slate-900 dark:text-slate-100">${formatCurrency(item.qty * item.price)}</span>
+                                    <span class="mt-1 block text-sm font-bold text-slate-900 dark:text-slate-100">${formatCurrency(Number(item.purchase_qty ?? item.qty) * Number(item.purchase_price ?? item.price))}</span>
                                 </div>
                             </div>
                         `;
@@ -668,7 +668,7 @@
                     try {
                         const data = await loadPurchase();
                         const items = data.items || [];
-                        const subtotal = items.reduce((sum, item) => sum + (item.qty * item.price), 0);
+                        const subtotal = items.reduce((sum, item) => sum + (Number(item.purchase_qty ?? item.qty) * Number(item.purchase_price ?? item.price)), 0);
                         const tax = subtotal * 0.11;
                         const total = subtotal + tax;
                         currentPurchaseMode = normalizePurchaseMode(data.purchase.purchase_mode || purchaseFlowDefaultMode);

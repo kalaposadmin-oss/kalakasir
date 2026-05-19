@@ -22,6 +22,7 @@ class ProductImportService
         'ignore' => 'Abaikan',
         'sku' => 'SKU / Barcode',
         'name' => 'Nama Produk',
+        'item_type' => 'Tipe Produk',
         'price' => 'Harga Jual',
         'hpp_average' => 'HPP / Modal',
         'qty_on_hand' => 'Stok Awal',
@@ -45,6 +46,14 @@ class ProductImportService
         'produk' => 'name',
         'product' => 'name',
         'product name' => 'name',
+        'item type' => 'item_type',
+        'product type' => 'item_type',
+        'tipe' => 'item_type',
+        'tipe produk' => 'item_type',
+        'tipe barang' => 'item_type',
+        'jenis' => 'item_type',
+        'jenis produk' => 'item_type',
+        'jenis barang' => 'item_type',
         'price' => 'price',
         'harga' => 'price',
         'harga jual' => 'price',
@@ -120,6 +129,11 @@ class ProductImportService
 
         if (str_contains($key, 'sku') || str_contains($key, 'barcode') || str_contains($key, 'kode')) {
             return 'sku';
+        }
+
+        if ((str_contains($key, 'tipe') || str_contains($key, 'jenis') || str_contains($key, 'type'))
+            && (str_contains($key, 'produk') || str_contains($key, 'product') || str_contains($key, 'barang') || str_contains($key, 'item') || in_array($key, ['tipe', 'jenis', 'type'], true))) {
+            return 'item_type';
         }
 
         if (str_contains($key, 'hpp') || str_contains($key, 'modal') || str_contains($key, 'cost')) {
@@ -490,19 +504,42 @@ class ProductImportService
             ? $this->normalizeMoney($mapped['hpp_average'])
             : (float) ($product?->hpp_average ?? 0);
         $initialStock = $this->normalizeQty($mapped['qty_on_hand'] ?? null);
+        $itemTypeMapped = array_key_exists('item_type', $mapped);
+        $itemType = $itemTypeMapped
+            ? $this->normalizeItemType($mapped['item_type'], $product)
+            : $this->resolveCurrentItemType($product);
+        $productMode = $this->resolveProductModeForImport($itemType, $product);
+        $productionMode = $this->resolveProductionModeForImport($itemType, $productMode, $product);
         $trackStockDefault = $product ? (bool) $product->track_stock : true;
+        if ($itemType === 'service') {
+            $trackStockDefault = false;
+        }
         if ($initialStock > 0 && ! array_key_exists('track_stock', $mapped)) {
             $trackStockDefault = true;
         }
         $trackStock = array_key_exists('track_stock', $mapped)
             ? $this->normalizeBoolean($mapped['track_stock'], $trackStockDefault)
             : $trackStockDefault;
+        if ($itemType === 'service') {
+            $trackStock = false;
+        }
         $categoryId = array_key_exists('category', $mapped)
             ? $this->resolveCategoryId($tenantId, $mapped['category'], $now)
             : $product?->category_id;
         $supplierId = array_key_exists('supplier', $mapped)
             ? $this->resolveSupplierId($tenantId, $mapped['supplier'], $now)
             : $product?->supplier_id;
+        $minStock = array_key_exists('min_stock', $mapped)
+            ? $this->normalizeQty($mapped['min_stock'])
+            : (float) ($product?->min_stock ?? 0);
+
+        if ($itemType === 'service') {
+            $minStock = 0;
+        }
+
+        if ($itemType === 'service' && $initialStock > 0) {
+            throw new RuntimeException('Stok awal tidak berlaku untuk produk jasa / service.');
+        }
 
         if ($initialStock > 0 && $hppAverage <= 0) {
             throw new RuntimeException('HPP / modal wajib lebih dari 0 saat stok awal diisi.');
@@ -512,6 +549,10 @@ class ProductImportService
             throw new RuntimeException('Gunakan Stok harus aktif saat stok awal diisi.');
         }
 
+        if ($productionMode === Product::PRODUCTION_MODE_BATCH && ! $trackStock) {
+            throw new RuntimeException('Produk batch production wajib Gunakan Stok aktif.');
+        }
+
         $createAttributes = $this->filterProductColumns([
             'tenant_id' => $tenantId,
             'category_id' => $categoryId,
@@ -519,14 +560,14 @@ class ProductImportService
             'name' => $name,
             'price' => $price,
             'hpp_average' => $hppAverage,
-            'min_stock' => array_key_exists('min_stock', $mapped) ? $this->normalizeQty($mapped['min_stock']) : 0,
+            'min_stock' => $minStock,
             'unit' => array_key_exists('unit', $mapped) ? $this->nullableString($mapped['unit'], 30) : null,
             'supplier_id' => $supplierId,
             'is_active' => true,
             'track_stock' => $trackStock,
-            'product_mode' => 'default',
-            'production_mode' => Product::PRODUCTION_MODE_NONE,
-            'item_type' => 'finished_good',
+            'product_mode' => $productMode,
+            'production_mode' => $productionMode,
+            'item_type' => $itemType,
             'variants' => json_encode([]),
             'bom_items' => json_encode([]),
             'bundle_items' => json_encode([]),
@@ -543,6 +584,9 @@ class ProductImportService
                 'price' => $price,
                 'hpp_average' => $hppAverage,
                 'track_stock' => $trackStock,
+                'item_type' => $itemType,
+                'product_mode' => $productMode,
+                'production_mode' => $productionMode,
                 'updated_by' => $userId,
                 'updated_at' => $now,
             ];
@@ -556,11 +600,18 @@ class ProductImportService
             }
 
             if (array_key_exists('min_stock', $mapped)) {
-                $updateAttributes['min_stock'] = $this->normalizeQty($mapped['min_stock']);
+                $updateAttributes['min_stock'] = $minStock;
+            } elseif ($itemType === 'service') {
+                $updateAttributes['min_stock'] = 0;
             }
 
             if (array_key_exists('unit', $mapped)) {
                 $updateAttributes['unit'] = $this->nullableString($mapped['unit'], 30);
+            }
+
+            if ($itemTypeMapped && in_array($itemType, ['raw_material', 'service'], true)) {
+                $updateAttributes['bom_items'] = json_encode([]);
+                $updateAttributes['recipe_output_qty'] = null;
             }
 
             DB::table('products')
@@ -590,6 +641,113 @@ class ProductImportService
         }
 
         return $result;
+    }
+
+    private function normalizeItemType(mixed $value, ?Product $product): string
+    {
+        $raw = $this->cleanCellValue($value);
+        if ($raw === '') {
+            return $this->resolveCurrentItemType($product);
+        }
+
+        $normalized = Str::of($raw)
+            ->lower()
+            ->replaceMatches('/[_\-\/]+/', ' ')
+            ->replaceMatches('/\s+/', ' ')
+            ->trim()
+            ->toString();
+
+        $aliases = [
+            'finished_good' => [
+                'finished good',
+                'barang jual',
+                'barang jadi',
+                'produk jual',
+                'produk jadi',
+                'jual',
+                'jualan',
+                'barang',
+                'produk',
+            ],
+            'raw_material' => [
+                'raw material',
+                'bahan baku',
+                'bahan mentah',
+                'bahan',
+                'material',
+                'raw',
+                'add on',
+                'addon',
+            ],
+            'service' => [
+                'service',
+                'jasa',
+                'jasa service',
+                'layanan',
+            ],
+        ];
+
+        foreach ($aliases as $itemType => $values) {
+            if (in_array($normalized, $values, true)) {
+                return $itemType;
+            }
+        }
+
+        throw new RuntimeException('Tipe Produk tidak dikenali. Gunakan barang_jual, bahan_baku, atau jasa.');
+    }
+
+    private function resolveCurrentItemType(?Product $product): string
+    {
+        if (! $product) {
+            return 'finished_good';
+        }
+
+        $itemType = ProductItemTypeMapper::resolve(
+            is_string($product->item_type ?? null) ? $product->item_type : null,
+            (string) ($product->product_mode ?? 'default')
+        );
+
+        return in_array($itemType, ProductItemTypeMapper::ITEM_TYPES, true)
+            ? $itemType
+            : 'finished_good';
+    }
+
+    private function resolveProductModeForImport(string $itemType, ?Product $product): string
+    {
+        if ($itemType === 'raw_material') {
+            return 'add_on';
+        }
+
+        if ($itemType === 'service') {
+            return 'default';
+        }
+
+        $currentMode = (string) ($product?->product_mode ?? '');
+        if ($currentMode !== ''
+            && $currentMode !== 'add_on'
+            && in_array($currentMode, ProductItemTypeMapper::PRODUCT_MODES, true)) {
+            return $currentMode;
+        }
+
+        return 'default';
+    }
+
+    private function resolveProductionModeForImport(string $itemType, string $productMode, ?Product $product): string
+    {
+        if ($itemType !== 'finished_good') {
+            return Product::PRODUCTION_MODE_NONE;
+        }
+
+        if ($productMode === 'add_on') {
+            return Product::PRODUCTION_MODE_NONE;
+        }
+
+        $currentMode = (string) ($product?->production_mode ?? '');
+        if ($currentMode !== '' && in_array($currentMode, Product::PRODUCTION_MODES, true)) {
+            return $currentMode;
+        }
+
+        return Product::PRODUCTION_MODE_NONE;
     }
 
     private function buildUniqueSku(string $tenantId, string $name): string

@@ -1,5 +1,5 @@
 sep=;
-sku;name;price;hpp_average;qty_on_hand;track_stock;category;supplier;unit;min_stock
-P001;Nasi Goreng;20000;12000;10;true;Makanan;Supplier Sembako;porsi;3
-P002;Teh Manis;5000;2500;50;true;Minuman;Supplier Minuman;gelas;10
-;Roti Tawar;8000;5000;15;true;Roti;Supplier Roti;bungkus;5
+sku;name;item_type;price;hpp_average;qty_on_hand;track_stock;category;supplier;unit;min_stock
+P001;Nasi Goreng;barang_jual;20000;12000;10;true;Makanan;Supplier Sembako;porsi;3
+P002;Teh Manis;barang_jual;5000;2500;50;true;Minuman;Supplier Minuman;gelas;10
+;Roti Tawar;barang_jual;8000;5000;15;true;Roti;Supplier Roti;bungkus;5

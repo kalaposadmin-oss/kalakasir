@@ -195,12 +195,12 @@
                     </div>
                     <div id="raw-material-meta-section" class="hidden rounded-xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3">
                         <div>
-                            <p class="text-sm font-semibold text-slate-900 dark:text-slate-100">Metadata Bahan Baku</p>
-                            <p class="text-xs text-slate-500 dark:text-slate-400">Satuan bahan dipilih dari daftar agar konsisten. Jika belum ada, pilih satuan lain lalu isi manual.</p>
+                            <p class="text-sm font-semibold text-slate-900 dark:text-slate-100">Satuan Produk</p>
+                            <p class="text-xs text-slate-500 dark:text-slate-400">Satuan ini dipakai untuk stok, pembelian, dan resep. Pilih satuan dasar terkecil agar konversi otomatis tetap rapi.</p>
                         </div>
                         <div class="flex flex-col gap-4">
                             <div class="flex flex-col gap-1.5">
-                                <label class="text-slate-700 dark:text-slate-300 text-sm font-semibold px-0.5">Satuan Bahan</label>
+                                <label class="text-slate-700 dark:text-slate-300 text-sm font-semibold px-0.5">Satuan Stok / Resep</label>
                                 <div class="relative">
                                     <select id="raw-material-unit-select" class="select-no-native-arrow w-full rounded-xl border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:border-primary focus:ring-primary h-12 px-4 pr-10 text-base"></select>
                                     <span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">expand_more</span>
@@ -511,7 +511,11 @@
                 let rawMaterialProducts = [];
                 const productDetailCache = new Map();
                 const successFlashKey = 'kalakasir:product-create-success';
-                const rawMaterialUnitOptions = ['gram', 'kg', 'mg', 'liter', 'ml', 'pcs', 'box', 'pack', 'roll', 'meter', 'cm', 'dozen', 'lusin', 'sachet', 'bungkus'];
+                const rawMaterialUnitOptions = ['mg', 'gram', 'kg', 'ml', 'liter', 'cm', 'meter', 'pcs', 'unit', 'dozen', 'lusin', 'box', 'pack', 'roll', 'sachet', 'bungkus'];
+                const stockUnitDefaults = {
+                    raw_material: 'gram',
+                    finished_good: 'pcs',
+                };
 
                 const getSelectedProductType = () => String(el.productType?.value || 'finished_good');
                 const normalizeRecipeProductionMode = (value) => {
@@ -832,6 +836,45 @@
                     return selectedUnit;
                 };
 
+                const confirmStockUnitBeforeSave = (productType, unit) => {
+                    if (productType === 'service') {
+                        return true;
+                    }
+
+                    const normalizedUnit = String(unit || '').trim().toLowerCase();
+                    const typeLabel = productType === 'raw_material' ? 'bahan baku' : 'produk';
+                    const examples = {
+                        gram: 'Contoh: beli 1 kg akan otomatis masuk sebagai 1000 gram. Jika resep butuh 100 gram, stok langsung berkurang 100 gram.',
+                        mg: 'Contoh: semua stok dan resep akan dihitung dalam mg. Pakai ini hanya jika resep memang memakai ukuran sangat kecil.',
+                        ml: 'Contoh: beli 1 liter akan otomatis masuk sebagai 1000 ml. Jika resep butuh 100 ml, stok langsung berkurang 100 ml.',
+                        cm: 'Contoh: beli 1 meter akan otomatis masuk sebagai 100 cm. Jika resep butuh 25 cm, stok langsung berkurang 25 cm.',
+                        pcs: 'Contoh: stok dan resep dihitung per pcs. Gunakan untuk barang hitungan seperti telur, cup, atau kemasan satuan.',
+                        unit: 'Contoh: stok dan resep dihitung per unit. Gunakan jika memang tidak ada satuan yang lebih spesifik.',
+                    };
+                    const notSmallestHints = {
+                        kg: 'Perhatian: kg biasanya bukan satuan terkecil untuk resep. Jika resep memakai gram, sebaiknya pilih gram.',
+                        liter: 'Perhatian: liter biasanya bukan satuan terkecil untuk resep. Jika resep memakai ml, sebaiknya pilih ml.',
+                        meter: 'Perhatian: meter biasanya bukan satuan terkecil untuk resep. Jika resep memakai cm, sebaiknya pilih cm.',
+                        dozen: 'Perhatian: dozen berisi 12 pcs. Jika resep memakai pcs, sebaiknya pilih pcs.',
+                        lusin: 'Perhatian: lusin berisi 12 pcs. Jika resep memakai pcs, sebaiknya pilih pcs.',
+                    };
+
+                    const message = [
+                        `Satuan dasar stok/resep untuk ${typeLabel} ini adalah: ${unit || '-'}.`,
+                        examples[normalizedUnit] || notSmallestHints[normalizedUnit] || 'Pastikan satuan ini adalah satuan yang akan dipakai saat stok dan resep dihitung.',
+                        'Lanjut simpan dengan satuan ini?',
+                    ].join('\n\n');
+
+                    if (window.PosUi?.confirmRiskAction) {
+                        return window.PosUi.confirmRiskAction({
+                            title: 'Pastikan Satuan Dasar',
+                            message,
+                        });
+                    }
+
+                    return window.confirm(message);
+                };
+
                 const loadCategories = async (selectedId = '') => {
                     const response = await fetch('/api/v1/categories', { headers });
                     if (!response.ok) {
@@ -968,7 +1011,10 @@
                     const isFinishedGood = productType === 'finished_good';
 
                     updateProductTypeNote();
-                    el.rawMaterialMetaSection.classList.toggle('hidden', !isRawMaterial);
+                    el.rawMaterialMetaSection.classList.toggle('hidden', isService);
+                    if (!isService && !resolveRawMaterialUnit()) {
+                        renderRawMaterialUnits(stockUnitDefaults[productType] || 'pcs');
+                    }
 
                     setToggleDisabled(el.trackStock, isService);
                     if (isService) {
@@ -1585,7 +1631,7 @@
                     setSupplierQuickPanel(false);
                     el.price.value = '';
                     el.hpp.value = '';
-                    renderRawMaterialUnits('');
+                    renderRawMaterialUnits(stockUnitDefaults[initialProductType || 'finished_good'] || 'pcs');
                     el.stock.value = '0';
                     el.isActive.checked = true;
                     el.trackStock.checked = true;
@@ -1658,6 +1704,16 @@
                         payload.price = Math.max(0, Number(payload.price || 0));
                     }
 
+                    if (productType !== 'service') {
+                        payload.unit = resolveRawMaterialUnit();
+
+                        if (!payload.unit) {
+                            showError('Satuan produk wajib diisi.');
+                            focusInvalidField(el.rawMaterialUnitSelect.value === '__custom__' ? el.rawMaterialUnitCustom : el.rawMaterialUnitSelect, 'main');
+                            return;
+                        }
+                    }
+
                     if (el.enableVariants.checked) {
                         try {
                             payload.variants = collectVariants();
@@ -1672,14 +1728,7 @@
                     }
 
                     if (productType === 'raw_material') {
-                        payload.unit = resolveRawMaterialUnit();
                         payload.recipe_output_qty = null;
-
-                        if (!payload.unit) {
-                            showError('Satuan bahan baku wajib diisi.');
-                            focusInvalidField(el.rawMaterialUnitSelect.value === '__custom__' ? el.rawMaterialUnitCustom : el.rawMaterialUnitSelect, 'main');
-                            return;
-                        }
 
                         payload.product_mode = 'add_on';
                         payload.item_type = 'raw_material';
@@ -1694,6 +1743,7 @@
                         payload.initial_stock = 0;
                         payload.initial_stock_lines = [];
                         payload.variants = [];
+                        payload.unit = null;
                     } else if (canManageRecipe && el.enableBom.checked) {
                         const productionMode = getSelectedRecipeProductionMode();
                         payload.recipe_output_qty = productionMode === 'batch_production'
@@ -1724,6 +1774,10 @@
                         payload.product_mode = 'default';
                         payload.item_type = 'finished_good';
                         payload.production_mode = 'none';
+                    }
+
+                    if (!confirmStockUnitBeforeSave(productType, payload.unit)) {
+                        return;
                     }
 
                     el.save.disabled = true;
@@ -1809,6 +1863,14 @@
                 el.isActive.addEventListener('change', refreshProductionReadiness);
 
                 el.productType.addEventListener('change', () => {
+                    const productType = getSelectedProductType();
+                    const currentUnit = resolveRawMaterialUnit();
+                    if (productType === 'raw_material' && (!currentUnit || ['pcs', 'unit'].includes(String(currentUnit).toLowerCase()))) {
+                        renderRawMaterialUnits('gram');
+                    } else if (productType === 'finished_good' && !currentUnit) {
+                        renderRawMaterialUnits('pcs');
+                    }
+
                     syncProductTypeState();
                 });
 
@@ -1998,8 +2060,8 @@
                 openProductTab('main');
                 el.productType.value = initialProductType || 'finished_good';
                 ensureSku();
+                renderRawMaterialUnits(stockUnitDefaults[initialProductType || 'finished_good'] || 'pcs');
                 syncProductTypeState();
-                renderRawMaterialUnits('');
                 refreshProductionReadiness();
 
                 el.rawMaterialUnitSelect.addEventListener('change', () => {
