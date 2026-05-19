@@ -21,6 +21,7 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/', [PortalAuthController::class, 'showRoot']);
 Route::post('/', [PortalAuthController::class, 'loginRoot']);
+Route::get('/sample_products.csv', [\App\Http\Controllers\Web\ProductImportController::class, 'downloadTemplate']);
 
 Route::get('/register', [OnboardingController::class, 'registerRedirect']);
 
@@ -391,6 +392,7 @@ Route::middleware(['canonical_portal_host:backoffice'])->group(function () {
 
     // Product import (CSV)
     Route::get('/backoffice/products/import', [\App\Http\Controllers\Web\ProductImportController::class, 'showImportForm'])->middleware('web_access:backoffice,admin|owner|superadmin,product.list');
+    Route::get('/backoffice/products/import/template', [\App\Http\Controllers\Web\ProductImportController::class, 'downloadTemplate'])->middleware('web_access:backoffice,admin|owner|superadmin,product.list');
     Route::post('/backoffice/products/import', [\App\Http\Controllers\Web\ProductImportController::class, 'handleImport'])->middleware('web_access:backoffice,admin|owner|superadmin,product.list');
     Route::post('/backoffice/products/import/process', [\App\Http\Controllers\Web\ProductImportController::class, 'processImport'])->middleware('web_access:backoffice,admin|owner|superadmin,product.list');
 

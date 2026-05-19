@@ -18,6 +18,36 @@ class ProductImportController extends Controller
         return view('backoffice.product-import', $this->viewData());
     }
 
+    public function downloadTemplate()
+    {
+        $rows = [
+            ['sep=;'],
+            ['sku', 'name', 'price', 'hpp_average', 'qty_on_hand', 'track_stock', 'category', 'supplier', 'unit', 'min_stock'],
+            ['P001', 'Nasi Goreng', '20000', '12000', '10', 'true', 'Makanan', 'Supplier Sembako', 'porsi', '3'],
+            ['P002', 'Teh Manis', '5000', '2500', '50', 'true', 'Minuman', 'Supplier Minuman', 'gelas', '10'],
+            ['', 'Roti Tawar', '8000', '5000', '15', 'true', 'Roti', 'Supplier Roti', 'bungkus', '5'],
+        ];
+
+        $csv = collect($rows)
+            ->map(function (array $row): string {
+                if (count($row) === 1) {
+                    return $row[0];
+                }
+
+                return implode(';', array_map(fn ($value) => str_contains((string) $value, ';')
+                    ? '"'.str_replace('"', '""', (string) $value).'"'
+                    : (string) $value, $row));
+            })
+            ->implode("\r\n")."\r\n";
+
+        return response($csv, 200, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="sample_products.csv"',
+            'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+            'Pragma' => 'no-cache',
+        ]);
+    }
+
     public function handleImport(Request $request)
     {
         // kept for backward compatibility: act like uploadPreview

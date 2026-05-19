@@ -81,7 +81,7 @@
                             <span class="material-symbols-outlined text-[20px]">preview</span>
                             Preview Kolom
                         </button>
-                        <a href="/sample_products.csv" download class="inline-flex h-11 items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700">
+                        <a href="/backoffice/products/import/template" download class="inline-flex h-11 items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700">
                             <span class="material-symbols-outlined text-[20px]">download</span>
                             Contoh CSV Excel
                         </a>
