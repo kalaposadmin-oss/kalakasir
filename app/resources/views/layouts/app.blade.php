@@ -3,6 +3,8 @@
     <head>
         <meta charset="utf-8" />
         <meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport" />
+        <meta name="color-scheme" content="light" />
+        <meta name="theme-color" content="#f8fafc" />
         <meta name="csrf-token" content="{{ csrf_token() }}" />
         <meta name="tenant-id" content="{{ $tenantId ?? '' }}" />
         <title>@yield('page_title', 'POS SaaS')</title>

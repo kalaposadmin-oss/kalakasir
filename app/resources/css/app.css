@@ -1,6 +1,8 @@
 @import 'tailwindcss' source(none);
 @import 'material-symbols/outlined.css';
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../views/**/*.blade.php';
 @source '../js/**/*.js';
@@ -24,7 +26,12 @@
 
 @layer base {
     html {
+        color-scheme: light;
         letter-spacing: 0;
+    }
+
+    html.dark {
+        color-scheme: dark;
     }
 
     body {
@@ -36,8 +43,16 @@
     input,
     select,
     textarea {
+        color-scheme: light;
         font: inherit;
         letter-spacing: 0;
+    }
+
+    html.dark button,
+    html.dark input,
+    html.dark select,
+    html.dark textarea {
+        color-scheme: dark;
     }
 }
 
