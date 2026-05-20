@@ -1,0 +1,53 @@
+name: Deploy to Hosting
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOSTING_HOST }}
+          username: ${{ secrets.HOSTING_USER }}
+          key: ${{ secrets.HOSTING_SSH_KEY }}
+          port: ${{ secrets.HOSTING_PORT }}
+          script: |
+            set -e
+
+            cd /home/kalapay1/kalakasir
+            git pull origin main
+
+            cd /home/kalapay1/kalakasir/app
+
+            if [ -f composer.phar ]; then
+              php composer.phar install --no-dev --optimize-autoloader
+            else
+              php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
+              php composer-setup.php
+              php composer.phar install --no-dev --optimize-autoloader
+            fi
+
+            php artisan migrate --force
+
+            rm -rf /home/kalapay1/public_html/build
+            cp -r /home/kalapay1/kalakasir/app/public/build /home/kalapay1/public_html/
+
+            if [ -d /home/kalapay1/kalakasir/app/public/js ]; then
+              cp -r /home/kalapay1/kalakasir/app/public/js /home/kalapay1/public_html/
+            fi
+
+            if [ -f /home/kalapay1/kalakasir/app/public/sample_products.csv ]; then
+              cp /home/kalapay1/kalakasir/app/public/sample_products.csv /home/kalapay1/public_html/
+            fi
+
+            php artisan optimize:clear
+            php artisan config:clear
+            php artisan cache:clear
+            php artisan route:clear
+            php artisan view:clear
