@@ -148,7 +148,11 @@ class CheckoutController extends Controller
         } catch (InvalidArgumentException $exception) {
             $message = $exception->getMessage();
             $code = match (true) {
-                str_contains($message, 'raw material') => 'INVALID_PRODUCT_TYPE',
+                str_contains($message, 'raw material'),
+                str_contains($message, 'packaging'),
+                str_contains($message, 'perlengkapan'),
+                str_contains($message, 'alat kecil'),
+                str_contains($message, 'stok internal') => 'INVALID_PRODUCT_TYPE',
                 str_contains($message, 'piutang'), str_contains($message, 'pembayaran'), str_contains($message, 'Customer') => 'INVALID_PAYMENT',
                 default => 'INVALID_TOTAL',
             };

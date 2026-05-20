@@ -189,7 +189,7 @@ class OnboardingFirstTimeFlowTest extends TestCase
             ->assertRedirect('/register/step-1');
     }
 
-    public function test_root_renders_pos_login_when_user_exists(): void
+    public function test_root_renders_portal_chooser_when_user_exists(): void
     {
         $tenantId = $this->seedTenant();
 
@@ -207,8 +207,12 @@ class OnboardingFirstTimeFlowTest extends TestCase
 
         $this->get('/')
             ->assertOk()
-            ->assertSee('Login POS')
-            ->assertSee('action="/"', false);
+            ->assertSee('Pilih Area Kerja')
+            ->assertSee('Masuk POS')
+            ->assertSee('Masuk Backoffice')
+            ->assertSee('href="/pos/login"', false)
+            ->assertDontSee('name="email"', false)
+            ->assertDontSee('action="/"', false);
     }
 
     public function test_onboarding_step_two_assigns_owner_and_creates_default_branch_location(): void

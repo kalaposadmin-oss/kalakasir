@@ -27,13 +27,16 @@
     $isProductCreatePosPortal = $productCreatePortalPrefix === '/pos';
     $productCreateFrom = trim((string) request()->query('from', ''));
     $productCreateRequestedType = trim((string) request()->query('type', ''));
-    if (! in_array($productCreateRequestedType, ['finished_good', 'raw_material', 'service'], true)) {
+    if (! in_array($productCreateRequestedType, ['finished_good', 'raw_material', 'packaging', 'supply', 'small_tool', 'service'], true)) {
         $productCreateRequestedType = 'finished_good';
     }
     $productCreateBackUrl = $productCreatePortalPrefix.'/products';
     $productCreateListUrl = $productCreatePortalPrefix.'/products';
     $productCreateTitle = match ($productCreateRequestedType) {
         'raw_material' => 'Tambah Bahan Baku',
+        'packaging' => 'Tambah Packaging',
+        'supply' => 'Tambah Perlengkapan',
+        'small_tool' => 'Tambah Alat Kecil',
         'service' => 'Tambah Service',
         default => 'Tambah Produk Baru',
     };
@@ -179,12 +182,15 @@
                     <div class="rounded-xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3">
                         <div>
                             <p class="text-sm font-semibold text-slate-900 dark:text-slate-100">Tipe Produk</p>
-                            <p class="text-xs text-slate-500 dark:text-slate-400">Tentukan apakah item ini dijual di kasir, dipakai sebagai bahan baku, atau berupa jasa.</p>
+                            <p class="text-xs text-slate-500 dark:text-slate-400">Tentukan apakah item dijual, dipakai resep, perlengkapan, alat kecil, atau jasa.</p>
                         </div>
                         <div class="relative">
                             <select id="product-type" class="select-no-native-arrow w-full rounded-xl border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:border-primary focus:ring-primary h-12 px-4 pr-10 text-base">
                                 <option value="finished_good">Barang Jual</option>
                                 <option value="raw_material">Bahan Baku</option>
+                                <option value="packaging">Packaging</option>
+                                <option value="supply">Perlengkapan</option>
+                                <option value="small_tool">Alat Kecil</option>
                                 <option value="service">Jasa / Service</option>
                             </select>
                             <span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">expand_more</span>
@@ -514,8 +520,16 @@
                 const rawMaterialUnitOptions = ['mg', 'gram', 'kg', 'ml', 'liter', 'cm', 'meter', 'pcs', 'unit', 'dozen', 'lusin', 'box', 'pack', 'roll', 'sachet', 'bungkus'];
                 const stockUnitDefaults = {
                     raw_material: 'gram',
+                    packaging: 'pcs',
+                    supply: 'pcs',
+                    small_tool: 'pcs',
                     finished_good: 'pcs',
                 };
+                const stockedInternalTypes = ['raw_material', 'packaging', 'supply', 'small_tool'];
+                const recipeComponentTypes = ['raw_material', 'packaging'];
+                const isStockedInternalType = (type) => stockedInternalTypes.includes(String(type || ''));
+                const isRecipeComponentType = (type) => recipeComponentTypes.includes(String(type || ''));
+                const isSellableType = (type) => ['finished_good', 'service'].includes(String(type || ''));
 
                 const getSelectedProductType = () => String(el.productType?.value || 'finished_good');
                 const normalizeRecipeProductionMode = (value) => {
@@ -615,7 +629,22 @@
                     const productType = getSelectedProductType();
 
                     if (productType === 'raw_material') {
-                        el.productTypeNote.textContent = 'Bahan baku dipakai untuk recipe atau batch produksi. Item ini tidak akan tampil di katalog kasir.';
+                        el.productTypeNote.textContent = 'Bahan baku dipakai untuk recipe atau batch produksi. Item ini tidak tampil di katalog kasir.';
+                        return;
+                    }
+
+                    if (productType === 'packaging') {
+                        el.productTypeNote.textContent = 'Packaging dipakai untuk kemasan produk dan bisa ikut dihitung dalam HPP recipe.';
+                        return;
+                    }
+
+                    if (productType === 'supply') {
+                        el.productTypeNote.textContent = 'Perlengkapan adalah barang habis pakai operasional. Distok untuk kontrol, tidak masuk POS atau recipe.';
+                        return;
+                    }
+
+                    if (productType === 'small_tool') {
+                        el.productTypeNote.textContent = 'Alat kecil dicatat sebagai stok/inventaris ringan. Untuk alat mahal gunakan modul aset tetap.';
                         return;
                     }
 
@@ -907,12 +936,11 @@
                             const mode = String(product.product_mode || '').toLowerCase();
                             const itemType = String(product.item_type || '').toLowerCase();
 
-                            // Keep backward compatibility while matching backend BOM contract.
-                            if (mode === 'add_on' && itemType !== 'service') {
+                            if (mode === 'add_on' && isRecipeComponentType(itemType)) {
                                 return true;
                             }
 
-                            return itemType === 'raw_material';
+                            return isRecipeComponentType(itemType);
                         })
                         .sort((left, right) => String(left.name || '').localeCompare(String(right.name || '')));
                 };
@@ -1006,7 +1034,7 @@
 
                 const syncProductTypeState = () => {
                     const productType = getSelectedProductType();
-                    const isRawMaterial = productType === 'raw_material';
+                    const isInternalStock = isStockedInternalType(productType);
                     const isService = productType === 'service';
                     const isFinishedGood = productType === 'finished_good';
 
@@ -1027,7 +1055,7 @@
                         el.enableVariants.checked = false;
                     }
 
-                    if (isRawMaterial || isService) {
+                    if (isInternalStock || isService) {
                         el.enableBom.checked = false;
                         el.bomLineList.innerHTML = '';
                     }
@@ -1215,9 +1243,9 @@
                         el.bomLockedNotice?.classList.add('hidden');
                         el.bomUnavailableNotice?.classList.remove('hidden');
                         el.enableBom.checked = false;
-                        setBomHint(productType === 'raw_material'
-                            ? 'Bahan baku dipakai sebagai komponen recipe, bukan output recipe.'
-                            : 'Produk service tidak mendukung BOM atau auto-consume.');
+                        setBomHint(isRecipeComponentType(productType)
+                            ? 'Bahan baku atau packaging dipakai sebagai komponen recipe, bukan output recipe.'
+                            : 'Item ini tidak mendukung BOM atau auto-consume.');
                         refreshProductionReadiness();
                         return;
                     }
@@ -1320,12 +1348,12 @@
                     return {
                         is_active: Boolean(el.isActive?.checked),
                         item_type: productType,
-                        product_mode: productType === 'raw_material'
+                        product_mode: isStockedInternalType(productType)
                             ? 'add_on'
                             : (productType === 'service'
                                 ? 'default'
                                 : (useBom ? 'bom' : 'default')),
-                        production_mode: productType === 'service' || productType === 'raw_material'
+                        production_mode: productType === 'service' || isStockedInternalType(productType)
                             ? 'none'
                             : productionMode,
                         track_stock: trackStock,
@@ -1694,13 +1722,13 @@
                         return;
                     }
 
-                    if (productType !== 'raw_material' && payload.price <= 0) {
+                    if (isSellableType(productType) && payload.price <= 0) {
                         showError('Harga jual wajib diisi lebih dari 0 di tab Utama.');
                         focusInvalidField(el.price, 'main');
                         return;
                     }
 
-                    if (productType === 'raw_material') {
+                    if (!isSellableType(productType)) {
                         payload.price = Math.max(0, Number(payload.price || 0));
                     }
 
@@ -1727,11 +1755,11 @@
                         }
                     }
 
-                    if (productType === 'raw_material') {
+                    if (isStockedInternalType(productType)) {
                         payload.recipe_output_qty = null;
 
                         payload.product_mode = 'add_on';
-                        payload.item_type = 'raw_material';
+                        payload.item_type = productType;
                         payload.production_mode = 'none';
                         payload.bom_items = [];
                     } else if (productType === 'service') {
@@ -1865,8 +1893,8 @@
                 el.productType.addEventListener('change', () => {
                     const productType = getSelectedProductType();
                     const currentUnit = resolveRawMaterialUnit();
-                    if (productType === 'raw_material' && (!currentUnit || ['pcs', 'unit'].includes(String(currentUnit).toLowerCase()))) {
-                        renderRawMaterialUnits('gram');
+                    if (isStockedInternalType(productType) && (!currentUnit || ['pcs', 'unit'].includes(String(currentUnit).toLowerCase()))) {
+                        renderRawMaterialUnits(stockUnitDefaults[productType] || 'pcs');
                     } else if (productType === 'finished_good' && !currentUnit) {
                         renderRawMaterialUnits('pcs');
                     }

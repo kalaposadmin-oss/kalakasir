@@ -68,6 +68,33 @@ class ProductItemTypeCatalogApiTest extends TestCase
         $this->assertNotContains($rawMaterialId, $productIds);
     }
 
+    public function test_packaging_can_be_stocked_as_internal_recipe_component_but_hidden_from_pos_catalog(): void
+    {
+        [$tenant] = $this->bootApiActor('Admin', 'admin+packaging-type@example.test');
+
+        $response = $this->postJson('/api/v1/products', [
+            'name' => 'Box Roti Satuan',
+            'sku' => 'PKG-001',
+            'price' => 0,
+            'hpp_average' => 650,
+            'track_stock' => true,
+            'product_mode' => 'add_on',
+            'item_type' => 'packaging',
+            'unit' => 'pcs',
+        ], $this->tenantHeaders($tenant->id));
+
+        $response->assertCreated()
+            ->assertJsonPath('product.item_type', 'packaging')
+            ->assertJsonPath('product.product_mode', 'add_on')
+            ->assertJsonPath('product.track_stock', true);
+
+        $packagingId = (string) $response->json('product.id');
+        $catalogResponse = $this->getJson('/api/v1/products?lite=1&per_page=20', $this->tenantHeaders($tenant->id));
+        $catalogIds = collect($catalogResponse->json('products'))->pluck('id')->all();
+
+        $this->assertNotContains($packagingId, $catalogIds);
+    }
+
     public function test_update_product_without_item_type_uses_mode_fallback(): void
     {
         [$tenant] = $this->bootApiActor('Admin', 'admin+update-fallback@example.test');

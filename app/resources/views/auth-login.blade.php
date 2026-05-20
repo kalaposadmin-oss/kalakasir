@@ -6,6 +6,7 @@
     $registerHref = $registerHref ?? '/register';
     $portalLabel = $portalLabel ?? null;
     $portalTone = $portalTone ?? 'primary';
+    $showPortalChooserOnly = $showPortalChooserOnly ?? false;
     $isSuperadminLogin = $portalLabel === 'SUPERADMIN';
     $isBackofficeLogin = in_array($portalLabel, ['BACKOFFICE', 'SUPERADMIN'], true);
     $loginButtonLabel = $loginButtonLabel ?? ($isSuperadminLogin ? 'Masuk Superadmin' : 'Masuk Backoffice');
@@ -46,7 +47,7 @@
                             <span class="block text-xs font-semibold text-slate-500 dark:text-slate-400">{{ $isSuperadminLogin ? 'Superadmin' : 'Backoffice' }}</span>
                         </span>
                     </a>
-                    <a class="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:border-primary/40 dark:border-slate-800 dark:text-slate-200" href="/">
+                    <a class="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:border-primary/40 dark:border-slate-800 dark:text-slate-200" href="/pos/login">
                         <span class="material-symbols-outlined text-[17px] text-primary">point_of_sale</span>
                         Buka POS
                     </a>
@@ -107,7 +108,7 @@
                                     <span class="block text-xs font-semibold text-slate-500 dark:text-slate-400">{{ $isSuperadminLogin ? 'Superadmin' : 'Backoffice' }}</span>
                                 </span>
                             </a>
-                            <a class="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 dark:border-slate-800 dark:text-slate-200" href="/">
+                            <a class="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 dark:border-slate-800 dark:text-slate-200" href="/pos/login">
                                 POS
                             </a>
                         </div>
@@ -175,7 +176,7 @@
 
                     <p class="mt-6 text-center text-sm text-slate-500 dark:text-slate-400">
                         Butuh kasir untuk transaksi harian?
-                        <a class="font-black text-primary hover:underline" href="/">Buka POS</a>
+                        <a class="font-black text-primary hover:underline" href="/pos/login">Buka POS</a>
                     </p>
                 </div>
             </section>
@@ -206,8 +207,8 @@
                     </div>
                 @endif
 
-                @if ($loginAction === '/login' && ! $portalLabel)
-                    <div class="mb-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left dark:border-slate-800 dark:bg-slate-900/60">
+                @if ($showPortalChooserOnly || ($loginAction === '/login' && ! $portalLabel))
+                    <div class="{{ $showPortalChooserOnly ? '' : 'mb-5' }} rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left dark:border-slate-800 dark:bg-slate-900/60">
                         <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">2 area kerja</p>
                         <div class="mt-3 grid grid-cols-2 gap-3 text-sm">
                             <div class="rounded-xl border border-primary/20 bg-white px-3 py-3 dark:border-primary/25 dark:bg-slate-950">
@@ -220,55 +221,57 @@
                             </div>
                         </div>
                         <div class="mt-4 grid grid-cols-2 gap-3">
-                            <a class="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-primary/20 transition hover:brightness-110" href="/">Masuk POS</a>
+                            <a class="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-primary/20 transition hover:brightness-110" href="/pos/login">Masuk POS</a>
                             <a class="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-900" href="/backoffice">Masuk Backoffice</a>
                         </div>
                     </div>
                 @endif
 
-                <form id="login-form" method="POST" action="{{ $loginAction }}" class="space-y-5">
-                    @csrf
-                    <div class="space-y-1.5">
-                        <label class="ml-1 text-sm font-semibold text-slate-700 dark:text-slate-300" for="email">Email</label>
-                        <div class="relative">
-                            <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5">
-                                <span class="material-symbols-outlined text-[20px] text-slate-400">mail</span>
+                @unless ($showPortalChooserOnly)
+                    <form id="login-form" method="POST" action="{{ $loginAction }}" class="space-y-5">
+                        @csrf
+                        <div class="space-y-1.5">
+                            <label class="ml-1 text-sm font-semibold text-slate-700 dark:text-slate-300" for="email">Email</label>
+                            <div class="relative">
+                                <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5">
+                                    <span class="material-symbols-outlined text-[20px] text-slate-400">mail</span>
+                                </div>
+                                <input name="email" value="{{ old('email') }}" class="block w-full rounded-xl border-slate-200 bg-slate-50 py-3.5 pl-11 pr-4 text-sm transition-all duration-200 dark:border-slate-700 dark:bg-slate-800" id="email" placeholder="nama@toko.com" type="email" required />
                             </div>
-                            <input name="email" value="{{ old('email') }}" class="block w-full rounded-xl border-slate-200 bg-slate-50 py-3.5 pl-11 pr-4 text-sm transition-all duration-200 dark:border-slate-700 dark:bg-slate-800" id="email" placeholder="nama@toko.com" type="email" required />
                         </div>
-                    </div>
 
-                    <div class="space-y-1.5">
-                        <div class="ml-1 flex items-center justify-between">
-                            <label class="text-sm font-semibold text-slate-700 dark:text-slate-300" for="password">Kata Sandi</label>
-                            <a class="text-xs font-semibold text-primary hover:underline" href="#">Lupa Kata Sandi?</a>
-                        </div>
-                        <div class="relative">
-                            <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5">
-                                <span class="material-symbols-outlined text-[20px] text-slate-400">lock</span>
+                        <div class="space-y-1.5">
+                            <div class="ml-1 flex items-center justify-between">
+                                <label class="text-sm font-semibold text-slate-700 dark:text-slate-300" for="password">Kata Sandi</label>
+                                <a class="text-xs font-semibold text-primary hover:underline" href="#">Lupa Kata Sandi?</a>
                             </div>
-                            <input name="password" class="block w-full rounded-xl border-slate-200 bg-slate-50 py-3.5 pl-11 pr-12 text-sm transition-all duration-200 dark:border-slate-700 dark:bg-slate-800" id="password" placeholder="********" type="password" required />
-                            <button id="toggle-password" class="absolute inset-y-0 right-0 flex items-center pr-3.5" type="button" aria-label="Tampilkan kata sandi">
-                                <span class="material-symbols-outlined text-[20px] text-slate-400">visibility_off</span>
-                            </button>
+                            <div class="relative">
+                                <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5">
+                                    <span class="material-symbols-outlined text-[20px] text-slate-400">lock</span>
+                                </div>
+                                <input name="password" class="block w-full rounded-xl border-slate-200 bg-slate-50 py-3.5 pl-11 pr-12 text-sm transition-all duration-200 dark:border-slate-700 dark:bg-slate-800" id="password" placeholder="********" type="password" required />
+                                <button id="toggle-password" class="absolute inset-y-0 right-0 flex items-center pr-3.5" type="button" aria-label="Tampilkan kata sandi">
+                                    <span class="material-symbols-outlined text-[20px] text-slate-400">visibility_off</span>
+                                </button>
+                            </div>
                         </div>
-                    </div>
 
-                    <button class="mt-4 w-full rounded-xl bg-primary py-4 font-bold text-white shadow-lg shadow-primary/25 transition-all duration-200 active:scale-[0.98]" type="submit">
-                        Masuk
-                    </button>
-                </form>
+                        <button class="mt-4 w-full rounded-xl bg-primary py-4 font-bold text-white shadow-lg shadow-primary/25 transition-all duration-200 active:scale-[0.98]" type="submit">
+                            Masuk
+                        </button>
+                    </form>
 
-                <div class="mt-8 flex flex-col items-center">
-                    <div class="mb-6 flex w-full items-center gap-4">
-                        <div class="h-px flex-1 bg-slate-200 dark:border-slate-800"></div>
-                        <span class="text-xs font-medium text-slate-400">Atau masuk dengan</span>
-                        <div class="h-px flex-1 bg-slate-200 dark:border-slate-800"></div>
+                    <div class="mt-8 flex flex-col items-center">
+                        <div class="mb-6 flex w-full items-center gap-4">
+                            <div class="h-px flex-1 bg-slate-200 dark:border-slate-800"></div>
+                            <span class="text-xs font-medium text-slate-400">Atau masuk dengan</span>
+                            <div class="h-px flex-1 bg-slate-200 dark:border-slate-800"></div>
+                        </div>
+                        <button class="flex size-14 items-center justify-center rounded-full border border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300" type="button">
+                            <span class="material-symbols-outlined text-[32px]">fingerprint</span>
+                        </button>
                     </div>
-                    <button class="flex size-14 items-center justify-center rounded-full border border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300" type="button">
-                        <span class="material-symbols-outlined text-[32px]">fingerprint</span>
-                    </button>
-                </div>
+                @endunless
             </div>
 
             <div class="w-full pb-4 text-center">

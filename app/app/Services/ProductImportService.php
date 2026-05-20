@@ -679,6 +679,29 @@ class ProductImportService
                 'add on',
                 'addon',
             ],
+            'packaging' => [
+                'packaging',
+                'kemasan',
+                'bungkus',
+                'box',
+                'dus',
+                'label',
+                'cup',
+            ],
+            'supply' => [
+                'supply',
+                'supplies',
+                'perlengkapan',
+                'habis pakai',
+                'consumable',
+            ],
+            'small_tool' => [
+                'small tool',
+                'alat kecil',
+                'peralatan kecil',
+                'tools',
+                'tool',
+            ],
             'service' => [
                 'service',
                 'jasa',
@@ -693,7 +716,7 @@ class ProductImportService
             }
         }
 
-        throw new RuntimeException('Tipe Produk tidak dikenali. Gunakan barang_jual, bahan_baku, atau jasa.');
+        throw new RuntimeException('Tipe Produk tidak dikenali. Gunakan barang_jual, bahan_baku, packaging, perlengkapan, alat_kecil, atau jasa.');
     }
 
     private function resolveCurrentItemType(?Product $product): string
@@ -714,7 +737,7 @@ class ProductImportService
 
     private function resolveProductModeForImport(string $itemType, ?Product $product): string
     {
-        if ($itemType === 'raw_material') {
+        if (ProductItemTypeMapper::isStockedNonSellable($itemType)) {
             return 'add_on';
         }
 

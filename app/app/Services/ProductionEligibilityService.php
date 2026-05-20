@@ -57,7 +57,7 @@ class ProductionEligibilityService
         $addCheck(
             'item_type',
             'Tipe produk jadi',
-            $itemType === 'finished_good',
+            $itemType === ProductItemTypeMapper::ITEM_FINISHED_GOOD,
             'Ubah tipe produk menjadi finished_good.'
         );
 
@@ -343,9 +343,9 @@ class ProductionEligibilityService
                 (string) ($recipeProduct?->product_mode ?? 'default')
             );
 
-            if ($resolvedType !== 'raw_material') {
+            if (! ProductItemTypeMapper::isRecipeComponent($resolvedType)) {
                 throw ValidationException::withMessages([
-                    'product_id' => 'Semua input recipe batch production harus bertipe raw_material.',
+                    'product_id' => 'Semua input recipe batch production harus bahan baku atau packaging.',
                 ]);
             }
 
@@ -447,11 +447,11 @@ class ProductionEligibilityService
                 (string) ($component->product_mode ?? 'default')
             );
 
-            if ($resolvedType !== 'raw_material') {
-                $reason = sprintf('Line BOM #%d (%s): komponen harus raw_material.', $lineNumber, $component->name ?? 'bahan baku');
+            if (! ProductItemTypeMapper::isRecipeComponent($resolvedType)) {
+                $reason = sprintf('Line BOM #%d (%s): komponen harus bahan baku atau packaging.', $lineNumber, $component->name ?? 'bahan baku');
                 $checks[] = [
                     'key' => 'bom_type_'.$lineNumber,
-                    'label' => 'Tipe komponen raw material',
+                    'label' => 'Tipe komponen recipe',
                     'passed' => false,
                     'reason' => $reason,
                     'meta' => ['line' => $lineNumber, 'product_id' => $componentId],

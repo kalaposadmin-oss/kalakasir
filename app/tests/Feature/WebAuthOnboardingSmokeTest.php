@@ -134,32 +134,49 @@ class WebAuthOnboardingSmokeTest extends TestCase
         $this->restoreEnvValue('SESSION_DOMAIN', $previousSessionDomain);
     }
 
-    public function test_root_pos_login_page_renders_official_pos_entry(): void
+    public function test_root_renders_portal_chooser_without_login_form(): void
     {
         $tenantId = $this->seedTenant();
         $this->seedWebUser($tenantId, 'owner-root-entry@example.test');
 
         $this->get('/')
             ->assertOk()
+            ->assertSee('Pilih Area Kerja')
+            ->assertSee('Masuk POS')
+            ->assertSee('Masuk Backoffice')
+            ->assertSee('href="/pos/login"', false)
+            ->assertSee('/backoffice', false)
+            ->assertDontSee('name="email"', false)
+            ->assertDontSee('action="/login"', false)
+            ->assertDontSee('action="/"', false)
+            ->assertSee('/register', false);
+    }
+
+    public function test_pos_login_page_renders_official_pos_entry(): void
+    {
+        $tenantId = $this->seedTenant();
+        $this->seedWebUser($tenantId, 'owner-pos-entry@example.test');
+
+        $this->get('/pos/login')
+            ->assertOk()
             ->assertSee('Login POS')
             ->assertSee('Area kerja kasir untuk transaksi dan operasional harian.')
             ->assertSee('Buka Backoffice')
-            ->assertSee('/backoffice', false)
             ->assertSee('POS')
-            ->assertSee('action="/"', false)
-            ->assertSee('/register', false);
+            ->assertSee('action="/pos/login"', false);
     }
 
     public function test_legacy_login_alias_renders_portal_chooser(): void
     {
-        $this->seedTenant();
+        $tenantId = $this->seedTenant();
+        $this->seedWebUser($tenantId, 'owner-login-chooser@example.test');
 
         $this->get('/login')
             ->assertOk()
             ->assertSee('Pilih Area Kerja')
             ->assertSee('Masuk POS')
             ->assertSee('Masuk Backoffice')
-            ->assertSee('href="/"', false)
+            ->assertSee('href="/pos/login"', false)
             ->assertSee('href="/backoffice"', false);
     }
 
@@ -197,13 +214,14 @@ class WebAuthOnboardingSmokeTest extends TestCase
             ->assertSee('BACKOFFICE')
             ->assertSee('Area kerja owner dan admin untuk laporan, data master, dan pengaturan toko.')
             ->assertSee('Buka POS')
-            ->assertSee('href="/"', false)
+            ->assertSee('href="/pos/login"', false)
             ->assertSee('action="/backoffice"', false);
     }
 
-    public function test_legacy_pos_login_alias_redirects_to_official_pos_entry(): void
+    public function test_pos_login_alias_renders_pos_entry(): void
     {
-        $this->seedTenant();
+        $tenantId = $this->seedTenant();
+        $this->seedWebUser($tenantId, 'owner-pos-alias@example.test');
 
         config([
             'platform.portals.pos_hosts' => ['pos.kalakasir.test'],
@@ -211,12 +229,15 @@ class WebAuthOnboardingSmokeTest extends TestCase
         ]);
 
         $this->get('http://pos.kalakasir.test/pos/login')
-            ->assertRedirect('http://pos.kalakasir.test');
+            ->assertOk()
+            ->assertSee('Login POS')
+            ->assertSee('action="/pos/login"', false);
     }
 
     public function test_legacy_backoffice_login_alias_redirects_to_official_backoffice_entry(): void
     {
-        $this->seedTenant();
+        $tenantId = $this->seedTenant();
+        $this->seedWebUser($tenantId, 'owner-backoffice-alias@example.test');
 
         config([
             'platform.portals.pos_hosts' => ['pos.kalakasir.test'],

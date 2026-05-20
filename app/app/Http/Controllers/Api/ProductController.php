@@ -116,7 +116,10 @@ class ProductController extends Controller
             ->where('products.is_active', true)
             ->where(function ($query) {
                 $query->whereNull('products.item_type')
-                    ->orWhere('products.item_type', '!=', 'raw_material');
+                    ->orWhereIn('products.item_type', [
+                        ProductItemTypeMapper::ITEM_FINISHED_GOOD,
+                        ProductItemTypeMapper::ITEM_SERVICE,
+                    ]);
             })
             ->where(function ($query) {
                 $query->whereNull('products.product_mode')
@@ -288,11 +291,11 @@ class ProductController extends Controller
             ProductItemTypeValidator::assertProductionModeValid($productionMode, $itemType, $trackStock);
 
             $price = (float) ($payload['price'] ?? 0);
-            if ($itemType !== 'raw_material' && $price <= 0) {
+            if (ProductItemTypeMapper::isSellable($itemType, $productMode) && $price <= 0) {
                 return response()->json(['message' => 'Harga jual harus lebih dari 0.'], 422);
             }
 
-            if ($itemType === 'raw_material') {
+            if (! ProductItemTypeMapper::isSellable($itemType, $productMode)) {
                 $price = max(0.0, $price);
             }
 
@@ -609,11 +612,11 @@ class ProductController extends Controller
             ProductItemTypeValidator::assertNotProducedForAutoConsume($tenantId, $product, $productionMode);
 
             $price = (float) ($payload['price'] ?? $productRow->price ?? 0);
-            if ($itemType !== 'raw_material' && $price <= 0) {
+            if (ProductItemTypeMapper::isSellable($itemType, $productMode) && $price <= 0) {
                 return response()->json(['message' => 'Harga harus lebih dari 0.'], 422);
             }
 
-            if ($itemType === 'raw_material') {
+            if (! ProductItemTypeMapper::isSellable($itemType, $productMode)) {
                 $price = max(0.0, $price);
             }
 

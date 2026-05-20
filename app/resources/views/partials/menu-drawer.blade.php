@@ -125,6 +125,7 @@
             'title' => 'Stok & Produksi',
             'items' => array_values(array_filter([
                 ($canFeature('inventory.stock') ? ['href' => '/backoffice/inventory', 'match' => '/backoffice/inventory', 'match_children' => false, 'icon' => 'warehouse', 'label' => 'Inventaris', 'description' => 'Stok aktif'] : null),
+                ($canFeature('inventory.stock') ? ['href' => '/backoffice/inventory/fixed-assets', 'match' => '/backoffice/inventory/fixed-assets', 'match_children' => false, 'icon' => 'home_repair_service', 'label' => 'Aset Tetap', 'description' => 'Peralatan dan depresiasi'] : null),
                 ($canFeature('inventory.adjustment') ? ['href' => '/backoffice/inventory/stock-adjustment', 'match' => '/backoffice/inventory/stock-adjustment', 'match_children' => false, 'icon' => 'edit_note', 'label' => 'Penyesuaian', 'description' => 'Koreksi stok'] : null),
                 ($canFeature('inventory.stock_opname') ? ['href' => '/backoffice/inventory/stock-opname', 'match' => '/backoffice/inventory/stock-opname', 'match_children' => false, 'icon' => 'fact_check', 'label' => 'Stock Opname', 'description' => 'Hitung fisik'] : null),
                 ($canFeature('inventory.transfer') ? ['href' => '/backoffice/inventory/stock-transfers', 'match' => '/backoffice/inventory/stock-transfers', 'match_children' => false, 'icon' => 'sync_alt', 'label' => 'Transfer Stok', 'description' => 'Antar lokasi'] : null),

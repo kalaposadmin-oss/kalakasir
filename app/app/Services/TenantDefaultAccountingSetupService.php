@@ -14,11 +14,14 @@ class TenantDefaultAccountingSetupService
             '1102' => ['name' => 'Bank', 'type' => 'asset'],
             '1201' => ['name' => 'Piutang Usaha', 'type' => 'asset'],
             '1301' => ['name' => 'Persediaan Barang', 'type' => 'asset'],
+            '1501' => ['name' => 'Aset Tetap - Peralatan', 'type' => 'asset'],
+            '1502' => ['name' => 'Akumulasi Depresiasi Peralatan', 'type' => 'asset'],
             '2101' => ['name' => 'Hutang Usaha', 'type' => 'liability'],
             '3101' => ['name' => 'Modal Pemilik', 'type' => 'equity'],
             '4101' => ['name' => 'Penjualan', 'type' => 'revenue'],
             '5101' => ['name' => 'Harga Pokok Penjualan', 'type' => 'expense'],
             '6101' => ['name' => 'Penyesuaian Beban', 'type' => 'expense'],
+            '6201' => ['name' => 'Beban Depresiasi Peralatan', 'type' => 'expense'],
         ];
 
         foreach ($definitions as $code => $meta) {

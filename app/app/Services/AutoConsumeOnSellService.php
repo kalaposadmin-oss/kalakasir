@@ -61,7 +61,7 @@ class AutoConsumeOnSellService
             $soldProduct->item_type,
             (string) ($soldProduct->product_mode ?? 'default')
         );
-        if ($soldType !== 'finished_good') {
+        if ($soldType !== ProductItemTypeMapper::ITEM_FINISHED_GOOD) {
             $candidateRecipeItems = collect($recipeLines)
                 ->filter(fn ($line) => is_array($line)
                     && ! empty($line['product_id'])
@@ -160,11 +160,11 @@ class AutoConsumeOnSellService
                 (string) ($material?->product_mode ?? 'default')
             );
 
-            if ($materialType !== 'raw_material') {
+            if (! ProductItemTypeMapper::isRecipeComponent($materialType)) {
                 throw new AutoConsumeValidationException(
                     'AUTO_CONSUME_RECIPE_INVALID',
                     'Recipe auto-consume tidak valid.',
-                    ['recipe' => ['Semua input recipe harus bertipe raw_material.']]
+                    ['recipe' => ['Semua input recipe harus bahan baku atau packaging.']]
                 );
             }
         }

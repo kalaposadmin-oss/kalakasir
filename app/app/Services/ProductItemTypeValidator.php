@@ -16,7 +16,7 @@ class ProductItemTypeValidator
             'variant' => ['finished_good', 'service'],
             'bom' => ['finished_good'],
             'bundle' => ['finished_good'],
-            'add_on' => ['raw_material'],
+            'add_on' => ProductItemTypeMapper::STOCKED_NON_SELLABLE_TYPES,
         ];
 
         return in_array($itemType, $allowed[$productMode] ?? ['finished_good'], true);
@@ -33,7 +33,7 @@ class ProductItemTypeValidator
 
     public static function assertServiceTrackStockValid(string $itemType, bool $trackStock): void
     {
-        if ($itemType === 'service' && $trackStock) {
+        if ($itemType === ProductItemTypeMapper::ITEM_SERVICE && $trackStock) {
             throw ValidationException::withMessages([
                 'track_stock' => 'Produk service tidak boleh menggunakan stok.',
             ]);
@@ -48,7 +48,7 @@ class ProductItemTypeValidator
             ]);
         }
 
-        if ($productionMode === Product::PRODUCTION_MODE_BATCH && $itemType !== 'finished_good') {
+        if ($productionMode === Product::PRODUCTION_MODE_BATCH && $itemType !== ProductItemTypeMapper::ITEM_FINISHED_GOOD) {
             throw ValidationException::withMessages([
                 'production_mode' => 'Produk batch production harus bertipe finished_good.',
             ]);
@@ -102,14 +102,14 @@ class ProductItemTypeValidator
             ->where('product_mode', 'add_on')
             ->where(function ($query) {
                 $query->whereNull('item_type')
-                    ->orWhere('item_type', '!=', 'service');
+                    ->orWhereIn('item_type', ProductItemTypeMapper::RECIPE_COMPONENT_TYPES);
             })
             ->whereIn('id', $bomProductIds)
             ->count();
 
         if ($validCount !== $bomProductIds->count()) {
             throw ValidationException::withMessages([
-                'bom_items' => 'Bahan baku harus berasal dari produk add on non-service.',
+                'bom_items' => 'Komponen resep harus berupa bahan baku atau packaging yang aktif sebagai item add on.',
             ]);
         }
 

@@ -74,6 +74,20 @@ class PortalWebAccessTest extends TestCase
         $this->assertAuthenticatedAs($user, 'web');
     }
 
+    public function test_pos_login_keeps_owner_in_pos_portal(): void
+    {
+        [, $user] = $this->createWebActor('owner', 'owner-pos-form@example.test');
+
+        $response = $this->from('/pos/login')->post('/pos/login', [
+            'email' => $user->email,
+            'password' => 'secret123',
+        ]);
+
+        $response->assertRedirect('/pos/dashboard');
+        $response->assertSessionHas('auth_portal', 'pos');
+        $this->assertAuthenticatedAs($user, 'web');
+    }
+
     public function test_generic_login_on_pos_host_keeps_owner_in_pos_portal(): void
     {
         config([
@@ -1235,6 +1249,12 @@ class PortalWebAccessTest extends TestCase
             ->withSession(['auth_portal' => 'backoffice'])
             ->get('/backoffice/inventory/stock-transfers')
             ->assertOk();
+
+        $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/backoffice/inventory/fixed-assets')
+            ->assertOk()
+            ->assertSee('Aset Tetap', false);
 
         $this->actingAs($user)
             ->withSession(['auth_portal' => 'backoffice'])

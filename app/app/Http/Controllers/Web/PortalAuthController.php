@@ -22,6 +22,15 @@ class PortalAuthController extends Controller
 {
     public function showRoot(Request $request)
     {
+        $requestPortal = app(WebPortalResolver::class)->resolvePortalFromRequest($request);
+        if ($requestPortal === 'pos') {
+            return $this->renderPosLogin($request, '/', true);
+        }
+
+        if ($requestPortal === 'backoffice') {
+            return $this->renderBackofficeLogin($request, '/backoffice');
+        }
+
         return $this->showGeneric($request);
     }
 
@@ -47,6 +56,7 @@ class PortalAuthController extends Controller
             'portalTone' => 'primary',
             'showMenu' => false,
             'showRegisterLink' => true,
+            'showPortalChooserOnly' => true,
         ]);
     }
 
@@ -54,10 +64,6 @@ class PortalAuthController extends Controller
     {
         if ($this->shouldStartOnboarding()) {
             return redirect('/register/step-1');
-        }
-
-        if (! Auth::check()) {
-            return redirect('/');
         }
 
         return $this->renderPosLogin($request, '/pos/login', false);

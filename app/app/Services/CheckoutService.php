@@ -45,6 +45,8 @@ class CheckoutService
             throw new InvalidArgumentException('Tenant tidak ditemukan.');
         }
 
+        $this->assertSellableProducts($payload, $tenantId);
+
         $discountCalculation = app(DiscountCalculationService::class)->calculate($payload);
         $this->assertTotals($payload, $discountCalculation);
         $this->assertShift($payload, $tenantId, $userId);
@@ -89,9 +91,10 @@ class CheckoutService
                         ->where('id', $productId)
                         ->firstOrFail();
 
-                    if ((string) $product->item_type === 'raw_material') {
-                        throw new InvalidArgumentException('Produk raw material tidak dapat dijual melalui checkout.');
-                    }
+                    $itemType = ProductItemTypeMapper::resolve(
+                        $product->item_type,
+                        (string) ($product->product_mode ?? 'default')
+                    );
 
                     $saleItemId = (string) Str::uuid();
 
@@ -575,6 +578,50 @@ class CheckoutService
 
         if (Decimal::compare($paymentTotal, $payloadTotal) !== 0) {
             throw new InvalidArgumentException('Total pembayaran tidak sama dengan total transaksi.');
+        }
+    }
+
+    private function assertSellableProducts(array $payload, string $tenantId): void
+    {
+        $productIds = collect($payload['items'] ?? [])
+            ->pluck('product_id')
+            ->filter()
+            ->map(fn ($id) => (string) $id)
+            ->unique()
+            ->values();
+
+        if ($productIds->isEmpty()) {
+            return;
+        }
+
+        $products = Product::query()
+            ->where('tenant_id', $tenantId)
+            ->whereIn('id', $productIds->all())
+            ->get(['id', 'item_type', 'product_mode'])
+            ->keyBy('id');
+
+        foreach ($productIds as $productId) {
+            $product = $products->get($productId);
+            if (! $product) {
+                continue;
+            }
+
+            $productMode = (string) ($product->product_mode ?? 'default');
+            $itemType = ProductItemTypeMapper::resolve($product->item_type, $productMode);
+
+            if (ProductItemTypeMapper::isSellable($itemType, $productMode)) {
+                continue;
+            }
+
+            $label = match ($itemType) {
+                ProductItemTypeMapper::ITEM_RAW_MATERIAL => 'raw material',
+                ProductItemTypeMapper::ITEM_PACKAGING => 'packaging',
+                ProductItemTypeMapper::ITEM_SUPPLY => 'perlengkapan',
+                ProductItemTypeMapper::ITEM_SMALL_TOOL => 'alat kecil',
+                default => 'stok internal',
+            };
+
+            throw new InvalidArgumentException("Produk {$label} tidak dapat dijual melalui checkout.");
         }
     }
 

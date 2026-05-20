@@ -90,6 +90,9 @@
                         <select id="edit-type" class="w-full px-4 py-3 rounded-lg border-slate-200 focus:ring-primary focus:border-primary appearance-none">
                             <option value="finished_good">Barang Jual</option>
                             <option value="raw_material">Bahan Baku</option>
+                            <option value="packaging">Packaging</option>
+                            <option value="supply">Perlengkapan</option>
+                            <option value="small_tool">Alat Kecil</option>
                             <option value="service">Jasa / Service</option>
                         </select>
                         <div id="edit-type-note" class="rounded-xl bg-slate-50 px-3 py-3 text-xs leading-relaxed text-slate-500">
@@ -299,8 +302,16 @@
                 const rawMaterialUnitOptions = ['mg', 'gram', 'kg', 'ml', 'liter', 'cm', 'meter', 'pcs', 'unit', 'dozen', 'lusin', 'box', 'pack', 'roll', 'sachet', 'bungkus'];
                 const stockUnitDefaults = {
                     raw_material: 'gram',
+                    packaging: 'pcs',
+                    supply: 'pcs',
+                    small_tool: 'pcs',
                     finished_good: 'pcs',
                 };
+                const stockedInternalTypes = ['raw_material', 'packaging', 'supply', 'small_tool'];
+                const recipeComponentTypes = ['raw_material', 'packaging'];
+                const isStockedInternalType = (type) => stockedInternalTypes.includes(String(type || ''));
+                const isRecipeComponentType = (type) => recipeComponentTypes.includes(String(type || ''));
+                const isSellableType = (type) => ['finished_good', 'service'].includes(String(type || ''));
 
                 const getSelectedProductType = () => String(el.editType?.value || 'finished_good');
                 const normalizeRecipeProductionMode = (value) => {
@@ -333,6 +344,21 @@
 
                     if (productType === 'raw_material') {
                         el.editTypeNote.textContent = 'Bahan baku dipakai untuk recipe atau produksi batch dan tidak tampil di katalog kasir.';
+                        return;
+                    }
+
+                    if (productType === 'packaging') {
+                        el.editTypeNote.textContent = 'Packaging dipakai untuk kemasan produk dan bisa ikut dihitung dalam HPP recipe.';
+                        return;
+                    }
+
+                    if (productType === 'supply') {
+                        el.editTypeNote.textContent = 'Perlengkapan adalah barang habis pakai operasional. Distok untuk kontrol, tidak masuk POS atau recipe.';
+                        return;
+                    }
+
+                    if (productType === 'small_tool') {
+                        el.editTypeNote.textContent = 'Alat kecil dicatat sebagai stok/inventaris ringan. Untuk alat mahal gunakan modul aset tetap.';
                         return;
                     }
 
@@ -574,12 +600,11 @@
                             const mode = String(product.product_mode || '').toLowerCase();
                             const itemType = String(product.item_type || '').toLowerCase();
 
-                            // Keep backward compatibility while matching backend BOM contract.
-                            if (mode === 'add_on' && itemType !== 'service') {
+                            if (mode === 'add_on' && isRecipeComponentType(itemType)) {
                                 return true;
                             }
 
-                            return itemType === 'raw_material';
+                            return isRecipeComponentType(itemType);
                         })
                         .sort((left, right) => String(left.name || '').localeCompare(String(right.name || '')));
                 };
@@ -780,12 +805,12 @@
                     return {
                         is_active: Boolean(el.isActive?.checked),
                         item_type: productType,
-                        product_mode: productType === 'raw_material'
+                        product_mode: isStockedInternalType(productType)
                             ? 'add_on'
                             : (productType === 'service'
                                 ? 'default'
                                 : (useBom ? 'bom' : 'default')),
-                        production_mode: productType === 'service' || productType === 'raw_material'
+                        production_mode: productType === 'service' || isStockedInternalType(productType)
                             ? 'none'
                             : productionMode,
                         track_stock: trackStock,
@@ -1360,8 +1385,8 @@
                 el.editType.addEventListener('change', () => {
                     const productType = getSelectedProductType();
                     const currentUnit = resolveRawMaterialUnit();
-                    if (productType === 'raw_material' && (!currentUnit || ['pcs', 'unit'].includes(String(currentUnit).toLowerCase()))) {
-                        renderRawMaterialUnits('gram');
+                    if (isStockedInternalType(productType) && (!currentUnit || ['pcs', 'unit'].includes(String(currentUnit).toLowerCase()))) {
+                        renderRawMaterialUnits(stockUnitDefaults[productType] || 'pcs');
                     } else if (productType === 'finished_good' && !currentUnit) {
                         renderRawMaterialUnits('pcs');
                     }
@@ -1485,12 +1510,12 @@
                         return;
                     }
 
-                    if (productType !== 'raw_material' && payload.price <= 0) {
+                    if (isSellableType(productType) && payload.price <= 0) {
                         showError('Harga harus lebih dari 0.');
                         return;
                     }
 
-                    if (productType === 'raw_material') {
+                    if (!isSellableType(productType)) {
                         payload.price = Math.max(0, Number(payload.price || 0));
                     }
 
@@ -1507,11 +1532,11 @@
                         payload.initial_stock_lines = el.trackStock.checked ? collectVariantStockLines(currentProduct) : [];
                     }
 
-                    if (productType === 'raw_material') {
+                    if (isStockedInternalType(productType)) {
                         payload.recipe_output_qty = null;
 
                         payload.product_mode = 'add_on';
-                        payload.item_type = 'raw_material';
+                        payload.item_type = productType;
                         payload.production_mode = 'none';
                         payload.bom_items = [];
                     } else if (productType === 'service') {
