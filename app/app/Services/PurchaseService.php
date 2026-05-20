@@ -154,7 +154,7 @@ class PurchaseService
         $purchaseMode = $this->flowResolver()->resolveMode($purchase->purchase_mode ?? null, TenantContext::get()?->purchase_mode);
 
         if (! PurchaseStatus::canClose((string) $purchase->status, $purchaseMode)) {
-            throw new RuntimeException('Hanya purchase received yang bisa di-close.');
+            throw new RuntimeException('Hanya PO yang diterima sebagian yang bisa ditutup tanpa susulan.');
         }
 
         $purchase->update([

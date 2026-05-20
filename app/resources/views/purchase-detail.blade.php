@@ -26,12 +26,15 @@
 
 @section('page_title', 'Detail dan Persetujuan PO')
 @section('body_class', 'bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display')
-@section('main_class', 'flex-1 overflow-y-auto pb-32 app-bottom-safe-space')
+@section('main_class', 'flex-1 overflow-y-auto pb-8')
 
 @push('head')
         <style type="text/tailwindcss">
             .status-badge {
                 @apply px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider;
+            }
+            #purchase-action-bar:not(.hidden) + #receipt-section {
+                padding-bottom: calc(env(safe-area-inset-bottom) + 7rem);
             }
         </style>
 @endpush
@@ -60,23 +63,38 @@
 @endsection
 
 @section('content')
-    <div class="p-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 grid grid-cols-2 gap-4 app-bottom-safe-space">
-        <div>
-            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Tanggal Pesan</p>
-            <p class="text-sm font-semibold" id="order-date">-</p>
+    <section class="px-4 pt-3">
+        <div class="rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div>
+                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tanggal Pesan</p>
+                    <p class="mt-1 text-sm font-semibold" id="order-date">-</p>
+                </div>
+                <div>
+                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Estimasi Tiba</p>
+                    <p class="mt-1 text-sm font-semibold" id="arrival-date">-</p>
+                </div>
+                @if ($canManagePurchaseDetail)
+                    <div class="col-span-2 flex items-start justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-800/60">
+                        <div class="min-w-0">
+                            <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Pembayaran</p>
+                            <p class="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100" id="payment-method-label">-</p>
+                            <p class="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400" id="payment-detail-label">-</p>
+                        </div>
+                        <button id="edit-payment" class="shrink-0 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary" type="button">Ubah</button>
+                    </div>
+                @endif
+            </div>
         </div>
-        <div>
-            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Estimasi Tiba</p>
-            <p class="text-sm font-semibold" id="arrival-date">-</p>
-        </div>
-    </div>
-    <section class="mt-4 px-4 app-bottom-safe-space">
+    </section>
+
+    <section class="mt-3 px-4">
         <div class="flex items-center justify-between mb-3 px-1">
             <h3 class="text-sm font-bold text-slate-500 uppercase tracking-widest">Daftar Barang</h3>
             <span class="text-xs font-medium text-slate-400" id="item-count">0 Produk</span>
         </div>
         <div class="space-y-2" id="item-list"></div>
-        <div class="mt-4 bg-primary/5 rounded-xl p-4 border border-primary/20">
+        <div class="mt-3 rounded-xl border border-primary/20 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div class="flex justify-between items-center mb-1">
                 <span class="text-xs text-slate-500">Subtotal</span>
                 <span class="text-sm font-medium" id="subtotal">Rp 0</span>
@@ -91,43 +109,29 @@
             </div>
         </div>
     </section>
-    @if ($canManagePurchaseDetail)
-        <section class="mt-4 px-4 app-bottom-safe-space">
-            <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                <div class="flex items-start justify-between gap-3">
-                    <div>
-                        <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Data Pembayaran</p>
-                        <p class="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100" id="payment-method-label">-</p>
-                        <p class="mt-1 text-xs text-slate-500 dark:text-slate-400" id="payment-detail-label">-</p>
+    <section class="mt-3 px-4">
+        <div class="rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <h3 class="text-xs font-bold text-slate-500 uppercase tracking-widest">Timeline Aktivitas</h3>
+            <div class="mt-3 grid gap-2 sm:grid-cols-2">
+                <div class="flex gap-2 rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-800/60">
+                    <div class="mt-1 size-2.5 shrink-0 rounded-full bg-emerald-500"></div>
+                    <div class="min-w-0">
+                        <p class="text-sm font-bold">Dibuat</p>
+                        <p class="truncate text-xs text-slate-500" id="created-info">-</p>
                     </div>
-                    <button id="edit-payment" class="rounded-full bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary" type="button">Ubah Pembayaran</button>
                 </div>
-                <p class="mt-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">Perubahan pembayaran akan memengaruhi laporan tempo, hutang jatuh tempo, dan rekap kas.</p>
-            </div>
-        </section>
-    @endif
-    <section class="mt-6 px-4 app-bottom-safe-space">
-        <h3 class="text-sm font-bold text-slate-500 uppercase tracking-widest px-1 mb-4">Timeline Aktivitas</h3>
-        <div class="relative space-y-6 pl-4">
-            <div class="absolute left-[7px] top-2 bottom-2 w-0.5 bg-slate-200 dark:bg-slate-800"></div>
-            <div class="relative flex gap-4">
-                <div class="absolute -left-[21px] mt-1 size-4 rounded-full bg-emerald-500 ring-4 ring-white dark:ring-slate-900"></div>
-                <div class="flex-1">
-                    <p class="text-sm font-bold">Dibuat</p>
-                    <p class="text-xs text-slate-500" id="created-info">-</p>
-                </div>
-            </div>
-            <div class="relative flex gap-4">
-                <div id="status-dot" class="absolute -left-[21px] mt-1 size-4 rounded-full bg-amber-400 ring-4 ring-white dark:ring-slate-900"></div>
-                <div class="flex-1">
-                    <p class="text-sm font-bold" id="status-title">{{ \App\Support\PurchaseStatus::label(\App\Support\PurchaseStatus::SUBMITTED) }}</p>
-                    <p class="text-xs text-slate-500" id="status-info">Sistem</p>
+                <div class="flex gap-2 rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-800/60">
+                    <div id="status-dot" class="mt-1 size-2.5 shrink-0 rounded-full bg-amber-400"></div>
+                    <div class="min-w-0">
+                        <p class="truncate text-sm font-bold" id="status-title">{{ \App\Support\PurchaseStatus::label(\App\Support\PurchaseStatus::SUBMITTED) }}</p>
+                        <p class="truncate text-xs text-slate-500" id="status-info">Sistem</p>
+                    </div>
                 </div>
             </div>
         </div>
     </section>
     @if ($canManagePurchaseDetail)
-        <div id="purchase-action-bar" class="fixed bottom-0 left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800 pt-4 px-4 app-bottom-safe-footer">
+        <div id="purchase-action-bar" class="fixed bottom-0 left-1/2 z-30 hidden w-full max-w-[430px] -translate-x-1/2 bg-white/95 px-4 pt-4 backdrop-blur-xl dark:bg-slate-900/95 app-bottom-safe-footer">
             <div id="approval-actions" class="flex gap-3">
                 <button id="reject" class="flex-1 py-4 px-6 rounded-xl border-2 border-slate-200 dark:border-slate-700 font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50" type="button">Tolak</button>
                 <button id="approve" class="flex-[2] py-4 px-6 rounded-xl bg-primary text-white font-bold shadow-lg shadow-primary/30 flex items-center justify-center gap-2" type="button">
@@ -137,7 +141,10 @@
             </div>
             <div id="fulfillment-actions" class="hidden flex flex-col gap-3">
                 <a id="open-receiving" class="flex items-center justify-center py-4 px-6 rounded-xl bg-primary text-white font-bold shadow-lg shadow-primary/30" href="#">Terima Barang</a>
-                <button id="close-purchase" class="flex items-center justify-center py-4 px-6 rounded-xl border-2 border-slate-200 dark:border-slate-700 font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50" type="button">Tutup Sisa</button>
+                <button id="close-purchase" class="flex items-center justify-center gap-2 py-4 px-6 rounded-xl border-2 border-amber-200 bg-amber-50 font-bold text-amber-700 hover:bg-amber-100 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300" type="button">
+                    <span class="material-symbols-outlined text-base">event_busy</span>
+                    <span>Tidak Ada Susulan</span>
+                </button>
             </div>
             <div class="mt-4 flex justify-center">
                 <div class="w-32 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full"></div>
@@ -145,8 +152,8 @@
         </div>
     @endif
 
-    <section class="mt-6 px-4 app-bottom-safe-space">
-        <h3 class="text-sm font-bold text-slate-500 uppercase tracking-widest px-1 mb-4">Riwayat Penerimaan</h3>
+    <section id="receipt-section" class="mt-3 px-4 pb-6">
+        <h3 class="mb-3 px-1 text-sm font-bold text-slate-500 uppercase tracking-widest">Riwayat Penerimaan</h3>
         <div id="receipt-history" class="space-y-3"></div>
     </section>
 
@@ -277,6 +284,13 @@
                     currency: 'IDR',
                     maximumFractionDigits: 0,
                 }).format(value || 0);
+
+                const formatQuantity = (value) => {
+                    const number = Number(value || 0);
+                    return new Intl.NumberFormat('id-ID', {
+                        maximumFractionDigits: Number.isInteger(number) ? 0 : 4,
+                    }).format(number);
+                };
 
                 const formatDate = (value) => new Intl.DateTimeFormat('id-ID', {
                     day: '2-digit',
@@ -410,27 +424,41 @@
                     el.statusBadge.textContent = label;
                     if (normalizedStatus === 'approved') {
                         el.statusBadge.className = 'status-badge bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400';
-                        el.statusDot.className = 'absolute -left-[21px] mt-1 size-4 rounded-full bg-emerald-500 ring-4 ring-white dark:ring-slate-900';
+                        el.statusDot.className = 'mt-1 size-2.5 shrink-0 rounded-full bg-emerald-500';
+                    } else if (normalizedStatus === 'received' || normalizedStatus === 'closed') {
+                        el.statusBadge.className = 'status-badge bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400';
+                        el.statusDot.className = 'mt-1 size-2.5 shrink-0 rounded-full bg-emerald-500';
+                    } else if (normalizedStatus === 'partially_received') {
+                        el.statusBadge.className = 'status-badge bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300';
+                        el.statusDot.className = 'mt-1 size-2.5 shrink-0 rounded-full bg-sky-500';
                     } else if (normalizedStatus === 'cancelled') {
                         el.statusBadge.className = 'status-badge bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400';
-                        el.statusDot.className = 'absolute -left-[21px] mt-1 size-4 rounded-full bg-rose-400 ring-4 ring-white dark:ring-slate-900';
+                        el.statusDot.className = 'mt-1 size-2.5 shrink-0 rounded-full bg-rose-400';
                     } else if (normalizedStatus === 'submitted') {
                         el.statusBadge.className = 'status-badge bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400';
-                        el.statusDot.className = 'absolute -left-[21px] mt-1 size-4 rounded-full bg-amber-400 ring-4 ring-white dark:ring-slate-900';
+                        el.statusDot.className = 'mt-1 size-2.5 shrink-0 rounded-full bg-amber-400';
                     } else {
                         el.statusBadge.className = 'status-badge bg-slate-100 text-slate-600 dark:bg-slate-800/70 dark:text-slate-300';
-                        el.statusDot.className = 'absolute -left-[21px] mt-1 size-4 rounded-full bg-slate-400 ring-4 ring-white dark:ring-slate-900';
+                        el.statusDot.className = 'mt-1 size-2.5 shrink-0 rounded-full bg-slate-400';
                     }
                     if (normalizedStatus === 'submitted' && normalizedMode === purchaseModeControlled) {
                         el.statusTitle.textContent = 'Menunggu Persetujuan Manajer';
                     } else if (normalizedStatus === 'submitted' && normalizedMode === purchaseModePoShort) {
                         el.statusTitle.textContent = 'Siap Diterima';
+                    } else if (normalizedStatus === 'received') {
+                        el.statusTitle.textContent = 'Selesai - Semua Barang Diterima';
+                    } else if (normalizedStatus === 'partially_received') {
+                        el.statusTitle.textContent = 'Diterima Sebagian - Menunggu Susulan';
+                    } else if (normalizedStatus === 'closed') {
+                        el.statusTitle.textContent = 'Selesai - Sisa Tidak Disusulkan';
                     } else {
                         el.statusTitle.textContent = label;
                     }
                     const showApproval = Boolean(currentPurchaseFlow.can_approve) && normalizedStatus === purchaseStatusSubmitted;
                     const showFulfillment = Boolean(currentPurchaseFlow.can_receive) || Boolean(currentPurchaseFlow.can_close);
+                    const showActionBar = showApproval || showFulfillment;
 
+                    el.actionBar?.classList.toggle('hidden', !showActionBar);
                     el.approvalActions?.classList.toggle('hidden', !showApproval);
                     el.fulfillmentActions?.classList.toggle('hidden', !showFulfillment);
 
@@ -445,7 +473,7 @@
                     }
                     if (el.closePurchase) {
                         el.closePurchase.classList.toggle('hidden', !currentPurchaseFlow.can_close);
-                        el.closePurchase.textContent = normalizedStatus === 'partially_received' ? 'Tutup Sisa' : 'Tutup PO';
+                        el.closePurchase.innerHTML = '<span class="material-symbols-outlined text-base">event_busy</span><span>Tidak Ada Susulan</span>';
                     }
                     if (el.approveLabel) {
                         el.approveLabel.textContent = 'Setujui Pembelian';
@@ -458,12 +486,12 @@
                     }
 
                     if (!receipts.length) {
-                        el.receiptHistory.innerHTML = '<div class="rounded-xl border border-dashed border-slate-200 bg-white px-4 py-5 text-sm text-slate-400 dark:border-slate-800 dark:bg-slate-900">Belum ada batch penerimaan.</div>';
+                        el.receiptHistory.innerHTML = '<div class="rounded-xl border border-dashed border-slate-200 bg-white px-4 py-4 text-sm text-slate-400 dark:border-slate-800 dark:bg-slate-900">Belum ada batch penerimaan.</div>';
                         return;
                     }
 
                     el.receiptHistory.innerHTML = receipts.map((receipt) => `
-                        <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                        <div class="rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                             <div class="flex items-start justify-between gap-3">
                                 <div>
                                     <p class="text-xs font-bold uppercase tracking-widest text-slate-400">Batch Penerimaan</p>
@@ -472,9 +500,9 @@
                                 </div>
                                 <span class="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold uppercase text-emerald-700">${formatQuantity(receipt.total_purchase_qty || receipt.total_qty || 0)} item</span>
                             </div>
-                            <div class="mt-3 space-y-2">
+                            <div class="mt-2 space-y-2">
                                 ${(receipt.items || []).map((item) => `
-                                    <div class="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800/50">
+                                    <div class="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800/60">
                                         <div class="min-w-0">
                                             <p class="truncate font-medium text-slate-900 dark:text-slate-100">${item.product_name}</p>
                                             <p class="text-xs text-slate-500">SKU: ${item.product_sku || '-'}</p>
@@ -494,24 +522,32 @@
 
                     items.forEach((item) => {
                         const row = document.createElement('div');
-                        row.className = 'bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800';
+                        const purchaseQty = Number(item.purchase_qty ?? item.qty ?? 0);
+                        const stockQty = Number(item.qty ?? 0);
+                        const purchasePrice = Number(item.purchase_price ?? item.price ?? 0);
+                        const lineTotal = purchaseQty * purchasePrice;
+                        row.className = 'bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm';
                         row.innerHTML = `
-                            <div class="flex justify-between items-start mb-2">
+                            <div class="flex justify-between items-start gap-3">
                                 <div class="flex-1 pr-3">
                                     <h4 class="font-bold text-sm">${item.product_name}</h4>
-                                    <p class="text-xs text-slate-500">SKU: ${item.product_sku || '-'} • Qty beli: ${formatQuantity(item.purchase_qty ?? item.qty)} ${item.purchase_unit || item.unit || 'Pcs'} • Stok masuk: ${formatQuantity(item.qty)} ${item.unit || 'Pcs'}</p>
+                                    <p class="text-xs text-slate-500">SKU: ${item.product_sku || '-'} - Qty beli: ${formatQuantity(purchaseQty)} ${item.purchase_unit || item.unit || 'Pcs'} - Stok masuk: ${formatQuantity(stockQty)} ${item.unit || 'Pcs'}</p>
                                     ${item.product_variant_name ? `<p class="text-xs text-slate-500">Varian: ${item.product_variant_name}</p>` : ''}
                                 </div>
-                                <span class="text-xs font-bold text-primary">${formatCurrency(item.purchase_price ?? item.price)}</span>
+                                <span class="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary">${formatCurrency(lineTotal)}</span>
                             </div>
-                            <div class="grid grid-cols-2 gap-3">
+                            <div class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                                <div class="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-2">
+                                    <span class="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Qty</span>
+                                    <span class="mt-1 block text-sm font-bold text-slate-900 dark:text-slate-100">${formatQuantity(purchaseQty)} ${item.purchase_unit || item.unit || 'Pcs'}</span>
+                                </div>
                                 <div class="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-2">
                                     <span class="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Harga Satuan</span>
-                                    <span class="mt-1 block text-sm font-bold text-slate-900 dark:text-slate-100">${formatCurrency(item.purchase_price ?? item.price)}</span>
+                                    <span class="mt-1 block text-sm font-bold text-slate-900 dark:text-slate-100">${formatCurrency(purchasePrice)}</span>
                                 </div>
                                 <div class="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-2 text-right">
                                     <span class="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Subtotal Item</span>
-                                    <span class="mt-1 block text-sm font-bold text-slate-900 dark:text-slate-100">${formatCurrency(Number(item.purchase_qty ?? item.qty) * Number(item.purchase_price ?? item.price))}</span>
+                                    <span class="mt-1 block text-sm font-bold text-primary">${formatCurrency(lineTotal)}</span>
                                 </div>
                             </div>
                         `;
@@ -524,6 +560,8 @@
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
+                            ...(csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}),
+                            'X-Requested-With': 'XMLHttpRequest',
                             ...headers,
                         },
                         body: JSON.stringify({ status }),
@@ -556,8 +594,8 @@
                     }
 
                     const allowed = window.PosUi.confirmRiskAction({
-                        title: 'Tutup Sisa Purchase',
-                        message: 'Langkah ini menutup sisa quantity yang belum datang tanpa menambah stok baru. Lanjutkan?',
+                        title: 'Tidak Ada Barang Susulan',
+                        message: 'Gunakan ini hanya kalau supplier tidak akan mengirim sisa barang. PO akan diselesaikan tanpa menambah stok lagi.',
                     });
                     if (!allowed) {
                         return;
@@ -568,6 +606,8 @@
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
+                                ...(csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}),
+                                'X-Requested-With': 'XMLHttpRequest',
                                 ...headers,
                             },
                         });

@@ -57,6 +57,9 @@ class WebDashboardSmokeTest extends TestCase
         $this->assertStringContainsString('/api/v1/reports/inventory/export/pdf', $contents);
         $this->assertStringContainsString('Audit Trail Operasional', $contents);
         $this->assertStringContainsString('Preview Reorder', $contents);
+        $this->assertStringContainsString('recent-movement-pagination', $contents);
+        $this->assertStringContainsString('movement_per_page', $contents);
+        $this->assertStringContainsString('formatQtyWithUnit(delta, row.unit)', $contents);
     }
 
     public function test_subscription_current_route_and_view_expose_management_links(): void

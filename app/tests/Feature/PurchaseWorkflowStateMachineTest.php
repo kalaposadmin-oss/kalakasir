@@ -133,6 +133,12 @@ class PurchaseWorkflowStateMachineTest extends TestCase
             'qty_in' => 5,
         ]);
 
+        $this->withHeaders($this->tenantHeaders($tenant->id))
+            ->getJson('/api/v1/purchases/'.$purchaseId)
+            ->assertOk()
+            ->assertJsonPath('purchase.status', PurchaseStatus::RECEIVED)
+            ->assertJsonPath('flow.can_close', false);
+
         $this->assertDatabaseHas('journal_entries', [
             'tenant_id' => $tenant->id,
             'reference_type' => 'purchase',
@@ -168,6 +174,12 @@ class PurchaseWorkflowStateMachineTest extends TestCase
             'status' => PurchaseStatus::PARTIALLY_RECEIVED,
         ]);
 
+        $this->withHeaders($this->tenantHeaders($tenant->id))
+            ->getJson('/api/v1/purchases/'.$purchaseId)
+            ->assertOk()
+            ->assertJsonPath('purchase.status', PurchaseStatus::PARTIALLY_RECEIVED)
+            ->assertJsonPath('flow.can_close', true);
+
         $secondResponse = $this->withHeaders($this->tenantHeaders($tenant->id))
             ->postJson('/api/v1/purchases/'.$purchaseId.'/receive', [
                 'items' => [
@@ -191,6 +203,12 @@ class PurchaseWorkflowStateMachineTest extends TestCase
             'product_id' => $fixture['product_id'],
             'received_qty' => 5,
         ]);
+
+        $this->withHeaders($this->tenantHeaders($tenant->id))
+            ->getJson('/api/v1/purchases/'.$purchaseId)
+            ->assertOk()
+            ->assertJsonPath('purchase.status', PurchaseStatus::RECEIVED)
+            ->assertJsonPath('flow.can_close', false);
 
         $this->assertDatabaseHas('inventory_balances', [
             'tenant_id' => $tenant->id,

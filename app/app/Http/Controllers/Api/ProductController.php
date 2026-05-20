@@ -45,33 +45,43 @@ class ProductController extends Controller
             return $this->indexLite($request, $tenantId);
         }
 
-        $products = Cache::remember("products:index:{$tenantId}", now('UTC')->addSeconds(60), function () use ($tenantId) {
-            return Product::query()
-                ->leftJoin('categories', function ($join) {
-                    $join->on('products.category_id', '=', 'categories.id')
-                        ->on('products.tenant_id', '=', 'categories.tenant_id');
-                })
-                ->select([
-                    'products.id',
-                    'products.sku',
-                    'products.name',
-                    'products.price',
-                    'products.hpp_average',
-                    'products.unit',
-                    'products.supplier_id',
-                    'products.image_url',
-                    'products.category_id',
-                    'products.product_mode',
-                    'products.production_mode',
-                    'products.item_type',
-                    'products.track_stock',
-                    'categories.name as category_name',
-                ])
-                ->where('products.tenant_id', $tenantId)
-                ->where('products.is_active', true)
-                ->orderBy('products.name')
-                ->get();
-        });
+        $inventorySub = InventoryBalance::query()
+            ->where('tenant_id', $tenantId)
+            ->select(['tenant_id', 'product_id'])
+            ->selectRaw('sum(qty_on_hand) as qty_on_hand')
+            ->groupBy('tenant_id', 'product_id');
+
+        $products = Product::query()
+            ->leftJoin('categories', function ($join) {
+                $join->on('products.category_id', '=', 'categories.id')
+                    ->on('products.tenant_id', '=', 'categories.tenant_id');
+            })
+            ->leftJoinSub($inventorySub, 'inventory', function ($join) {
+                $join->on('products.id', '=', 'inventory.product_id')
+                    ->on('products.tenant_id', '=', 'inventory.tenant_id');
+            })
+            ->select([
+                'products.id',
+                'products.sku',
+                'products.name',
+                'products.price',
+                'products.hpp_average',
+                'products.min_stock',
+                'products.unit',
+                'products.supplier_id',
+                'products.image_url',
+                'products.category_id',
+                'products.product_mode',
+                'products.production_mode',
+                'products.item_type',
+                'products.track_stock',
+                'categories.name as category_name',
+                DB::raw('coalesce(inventory.qty_on_hand, 0) as qty_on_hand'),
+            ])
+            ->where('products.tenant_id', $tenantId)
+            ->where('products.is_active', true)
+            ->orderBy('products.name')
+            ->get();
 
         return response()->json([
             'products' => $products,

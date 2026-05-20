@@ -21,6 +21,10 @@ class InventoryOperationalReportsTest extends TestCase
         $tenant->forceFill(['plan' => 'P'])->save();
 
         $fixture = $this->seedCheckoutFixture($tenant->id, $user->id);
+        \DB::table('products')
+            ->where('tenant_id', $tenant->id)
+            ->where('id', $fixture['product_id'])
+            ->update(['unit' => 'g']);
         $insideAt = CarbonImmutable::parse('2026-02-27 09:00:00', 'UTC');
         $outsideAt = CarbonImmutable::parse('2026-02-20 09:00:00', 'UTC');
 
@@ -105,6 +109,10 @@ class InventoryOperationalReportsTest extends TestCase
             ->assertJsonPath('movement_range.out', 4)
             ->assertJsonPath('movement_range.net', 6)
             ->assertJsonCount(2, 'recent_movements')
+            ->assertJsonPath('recent_movements.0.unit', 'g')
+            ->assertJsonPath('recent_movements_pagination.current_page', 1)
+            ->assertJsonPath('recent_movements_pagination.per_page', 10)
+            ->assertJsonPath('recent_movements_pagination.total', 2)
             ->assertJsonCount(1, 'audit_trail')
             ->assertJsonPath('audit_trail.0.event_type', 'anomaly_detected')
             ->assertJsonPath('audit_trail.0.entity_type', 'anomaly');

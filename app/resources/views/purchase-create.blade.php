@@ -185,6 +185,7 @@
         @include('partials.ui-helpers')
         <script>
             (() => {
+                const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
                 const tenantId = document.querySelector('meta[name="tenant-id"]').content;
                 const headers = tenantId ? { 'X-Tenant-Id': tenantId } : {};
                 const purchaseStatusDraft = @json(\App\Support\PurchaseStatus::DRAFT);
@@ -360,6 +361,15 @@
                                 </div>
                             </div>
                         </div>
+                        <div class="rounded-xl border border-primary/10 bg-primary/5 px-4 py-3">
+                            <div class="flex items-center justify-between gap-3">
+                                <div>
+                                    <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Item</p>
+                                    <p class="mt-1 text-xs text-slate-500"><span class="item-line-qty">1</span> x <span class="item-line-price">Rp 0</span></p>
+                                </div>
+                                <p class="item-line-total text-base font-black text-primary">Rp 0</p>
+                            </div>
+                        </div>
                     `;
                     el.container.appendChild(wrapper);
 
@@ -397,7 +407,20 @@
 
                         const qty = parseFloat(qtyInput.value || '0');
                         const price = parseFloat(priceInput.value || '0');
-                        subtotal += qty * price;
+                        const lineTotal = qty * price;
+                        subtotal += lineTotal;
+                        const lineQty = row.querySelector('.item-line-qty');
+                        const linePrice = row.querySelector('.item-line-price');
+                        const lineTotalEl = row.querySelector('.item-line-total');
+                        if (lineQty) {
+                            lineQty.textContent = new Intl.NumberFormat('id-ID', { maximumFractionDigits: Number.isInteger(qty) ? 0 : 4 }).format(qty);
+                        }
+                        if (linePrice) {
+                            linePrice.textContent = formatCurrency(price);
+                        }
+                        if (lineTotalEl) {
+                            lineTotalEl.textContent = formatCurrency(lineTotal);
+                        }
                     });
                     const taxEnabled = el.taxEnabled?.checked ?? true;
                     const taxRate = taxEnabled ? Math.max(0, parseFloat(el.taxRate?.value || '0')) : 0;
@@ -466,6 +489,8 @@
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
+                                ...(csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}),
+                                'X-Requested-With': 'XMLHttpRequest',
                                 ...headers,
                             },
                             body: JSON.stringify({ name }),
@@ -562,6 +587,8 @@
                                 method: 'POST',
                                 headers: {
                                     'Content-Type': 'application/json',
+                                    ...(csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}),
+                                    'X-Requested-With': 'XMLHttpRequest',
                                     ...headers,
                                 },
                                 body: JSON.stringify({

@@ -140,6 +140,33 @@
             maximumFractionDigits: 0,
         }).format(value || 0);
 
+        const formatQty = (value) => {
+            const qty = Number(value || 0);
+            return Number.isInteger(qty) ? String(qty) : qty.toFixed(2);
+        };
+
+        const formatQtyWithUnit = (value, unit) => {
+            const qty = Number(value || 0);
+            const rawUnit = String(unit || '').trim();
+            const normalized = rawUnit.toLowerCase();
+            const absQty = Math.abs(qty);
+            let displayQty = qty;
+            let displayUnit = rawUnit || 'unit';
+
+            if (['g', 'gr', 'gram', 'grams'].includes(normalized) && absQty >= 1000) {
+                displayQty = qty / 1000;
+                displayUnit = 'kg';
+            } else if (['mg', 'miligram', 'milligram'].includes(normalized) && absQty >= 1000) {
+                displayQty = qty / 1000;
+                displayUnit = 'g';
+            } else if (['ml', 'mili', 'milliliter', 'mililiter'].includes(normalized) && absQty >= 1000) {
+                displayQty = qty / 1000;
+                displayUnit = 'L';
+            }
+
+            return `${formatQty(displayQty)} ${displayUnit}`;
+        };
+
         const renderFilters = () => {
             el.filters.innerHTML = '';
             const allBtn = document.createElement('button');
@@ -192,13 +219,22 @@
                 const hppLabel = Number(product.hpp_average || 0) > 0
                     ? formatCurrency(product.hpp_average)
                     : 'Belum terbentuk';
+                const stockLabel = product.track_stock
+                    ? formatQtyWithUnit(product.qty_on_hand || 0, product.unit)
+                    : 'Tidak dilacak';
+                const stockClass = product.track_stock && Number(product.qty_on_hand || 0) <= Number(product.min_stock || 0)
+                    ? 'bg-rose-50 text-rose-700 ring-rose-100'
+                    : 'bg-emerald-50 text-emerald-700 ring-emerald-100';
                 card.innerHTML = `
                     <div class="flex min-w-0 items-center gap-3">
                         <div class="size-14 shrink-0 rounded-xl border border-slate-100 bg-cover bg-center dark:border-slate-800" style="background-image: url('${image}')"></div>
-                        <div class="flex flex-col">
+                        <div class="flex min-w-0 flex-col">
                             <h3 class="truncate text-sm font-black text-slate-950 dark:text-white">${product.name}</h3>
                             <p class="text-sm text-slate-500">SKU: ${product.sku || '-'} • <span class="font-semibold text-slate-700 dark:text-slate-300">${formatCurrency(product.price)}</span></p>
-                            <p class="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">HPP ${hppLabel}</p>
+                            <div class="mt-2 flex flex-wrap items-center gap-2">
+                                <span class="rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] ring-1 ${stockClass}">Stok ${stockLabel}</span>
+                                <span class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">HPP ${hppLabel}</span>
+                            </div>
                         </div>
                     </div>
                     <div class="flex items-center gap-2">

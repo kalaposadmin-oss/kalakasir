@@ -111,6 +111,7 @@
                     <div>
                         <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Movement Terbaru</p>
                         <div id="recent-movement-list" class="mt-2 space-y-2"></div>
+                        <div id="recent-movement-pagination" class="mt-3 flex items-center justify-between gap-2"></div>
                     </div>
                     <div>
                         <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Audit / Anomaly</p>
@@ -179,6 +180,7 @@
             const listEl = document.getElementById('low-stock-list');
             const movementTypeList = document.getElementById('movement-type-list');
             const recentMovementList = document.getElementById('recent-movement-list');
+            const recentMovementPagination = document.getElementById('recent-movement-pagination');
             const auditTrailList = document.getElementById('audit-trail-list');
             const auditCategoryFilter = document.getElementById('audit-category-filter');
             const movementRangeLabel = document.getElementById('movement-range-label');
@@ -198,6 +200,8 @@
                 locations: [],
                 locationId: '',
                 auditCategory: '',
+                movementPage: Math.max(1, Number(new URLSearchParams(window.location.search).get('page') || 1)),
+                movementPerPage: 10,
             };
 
             const formatCurrency = (value) => new Intl.NumberFormat('id-ID', {
@@ -218,6 +222,28 @@
             const formatQty = (value) => {
                 const qty = Number(value || 0);
                 return Number.isInteger(qty) ? String(qty) : qty.toFixed(2);
+            };
+
+            const formatQtyWithUnit = (value, unit) => {
+                const qty = Number(value || 0);
+                const rawUnit = String(unit || '').trim();
+                const normalized = rawUnit.toLowerCase();
+                const absQty = Math.abs(qty);
+                let displayQty = qty;
+                let displayUnit = rawUnit || 'unit';
+
+                if (['g', 'gr', 'gram', 'grams'].includes(normalized) && absQty >= 1000) {
+                    displayQty = qty / 1000;
+                    displayUnit = 'kg';
+                } else if (['mg', 'miligram', 'milligram'].includes(normalized) && absQty >= 1000) {
+                    displayQty = qty / 1000;
+                    displayUnit = 'g';
+                } else if (['ml', 'mili', 'milliliter', 'mililiter'].includes(normalized) && absQty >= 1000) {
+                    displayQty = qty / 1000;
+                    displayUnit = 'L';
+                }
+
+                return `${formatQty(displayQty)} ${displayUnit}`;
             };
 
             const escapeHtml = (value) => String(value ?? '')
@@ -290,7 +316,7 @@
                             <p class="text-sm font-semibold text-slate-900">${item.name || '-'}</p>
                             <p class="text-[11px] text-slate-500">SKU: ${item.sku || '-'}</p>
                         </div>
-                        <span class="text-sm font-semibold text-rose-600">${item.qty_on_hand ?? 0}</span>
+                        <span class="text-sm font-semibold text-rose-600">${formatQtyWithUnit(item.qty_on_hand ?? 0, item.unit)}</span>
                     `;
                     listEl.appendChild(card);
                 });
@@ -326,6 +352,8 @@
                             return;
                         }
                         state.auditCategory = nextValue;
+                        state.movementPage = 1;
+                        syncMovementPageUrl();
                         loadDashboard();
                     });
                     auditCategoryFilter.appendChild(button);
@@ -376,12 +404,61 @@
                                 <p class="text-[11px] text-slate-400">${row.created_at ? formatDate(row.created_at) : '-'}</p>
                             </div>
                             <div class="text-right">
-                                <p class="text-sm font-bold ${delta >= 0 ? 'text-emerald-600' : 'text-rose-600'}">${delta >= 0 ? '+' : ''}${formatQty(delta)}</p>
-                                <p class="text-[11px] text-slate-400">Saldo ${formatQty(row.balance_after || 0)}</p>
+                                <p class="text-sm font-bold ${delta >= 0 ? 'text-emerald-600' : 'text-rose-600'}">${delta >= 0 ? '+' : ''}${formatQtyWithUnit(delta, row.unit)}</p>
+                                <p class="text-[11px] text-slate-400">Saldo ${formatQtyWithUnit(row.balance_after || 0, row.unit)}</p>
                             </div>
                         </div>
                     `;
                     recentMovementList.appendChild(card);
+                });
+            };
+
+            const syncMovementPageUrl = () => {
+                const url = new URL(window.location.href);
+                url.searchParams.set('page', String(state.movementPage));
+                window.history.replaceState({}, '', `${url.pathname}${url.search}`);
+            };
+
+            const renderRecentMovementPagination = (pagination) => {
+                if (!recentMovementPagination) {
+                    return;
+                }
+
+                const total = Number(pagination?.total || 0);
+                const currentPage = Number(pagination?.current_page || state.movementPage || 1);
+                const lastPage = Math.max(1, Number(pagination?.last_page || 1));
+                if (total <= state.movementPerPage) {
+                    recentMovementPagination.innerHTML = '';
+                    return;
+                }
+
+                recentMovementPagination.innerHTML = `
+                    <button id="movement-prev" class="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold text-slate-600 disabled:opacity-40" type="button" ${currentPage <= 1 ? 'disabled' : ''}>
+                        <span class="material-symbols-outlined text-sm">chevron_left</span>
+                        Sebelumnya
+                    </button>
+                    <span class="text-[11px] font-semibold text-slate-500">Hal. ${currentPage} / ${lastPage} - ${total} movement</span>
+                    <button id="movement-next" class="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold text-slate-600 disabled:opacity-40" type="button" ${currentPage >= lastPage ? 'disabled' : ''}>
+                        Berikutnya
+                        <span class="material-symbols-outlined text-sm">chevron_right</span>
+                    </button>
+                `;
+
+                recentMovementPagination.querySelector('#movement-prev')?.addEventListener('click', () => {
+                    if (state.movementPage <= 1) {
+                        return;
+                    }
+                    state.movementPage -= 1;
+                    syncMovementPageUrl();
+                    loadDashboard();
+                });
+                recentMovementPagination.querySelector('#movement-next')?.addEventListener('click', () => {
+                    if (state.movementPage >= lastPage) {
+                        return;
+                    }
+                    state.movementPage += 1;
+                    syncMovementPageUrl();
+                    loadDashboard();
                 });
             };
 
@@ -496,6 +573,8 @@
                 if (state.period.end_date) url.searchParams.set('end_date', state.period.end_date);
                 if (state.locationId) url.searchParams.set('location_id', state.locationId);
                 if (state.auditCategory) url.searchParams.set('audit_category', state.auditCategory);
+                url.searchParams.set('movement_page', String(state.movementPage));
+                url.searchParams.set('movement_per_page', String(state.movementPerPage));
                 const response = await fetch(url, { headers });
                 if (!response.ok) {
                     throw new Error('Gagal memuat ringkasan persediaan.');
@@ -524,6 +603,7 @@
                 renderAuditCategoryFilter(Array.isArray(data.audit_categories) ? data.audit_categories : []);
                 renderMovementTypes(Array.isArray(data.movement_range?.by_type) ? data.movement_range.by_type : []);
                 renderRecentMovements(Array.isArray(data.recent_movements) ? data.recent_movements : []);
+                renderRecentMovementPagination(data.recent_movements_pagination || {});
                 renderAuditTrail(Array.isArray(data.audit_trail) ? data.audit_trail : []);
             };
 
@@ -553,6 +633,8 @@
 
             period?.addEventListener('period:change', (event) => {
                 state.period = event.detail;
+                state.movementPage = 1;
+                syncMovementPageUrl();
                 syncExportLinks();
                 loadDashboard();
             });
@@ -563,6 +645,8 @@
                 if (locationLabel) {
                     locationLabel.textContent = label;
                 }
+                state.movementPage = 1;
+                syncMovementPageUrl();
                 syncExportLinks();
                 loadDashboard();
             });

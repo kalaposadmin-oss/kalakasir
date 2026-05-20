@@ -40,7 +40,7 @@ final class PurchaseFlowResolver
     {
         $normalizedStatus = PurchaseStatus::normalize($status);
 
-        return in_array($normalizedStatus, [PurchaseStatus::PARTIALLY_RECEIVED, PurchaseStatus::RECEIVED], true);
+        return $normalizedStatus === PurchaseStatus::PARTIALLY_RECEIVED;
     }
 
     public function receiveBlockMessage(string $status, ?string $purchaseMode = null, ?string $tenantPurchaseMode = null): string

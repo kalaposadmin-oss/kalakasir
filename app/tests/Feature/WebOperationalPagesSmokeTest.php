@@ -14,13 +14,15 @@ class WebOperationalPagesSmokeTest extends TestCase
         $middleware = $route->gatherMiddleware();
         $contents = file_get_contents(resource_path('views/products.blade.php'));
 
-        $this->assertContains('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview', $middleware);
+        $this->assertContains('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,product.list', $middleware);
         $this->assertTrue(view()->exists('products'));
         $this->assertStringContainsString('Daftar Produk', $contents);
         $this->assertStringContainsString('/backoffice/dashboard', $contents);
-        $this->assertStringContainsString('/backoffice/products/new', $contents);
-        $this->assertStringContainsString('/backoffice/products/${product.id}/edit', $contents);
-        $this->assertStringContainsString('/backoffice/products/${product.id}?from=', $contents);
+        $this->assertStringContainsString("\$productsPortalPrefix.'/products/new", $contents);
+        $this->assertStringContainsString('${portalPrefix}/products/${product.id}/edit', $contents);
+        $this->assertStringContainsString('${portalPrefix}/products/${product.id}?from=', $contents);
+        $this->assertStringContainsString('Stok ${stockLabel}', $contents);
+        $this->assertStringContainsString('formatQtyWithUnit(product.qty_on_hand', $contents);
     }
 
     public function test_product_create_route_and_view_expose_inline_category_creation(): void
@@ -94,7 +96,7 @@ class WebOperationalPagesSmokeTest extends TestCase
         $middleware = $route->gatherMiddleware();
         $contents = file_get_contents(resource_path('views/product-detail.blade.php'));
 
-        $this->assertContains('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview', $middleware);
+        $this->assertContains('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,product.list', $middleware);
         $this->assertTrue(view()->exists('product-detail'));
         $this->assertStringContainsString('Detail Produk', $contents);
         $this->assertStringContainsString('Transfer Stok', $contents);
@@ -110,10 +112,10 @@ class WebOperationalPagesSmokeTest extends TestCase
         $middleware = $route->gatherMiddleware();
         $contents = file_get_contents(resource_path('views/inventory.blade.php'));
 
-        $this->assertContains('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview', $middleware);
+        $this->assertContains('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,inventory.stock', $middleware);
         $this->assertTrue(view()->exists('inventory'));
         $this->assertStringContainsString('Stok Inventaris', $contents);
-        $this->assertStringContainsString('$inventoryBackUrl = \'/backoffice/dashboard\';', $contents);
+        $this->assertStringContainsString('$inventoryBackUrl = $inventoryPortalPrefix === \'/pos\' ? pos_default_url() : \'/backoffice/dashboard\';', $contents);
         $this->assertStringContainsString(':backUrl="$inventoryBackUrl"', $contents);
     }
 
@@ -144,7 +146,7 @@ class WebOperationalPagesSmokeTest extends TestCase
         $middleware = $route->gatherMiddleware();
         $contents = file_get_contents(resource_path('views/suppliers.blade.php'));
 
-        $this->assertContains('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview', $middleware);
+        $this->assertContains('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,supplier.manage', $middleware);
         $this->assertTrue(view()->exists('suppliers'));
         $this->assertStringContainsString('Pemasok & PO', $contents);
         $this->assertStringContainsString('/backoffice/dashboard', $contents);
@@ -153,19 +155,36 @@ class WebOperationalPagesSmokeTest extends TestCase
         $this->assertStringContainsString('/backoffice/purchases/${purchase.id}?from=', $contents);
     }
 
+    public function test_purchase_pages_include_line_totals_and_csrf_safe_actions(): void
+    {
+        $createContents = file_get_contents(resource_path('views/purchase-create.blade.php'));
+        $detailContents = file_get_contents(resource_path('views/purchase-detail.blade.php'));
+
+        $this->assertStringContainsString('item-line-total', $createContents);
+        $this->assertStringContainsString('Total Item', $createContents);
+        $this->assertStringContainsString("'X-CSRF-TOKEN': csrfToken", $createContents);
+        $this->assertStringContainsString('formatQuantity', $detailContents);
+        $this->assertStringContainsString('/api/v1/purchases/${purchaseId}/decision', $detailContents);
+        $this->assertStringContainsString('/api/v1/purchases/${purchaseId}/close', $detailContents);
+        $this->assertStringContainsString("'X-CSRF-TOKEN': csrfToken", $detailContents);
+        $this->assertStringContainsString('Tidak Ada Susulan', $detailContents);
+        $this->assertStringContainsString('Selesai - Semua Barang Diterima', $detailContents);
+    }
+
     public function test_receiving_route_and_view_expose_canonical_receiving_flow(): void
     {
         $route = Route::getRoutes()->match(Request::create('/backoffice/receiving', 'GET'));
         $middleware = $route->gatherMiddleware();
         $contents = file_get_contents(resource_path('views/receiving.blade.php'));
 
-        $this->assertContains('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview', $middleware);
+        $this->assertContains('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,purchase.receive', $middleware);
         $this->assertTrue(view()->exists('receiving'));
         $this->assertStringContainsString('Terima Barang', $contents);
-        $this->assertStringContainsString('/backoffice/suppliers', $contents);
-        $this->assertStringContainsString('/backoffice/receiving/${encodeURIComponent(selectedPurchaseId)}?from=', $contents);
-        $this->assertStringContainsString('/backoffice/receiving/${encodeURIComponent(selectedPurchaseId)}/action?from=', $contents);
+        $this->assertStringContainsString('Purchase Order Tersedia', $contents);
+        $this->assertStringContainsString('const buildDetailUrl = (selectedPurchaseId)', $contents);
+        $this->assertStringContainsString('const buildActionUrl = (selectedPurchaseId)', $contents);
         $this->assertStringContainsString('KONFIRMASI STOK', $contents);
+        $this->assertStringContainsString('TIDAK ADA SUSULAN', $contents);
     }
 
     public function test_pos_sales_history_route_and_view_expose_transaction_and_shift_tabs(): void

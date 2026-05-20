@@ -95,8 +95,9 @@
         @if ($canManageReceivingFlow)
             <div class="fixed bottom-0 left-1/2 w-full max-w-[430px] -translate-x-1/2 p-4 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 z-20 app-bottom-safe-footer">
                 <div class="max-w-md mx-auto flex gap-3">
-                    <button id="close-purchase" class="hidden flex-1 flex items-center justify-center h-12 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-sm tracking-wide shadow-sm" type="button">
-                        TUTUP SISA
+                    <button id="close-purchase" class="hidden flex-1 items-center justify-center gap-2 h-12 rounded-xl border border-amber-200 bg-amber-50 text-amber-700 font-bold text-sm tracking-wide shadow-sm dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300" type="button">
+                        <span class="material-symbols-outlined text-base">event_busy</span>
+                        <span>TIDAK ADA SUSULAN</span>
                     </button>
                     <div class="flex flex-[1.5] gap-2">
                         <button id="edit-payment-footer" class="hidden flex-1 items-center justify-center h-12 rounded-xl border border-primary/20 bg-primary/10 text-primary font-bold text-sm tracking-wide shadow-sm" type="button">
@@ -467,6 +468,9 @@
                     el.detailActionButton?.classList.toggle('flex', canReceive);
                     el.closePurchase?.classList.toggle('hidden', !canClose);
                     el.closePurchase?.classList.toggle('flex', canClose);
+                    if (el.closePurchase && canClose) {
+                        el.closePurchase.innerHTML = '<span class="material-symbols-outlined text-base">event_busy</span><span>TIDAK ADA SUSULAN</span>';
+                    }
                 };
 
                 const renderHeader = (data) => {
@@ -529,8 +533,8 @@
                     }
 
                     const allowed = window.PosUi.confirmRiskAction({
-                        title: 'Tutup Sisa Purchase',
-                        message: 'Purchase ini akan ditutup tanpa menambah stok baru untuk sisa quantity yang belum datang. Lanjutkan?',
+                        title: 'Tidak Ada Barang Susulan',
+                        message: 'Gunakan ini hanya kalau supplier tidak akan mengirim sisa barang. PO akan diselesaikan tanpa menambah stok lagi.',
                     });
                     if (!allowed) {
                         return;

@@ -40,6 +40,8 @@ class InventoryReportController extends Controller
             'to' => ['nullable', 'date'],
             'location_id' => ['nullable', 'uuid'],
             'audit_category' => ['nullable', 'string', 'in:inventory,purchase,sales,anomaly'],
+            'movement_page' => ['nullable', 'integer', 'min:1'],
+            'movement_per_page' => ['nullable', 'integer', 'min:1', 'max:50'],
         ]);
         if (! $tenantId) {
             return response()->json([
@@ -71,13 +73,17 @@ class InventoryReportController extends Controller
         );
 
         $locationId = $validated['location_id'] ?? null;
+        $movementPage = max(1, (int) ($validated['movement_page'] ?? $request->query('page', 1)));
+        $movementPerPage = max(1, min((int) ($validated['movement_per_page'] ?? 10), 50));
         $summaryCacheKey = sprintf(
-            'reports:inventory:summary:%s:%s:%s:%s:%s',
+            'reports:inventory:summary:%s:%s:%s:%s:%s:%d:%d',
             $tenantId,
             $rangeMeta['start_date'] ?? 'na',
             $rangeMeta['end_date'] ?? 'na',
             $locationId ?: 'all',
-            $validated['audit_category'] ?? 'inventory'
+            $validated['audit_category'] ?? 'inventory',
+            $movementPage,
+            $movementPerPage
         );
         if (! $request->boolean('fresh') && is_array($cached = Cache::get($summaryCacheKey))) {
             return response()->json($cached);
@@ -233,9 +239,10 @@ class InventoryReportController extends Controller
             $recentMovementsQuery->where('stock_ledger.location_id', $locationId);
         }
 
+        $recentMovementsTotal = (clone $recentMovementsQuery)->count();
         $recentMovements = $recentMovementsQuery
             ->orderByDesc('stock_ledger.created_at')
-            ->limit(10)
+            ->forPage($movementPage, $movementPerPage)
             ->get([
                 'stock_ledger.reference_type',
                 'stock_ledger.reference_id',
@@ -246,6 +253,7 @@ class InventoryReportController extends Controller
                 'recent_sales.idempotency_key as sale_idempotency_key',
                 'products.name as product_name',
                 'products.sku as product_sku',
+                'products.unit as product_unit',
                 'locations.name as location_name',
             ])
             ->map(function ($row) {
@@ -265,6 +273,7 @@ class InventoryReportController extends Controller
                     'created_at' => $row->created_at,
                     'product_name' => $row->product_name,
                     'product_sku' => $row->product_sku,
+                    'unit' => $row->product_unit,
                     'location_name' => $row->location_name,
                 ];
             })
@@ -290,6 +299,7 @@ class InventoryReportController extends Controller
                 'products.id',
                 'products.name',
                 'products.sku',
+                'products.unit',
                 'products.min_stock',
                 DB::raw('coalesce(inventory.qty_on_hand, 0) as qty_on_hand'),
             ])
@@ -298,6 +308,7 @@ class InventoryReportController extends Controller
                     'id' => $row->id,
                     'name' => $row->name,
                     'sku' => $row->sku,
+                    'unit' => $row->unit,
                     'qty_on_hand' => (float) $row->qty_on_hand,
                     'min_stock' => (float) $row->min_stock,
                 ];
@@ -320,6 +331,13 @@ class InventoryReportController extends Controller
                 'by_type' => $movementByType,
             ],
             'recent_movements' => $recentMovements,
+            'recent_movements_pagination' => [
+                'current_page' => $movementPage,
+                'per_page' => $movementPerPage,
+                'total' => $recentMovementsTotal,
+                'last_page' => max(1, (int) ceil($recentMovementsTotal / $movementPerPage)),
+                'has_more' => $movementPage * $movementPerPage < $recentMovementsTotal,
+            ],
             'audit_trail' => $auditTrail,
             'audit_category' => $auditCategory,
             'audit_categories' => $this->availableAuditCategories($auditCategory),
