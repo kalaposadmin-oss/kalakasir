@@ -706,7 +706,12 @@
                     });
 
                     regenerateLinkBtn?.addEventListener('click', async () => {
-                        if (!window.confirm('Buat ulang link pelanggan ini? Link lama yang tersimpan di WhatsApp tidak akan bisa dipakai lagi.')) {
+                        if (!await window.PosUi.confirmRiskActionAsync({
+                            title: 'Buat Ulang Link',
+                            message: 'Link lama yang tersimpan di WhatsApp tidak akan bisa dipakai lagi. Lanjutkan?',
+                            confirmText: 'Buat Ulang',
+                            icon: 'link',
+                        })) {
                             return;
                         }
 

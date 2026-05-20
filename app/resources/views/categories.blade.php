@@ -373,7 +373,12 @@
                         return;
                     }
 
-                    if (!window.confirm('Hapus kategori pelanggan ini? Pelanggan yang memakai kategori ini akan menjadi tanpa kategori.')) {
+                    if (!await window.PosUi.confirmRiskActionAsync({
+                        title: 'Hapus Kategori Pelanggan',
+                        message: 'Pelanggan yang memakai kategori ini akan menjadi tanpa kategori. Lanjutkan?',
+                        confirmText: 'Hapus',
+                        icon: 'delete',
+                    })) {
                         return;
                     }
 

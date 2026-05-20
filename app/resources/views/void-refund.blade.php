@@ -428,9 +428,11 @@
                         }
                     }
 
-                    const allowed = window.PosUi.confirmRiskAction({
+                    const allowed = await window.PosUi.confirmRiskActionAsync({
                         title: 'Konfirmasi Refund',
                         message: `Item: ${totalItems}\nTotal: ${formatCurrency(totalRefund)}\nRefund akan tercatat di audit log dan reversal finance. Lanjutkan?`,
+                        confirmText: 'Proses Refund',
+                        icon: 'assignment_return',
                     });
                     if (!allowed) {
                         return;

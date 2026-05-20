@@ -1257,7 +1257,12 @@
                     return;
                 }
 
-                if (!window.confirm('Hapus baris stok awal ini dari draft saldo awal?')) {
+                if (!await window.PosUi.confirmRiskActionAsync({
+                    title: 'Hapus Stok Awal',
+                    message: 'Baris stok awal ini akan dihapus dari draft saldo awal. Lanjutkan?',
+                    confirmText: 'Hapus',
+                    icon: 'delete',
+                })) {
                     return;
                 }
 
@@ -1289,7 +1294,12 @@
                     return;
                 }
 
-                if (!window.confirm('Hapus baris dana awal ini dari draft saldo awal?')) {
+                if (!await window.PosUi.confirmRiskActionAsync({
+                    title: 'Hapus Dana Awal',
+                    message: 'Baris dana awal ini akan dihapus dari draft saldo awal. Lanjutkan?',
+                    confirmText: 'Hapus',
+                    icon: 'delete',
+                })) {
                     return;
                 }
 

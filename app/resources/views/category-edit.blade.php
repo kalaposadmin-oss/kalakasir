@@ -196,7 +196,12 @@
 
                 const deleteCategory = async () => {
                     showError('');
-                    const confirmed = window.confirm('Hapus kategori ini?');
+                    const confirmed = await window.PosUi.confirmRiskActionAsync({
+                        title: 'Hapus Kategori',
+                        message: 'Kategori akan dihapus dari master data. Lanjutkan?',
+                        confirmText: 'Hapus',
+                        icon: 'delete',
+                    });
                     if (!confirmed) {
                         return;
                     }

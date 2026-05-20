@@ -86,6 +86,262 @@
             return window.confirm(`${title}\n\n${message}`);
         };
 
+        const ensureConfirmDialog = () => {
+            let dialog = document.getElementById('pos-ui-confirm-dialog');
+
+            if (dialog) {
+                return dialog;
+            }
+
+            if (!document.getElementById('pos-ui-confirm-style')) {
+                const style = document.createElement('style');
+                style.id = 'pos-ui-confirm-style';
+                style.textContent = `
+                    .pos-ui-confirm-dialog {
+                        position: fixed;
+                        inset: 0;
+                        z-index: 80;
+                        display: none;
+                        align-items: center;
+                        justify-content: center;
+                        padding: 1.5rem 1rem;
+                        background: rgba(15, 23, 42, 0.45);
+                        backdrop-filter: blur(2px);
+                    }
+                    .pos-ui-confirm-dialog.is-open { display: flex; }
+                    .pos-ui-confirm-card {
+                        width: 100%;
+                        max-width: 430px;
+                        overflow: hidden;
+                        border: 1px solid #e2e8f0;
+                        border-radius: 24px;
+                        background: #fff;
+                        box-shadow: 0 24px 60px rgba(15, 23, 42, 0.22);
+                    }
+                    .pos-ui-confirm-head {
+                        display: flex;
+                        gap: 0.75rem;
+                        align-items: flex-start;
+                        padding: 1rem 1.25rem;
+                        border-bottom: 1px solid #f1f5f9;
+                    }
+                    .pos-ui-confirm-icon {
+                        display: flex;
+                        width: 2.5rem;
+                        height: 2.5rem;
+                        flex: 0 0 auto;
+                        align-items: center;
+                        justify-content: center;
+                        margin-top: 0.125rem;
+                        border-radius: 1rem;
+                        background: rgba(249, 115, 22, 0.11);
+                        color: #f97316;
+                    }
+                    .pos-ui-confirm-kicker {
+                        margin: 0;
+                        color: #94a3b8;
+                        font-size: 10px;
+                        font-weight: 800;
+                        letter-spacing: 0.16em;
+                        text-transform: uppercase;
+                    }
+                    .pos-ui-confirm-title {
+                        margin: 0.25rem 0 0;
+                        color: #020617;
+                        font-size: 1rem;
+                        font-weight: 800;
+                        line-height: 1.25;
+                    }
+                    .pos-ui-confirm-body { padding: 1rem 1.25rem; }
+                    .pos-ui-confirm-message {
+                        border-radius: 1rem;
+                        background: #f8fafc;
+                        padding: 0.75rem 1rem;
+                        color: #334155;
+                        font-size: 0.875rem;
+                        line-height: 1.65;
+                    }
+                    .pos-ui-confirm-row {
+                        display: flex;
+                        justify-content: space-between;
+                        gap: 0.75rem;
+                        padding: 0.25rem 0;
+                    }
+                    .pos-ui-confirm-label {
+                        color: #94a3b8;
+                        font-size: 0.75rem;
+                        font-weight: 800;
+                        letter-spacing: 0.08em;
+                        text-transform: uppercase;
+                    }
+                    .pos-ui-confirm-value {
+                        max-width: 65%;
+                        color: #0f172a;
+                        font-weight: 700;
+                        text-align: right;
+                    }
+                    .pos-ui-confirm-actions {
+                        display: flex;
+                        gap: 0.75rem;
+                        padding: 1rem 1.25rem;
+                        border-top: 1px solid #f1f5f9;
+                    }
+                    .pos-ui-confirm-button {
+                        min-height: 48px;
+                        border-radius: 1rem;
+                        padding: 0.75rem 1rem;
+                        font-size: 0.875rem;
+                        font-weight: 800;
+                    }
+                    .pos-ui-confirm-cancel {
+                        flex: 1;
+                        border: 1px solid #e2e8f0;
+                        background: #fff;
+                        color: #475569;
+                    }
+                    .pos-ui-confirm-ok {
+                        flex: 1.25;
+                        border: 1px solid #f97316;
+                        background: #f97316;
+                        color: #fff;
+                        box-shadow: 0 12px 24px rgba(249, 115, 22, 0.25);
+                    }
+                    .dark .pos-ui-confirm-card {
+                        border-color: #1e293b;
+                        background: #0f172a;
+                    }
+                    .dark .pos-ui-confirm-head,
+                    .dark .pos-ui-confirm-actions { border-color: #1e293b; }
+                    .dark .pos-ui-confirm-title,
+                    .dark .pos-ui-confirm-value { color: #f8fafc; }
+                    .dark .pos-ui-confirm-message {
+                        background: rgba(30, 41, 59, 0.7);
+                        color: #e2e8f0;
+                    }
+                    .dark .pos-ui-confirm-cancel {
+                        border-color: #334155;
+                        background: #0f172a;
+                        color: #cbd5e1;
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+
+            dialog = document.createElement('div');
+            dialog.id = 'pos-ui-confirm-dialog';
+            dialog.className = 'pos-ui-confirm-dialog';
+            dialog.innerHTML = `
+                <div class="pos-ui-confirm-card">
+                    <div class="pos-ui-confirm-head">
+                        <div class="pos-ui-confirm-icon">
+                            <span class="material-symbols-outlined text-[22px]" data-confirm-icon>verified</span>
+                        </div>
+                        <div>
+                            <p class="pos-ui-confirm-kicker">Konfirmasi Aksi</p>
+                            <h3 class="pos-ui-confirm-title" data-confirm-title>Konfirmasi</h3>
+                        </div>
+                    </div>
+                    <div class="pos-ui-confirm-body">
+                        <div class="pos-ui-confirm-message" data-confirm-message></div>
+                    </div>
+                    <div class="pos-ui-confirm-actions">
+                        <button class="pos-ui-confirm-button pos-ui-confirm-cancel" type="button" data-confirm-cancel>Batal</button>
+                        <button class="pos-ui-confirm-button pos-ui-confirm-ok" type="button" data-confirm-ok>Oke</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(dialog);
+
+            return dialog;
+        };
+
+        const escapeHtml = (value) => String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+
+        const renderConfirmMessage = (message) => {
+            const lines = String(message || 'Lanjutkan aksi ini?')
+                .split('\n')
+                .map((line) => line.trim())
+                .filter(Boolean);
+
+            if (!lines.length) {
+                return '<p>Lanjutkan aksi ini?</p>';
+            }
+
+            return lines.map((line) => {
+                const separatorIndex = line.indexOf(':');
+
+                if (separatorIndex > 0 && separatorIndex < 22) {
+                    const label = line.slice(0, separatorIndex).trim();
+                    const value = line.slice(separatorIndex + 1).trim();
+
+                    return `
+                        <div class="pos-ui-confirm-row">
+                            <span class="pos-ui-confirm-label">${escapeHtml(label)}</span>
+                            <span class="pos-ui-confirm-value">${escapeHtml(value || '-')}</span>
+                        </div>
+                    `;
+                }
+
+                return `<p>${escapeHtml(line)}</p>`;
+            }).join('');
+        };
+
+        const confirmRiskActionAsync = ({
+            title = 'Konfirmasi',
+            message = 'Lanjutkan aksi ini?',
+            confirmText = 'Oke',
+            cancelText = 'Batal',
+            icon = 'verified',
+        } = {}) => new Promise((resolve) => {
+            const dialog = ensureConfirmDialog();
+            const titleEl = dialog.querySelector('[data-confirm-title]');
+            const messageEl = dialog.querySelector('[data-confirm-message]');
+            const confirmButton = dialog.querySelector('[data-confirm-ok]');
+            const cancelButton = dialog.querySelector('[data-confirm-cancel]');
+            const iconEl = dialog.querySelector('[data-confirm-icon]');
+            let resolved = false;
+
+            const close = (value) => {
+                if (resolved) {
+                    return;
+                }
+
+                resolved = true;
+                dialog.classList.remove('is-open');
+                document.removeEventListener('keydown', handleKeydown);
+                resolve(value);
+            };
+
+            const handleKeydown = (event) => {
+                if (event.key === 'Escape') {
+                    close(false);
+                }
+            };
+
+            titleEl.textContent = title;
+            messageEl.innerHTML = renderConfirmMessage(message);
+            confirmButton.textContent = confirmText;
+            cancelButton.textContent = cancelText;
+            iconEl.textContent = icon;
+
+            confirmButton.onclick = () => close(true);
+            cancelButton.onclick = () => close(false);
+            dialog.onclick = (event) => {
+                if (event.target === dialog) {
+                    close(false);
+                }
+            };
+
+            document.addEventListener('keydown', handleKeydown);
+            dialog.classList.add('is-open');
+            confirmButton.focus({ preventScroll: true });
+        });
+
         const fetchWithTimeout = async (url, init = {}, timeoutMs = 15000) => {
             const controller = new AbortController();
             const timer = setTimeout(() => controller.abort(), Math.max(1000, timeoutMs));
@@ -600,6 +856,7 @@
             isProductionBatchDisplayCandidateProduct,
             mapApiError,
             confirmRiskAction,
+            confirmRiskActionAsync,
             fetchWithTimeout,
             prefetchDocument,
             runWithSubmitGuard,

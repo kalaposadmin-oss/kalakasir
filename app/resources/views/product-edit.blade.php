@@ -549,7 +549,7 @@
                     return selectedUnit;
                 };
 
-                const confirmStockUnitBeforeSave = (productType, unit) => {
+                const confirmStockUnitBeforeSave = async (productType, unit) => {
                     if (productType === 'service') {
                         return true;
                     }
@@ -578,10 +578,12 @@
                         'Lanjut simpan dengan satuan ini?',
                     ].join('\n\n');
 
-                    if (window.PosUi?.confirmRiskAction) {
-                        return window.PosUi.confirmRiskAction({
+                    if (window.PosUi?.confirmRiskActionAsync) {
+                        return window.PosUi.confirmRiskActionAsync({
                             title: 'Pastikan Satuan Dasar',
                             message,
+                            confirmText: 'Lanjut Simpan',
+                            icon: 'straighten',
                         });
                     }
 
@@ -1595,7 +1597,7 @@
                         payload.track_stock = true;
                     }
 
-                    if (!confirmStockUnitBeforeSave(productType, payload.unit)) {
+                    if (!await confirmStockUnitBeforeSave(productType, payload.unit)) {
                         return;
                     }
 

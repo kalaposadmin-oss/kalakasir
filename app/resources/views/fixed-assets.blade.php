@@ -539,7 +539,12 @@
                 }
 
                 if (button.dataset.action === 'depreciate') {
-                    if (!window.confirm(`Hitung depresiasi bulan ini untuk ${asset.name}?`)) return;
+                    if (!await window.PosUi.confirmRiskActionAsync({
+                        title: 'Hitung Depresiasi',
+                        message: `Aset: ${asset.name}\nPeriode: Bulan ini\nLanjut hitung penyusutan aset ini?`,
+                        confirmText: 'Hitung',
+                        icon: 'calculate',
+                    })) return;
                     await apiJson(`/api/v1/fixed-assets/${asset.id}/depreciation`, {
                         method: 'POST',
                         body: JSON.stringify({ period_date: new Date().toISOString().slice(0, 10) }),

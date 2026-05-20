@@ -894,7 +894,12 @@
             };
 
             const cancelDraft = async () => {
-                if (!state.current || !window.confirm('Batalkan draft stock opname ini?')) {
+                if (!state.current || !await window.PosUi.confirmRiskActionAsync({
+                    title: 'Batalkan Draft',
+                    message: 'Draft stock opname ini akan dibatalkan. Lanjutkan?',
+                    confirmText: 'Batalkan',
+                    icon: 'cancel',
+                })) {
                     return;
                 }
 

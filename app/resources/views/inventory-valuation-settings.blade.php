@@ -406,9 +406,11 @@
                         showToast('Metode sudah sama, tidak ada perubahan.');
                         return;
                     }
-                    if (!window.PosUi.confirmRiskAction({
+                    if (!await window.PosUi.confirmRiskActionAsync({
                         title: 'Konfirmasi Ganti Metode',
                         message: `Metode akan diubah ke ${methodLabel(method)} dan rebuild historis akan dijalankan. Lanjutkan?`,
+                        confirmText: 'Lanjutkan',
+                        icon: 'sync',
                     })) {
                         return;
                     }
@@ -445,9 +447,11 @@
 
                 const triggerRebuild = async () => {
                     clearError();
-                    if (!window.PosUi.confirmRiskAction({
+                    if (!await window.PosUi.confirmRiskActionAsync({
                         title: 'Konfirmasi Rebuild',
                         message: 'Write API dapat terkunci sementara selama rebuild berjalan. Lanjutkan?',
+                        confirmText: 'Rebuild',
+                        icon: 'sync',
                     })) {
                         return;
                     }

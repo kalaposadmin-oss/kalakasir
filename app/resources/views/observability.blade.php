@@ -366,9 +366,11 @@
                 };
 
                 const resolveAnomaly = async (id) => {
-                    const ok = window.PosUi.confirmRiskAction({
+                    const ok = await window.PosUi.confirmRiskActionAsync({
                         title: 'Resolve Anomaly',
                         message: 'Tandai anomaly ini sebagai resolved?',
+                        confirmText: 'Resolve',
+                        icon: 'task_alt',
                     });
                     if (!ok) return;
 

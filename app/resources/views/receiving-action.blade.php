@@ -520,9 +520,11 @@
                 const orderedTotal = items.reduce((sum, item) => sum + Number(item.qty || 0), 0);
                 const receivedTotal = items.reduce((sum, item) => sum + Number(item.received || 0), 0);
 
-                const allowed = window.PosUi.confirmRiskAction({
+                const allowed = await window.PosUi.confirmRiskActionAsync({
                     title: 'Konfirmasi Penerimaan Barang',
                     message: `PO: ${el.subtitle.textContent}\nItem: ${totalItems}\nQty Order: ${formatQuantity(orderedTotal)}\nQty Diterima: ${formatQuantity(receivedTotal)}`,
+                    confirmText: 'Simpan Terima',
+                    icon: 'inventory',
                 });
                 if (!allowed) {
                     return;

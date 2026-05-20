@@ -427,9 +427,11 @@
                     return;
                 }
 
-                const allowed = window.PosUi.confirmRiskAction({
+                const allowed = await window.PosUi.confirmRiskActionAsync({
                     title: 'Konfirmasi Pembayaran Piutang',
                     message: `Catat pembayaran ${formatCurrency(amount)} untuk ${state.selected.customer_name || 'customer'}?`,
+                    confirmText: 'Catat Bayar',
+                    icon: 'payments',
                 });
                 if (!allowed) {
                     return;

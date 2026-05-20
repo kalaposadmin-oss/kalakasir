@@ -388,7 +388,12 @@
                         return;
                     }
 
-                    const confirmed = window.confirm(`Remediasi ${preview.matched_resolvable} row resolvable untuk ${label}? Kandidat skip: ${preview.skipped_candidates || 0}.`);
+                    const confirmed = await window.PosUi.confirmRiskActionAsync({
+                        title: 'Remediasi Audit Refund',
+                        message: `Label: ${label}\nRow resolvable: ${preview.matched_resolvable}\nKandidat skip: ${preview.skipped_candidates || 0}`,
+                        confirmText: 'Remediasi',
+                        icon: 'build',
+                    });
                     if (!confirmed) {
                         return;
                     }

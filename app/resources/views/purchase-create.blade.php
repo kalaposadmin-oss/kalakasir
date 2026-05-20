@@ -567,13 +567,14 @@
                         return;
                     }
 
-                    const allowed = window.PosUi.confirmRiskAction({
+                    const allowed = await window.PosUi.confirmRiskActionAsync({
                         title: purchaseMode === purchaseModeSimple
                             ? 'Beli & Terima Sekarang'
                             : status === purchaseStatusDraft
                                 ? 'Simpan sebagai Draft'
                                 : 'Konfirmasi dan Buat PO',
                         message: `Supplier: ${supplierName}\nItem: ${items.length}\nTotal Qty: ${totalQty}\nEstimasi Nilai: ${formatCurrency(totalValue)}`,
+                        icon: purchaseMode === purchaseModeSimple ? 'inventory_2' : 'shopping_cart_checkout',
                     });
                     if (!allowed) {
                         return;

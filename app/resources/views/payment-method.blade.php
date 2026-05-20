@@ -1600,11 +1600,13 @@
                     }
 
                     if (!skipConfirmation) {
-                        const allowed = window.PosUi.confirmRiskAction({
+                        const allowed = await window.PosUi.confirmRiskActionAsync({
                             title: isReceivable ? 'Konfirmasi Piutang' : 'Konfirmasi Pembayaran',
                             message: isReceivable
                                 ? 'Sisa tagihan akan disimpan sebagai piutang pelanggan.'
                                 : 'Pastikan nominal bayar dan kembalian sudah benar.',
+                            confirmText: 'Proses',
+                            icon: isReceivable ? 'receipt_long' : 'payments',
                         });
                         if (!allowed) {
                             return;

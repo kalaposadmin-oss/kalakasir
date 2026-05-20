@@ -865,7 +865,7 @@
                     return selectedUnit;
                 };
 
-                const confirmStockUnitBeforeSave = (productType, unit) => {
+                const confirmStockUnitBeforeSave = async (productType, unit) => {
                     if (productType === 'service') {
                         return true;
                     }
@@ -894,10 +894,12 @@
                         'Lanjut simpan dengan satuan ini?',
                     ].join('\n\n');
 
-                    if (window.PosUi?.confirmRiskAction) {
-                        return window.PosUi.confirmRiskAction({
+                    if (window.PosUi?.confirmRiskActionAsync) {
+                        return window.PosUi.confirmRiskActionAsync({
                             title: 'Pastikan Satuan Dasar',
                             message,
+                            confirmText: 'Lanjut Simpan',
+                            icon: 'straighten',
                         });
                     }
 
@@ -1804,7 +1806,7 @@
                         payload.production_mode = 'none';
                     }
 
-                    if (!confirmStockUnitBeforeSave(productType, payload.unit)) {
+                    if (!await confirmStockUnitBeforeSave(productType, payload.unit)) {
                         return;
                     }
 
@@ -1828,7 +1830,13 @@
                             throw new Error(validationMessage || mapped?.message || 'Gagal menyimpan produk.');
                         }
 
-                        const addAnother = window.confirm('Produk berhasil disimpan.\n\nKlik OK untuk tambah produk lagi.\nKlik Cancel untuk kembali ke daftar produk.');
+                        const addAnother = await window.PosUi.confirmRiskActionAsync({
+                            title: 'Produk Berhasil Disimpan',
+                            message: 'Tambah produk lagi atau kembali ke daftar produk?',
+                            confirmText: 'Tambah Lagi',
+                            cancelText: 'Ke Daftar Produk',
+                            icon: 'check_circle',
+                        });
                         if (addAnother) {
                             showSuccess('Produk berhasil disimpan.');
                             resetProductForm();

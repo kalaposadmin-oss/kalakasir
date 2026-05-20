@@ -532,9 +532,11 @@
                         return;
                     }
 
-                    const allowed = window.PosUi.confirmRiskAction({
+                    const allowed = await window.PosUi.confirmRiskActionAsync({
                         title: 'Tidak Ada Barang Susulan',
                         message: 'Gunakan ini hanya kalau supplier tidak akan mengirim sisa barang. PO akan diselesaikan tanpa menambah stok lagi.',
+                        confirmText: 'Selesaikan PO',
+                        icon: 'event_busy',
                     });
                     if (!allowed) {
                         return;
@@ -634,14 +636,13 @@
                             payload.cash_account_id = el.paymentCashAccount?.value || null;
                         }
 
-                        const confirmRiskAction = window.PosUi?.confirmRiskAction ?? (({ title = 'Konfirmasi', message = 'Lanjutkan aksi ini?' } = {}) => {
-                            return window.confirm(`${title}\n\n${message}`);
-                        });
                         const runWithSubmitGuard = window.PosUi?.runWithSubmitGuard ?? (async (_button, task) => task());
 
-                        const allowed = confirmRiskAction({
+                        const allowed = await window.PosUi.confirmRiskActionAsync({
                             title: 'Simpan Perubahan Pembayaran',
                             message: 'Perubahan ini akan memengaruhi laporan tempo dan rekap kas. Lanjutkan?',
+                            confirmText: 'Simpan',
+                            icon: 'payments',
                         });
                         if (!allowed) {
                             return;
