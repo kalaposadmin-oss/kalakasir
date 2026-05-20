@@ -46,6 +46,42 @@ class PurchaseWorkflowStateMachineTest extends TestCase
         ]);
     }
 
+    public function test_purchase_tax_is_optional_and_editable(): void
+    {
+        [$tenant, $user] = $this->bootApiActor('admin', 'purchase-tax@example.test');
+        $fixture = $this->seedCheckoutFixture($tenant->id, $user->id);
+        $supplierId = $this->insertSupplier($tenant->id, 'Supplier Tax');
+
+        $withoutTaxId = $this->createPurchase($tenant->id, $supplierId, $fixture['location_id'], $fixture['product_id'], PurchaseStatus::DRAFT, 2, 10000);
+        $withoutTax = DB::table('purchases')->where('id', $withoutTaxId)->first();
+
+        $this->assertSame(20000.0, (float) $withoutTax->subtotal);
+        $this->assertSame(0.0, (float) $withoutTax->tax);
+        $this->assertSame(20000.0, (float) $withoutTax->total);
+
+        $response = $this->withHeaders($this->tenantHeaders($tenant->id))
+            ->patchJson('/api/v1/purchases/'.$withoutTaxId.'/tax', [
+                'tax_enabled' => true,
+                'tax_rate' => 11,
+            ]);
+
+        $response->assertOk()
+            ->assertJsonPath('purchase.subtotal', 20000)
+            ->assertJsonPath('purchase.tax_rate', 11)
+            ->assertJsonPath('purchase.tax', 2200)
+            ->assertJsonPath('purchase.total', 22200);
+
+        $response = $this->withHeaders($this->tenantHeaders($tenant->id))
+            ->patchJson('/api/v1/purchases/'.$withoutTaxId.'/tax', [
+                'tax_enabled' => false,
+            ]);
+
+        $response->assertOk()
+            ->assertJsonPath('purchase.tax_rate', 0)
+            ->assertJsonPath('purchase.tax', 0)
+            ->assertJsonPath('purchase.total', 20000);
+    }
+
     public function test_approve_purchase_from_submitted_status_succeeds(): void
     {
         [$tenant, $user] = $this->bootApiActor('admin', 'purchase-approve@example.test');

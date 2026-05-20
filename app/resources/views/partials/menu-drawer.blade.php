@@ -135,7 +135,7 @@
         [
             'title' => 'Pembelian',
             'items' => array_values(array_filter([
-                ($canAccessPurchasing && $canAnyFeature(['history.purchases', 'purchase.order', 'purchase.receive', 'purchase.return']) ? ['href' => '/backoffice/purchases/detail', 'match' => '/backoffice/purchases', 'icon' => 'receipt_long', 'label' => 'Daftar Pembelian', 'description' => 'PO dan histori'] : null),
+                ($canAccessPurchasing && $canAnyFeature(['history.purchases', 'purchase.order', 'purchase.receive', 'purchase.return']) ? ['href' => '/backoffice/purchases', 'match' => '/backoffice/purchases', 'icon' => 'receipt_long', 'label' => 'Daftar Pembelian', 'description' => 'PO dan histori'] : null),
                 ($canAccessPurchasing && $canFeature('purchase.order') ? ['href' => '/backoffice/purchases/new', 'match' => '/backoffice/purchases/new', 'match_children' => false, 'icon' => 'add_shopping_cart', 'label' => 'Buat PO', 'description' => 'Pembelian baru'] : null),
                 ($canAccessPurchasing && $canFeature('purchase.receive') ? ['href' => '/backoffice/receiving', 'match' => '/backoffice/receiving', 'icon' => 'inventory', 'label' => 'Penerimaan', 'description' => 'Barang masuk'] : null),
                 ($canManageProducts && $canFeature('purchase.return') ? ['href' => '/backoffice/purchases/returns', 'match' => '/backoffice/purchases/returns', 'match_children' => false, 'icon' => 'assignment_return', 'label' => 'Retur Pembelian', 'description' => 'Retur supplier'] : null),

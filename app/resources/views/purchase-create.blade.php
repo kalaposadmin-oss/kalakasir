@@ -422,7 +422,7 @@
                             lineTotalEl.textContent = formatCurrency(lineTotal);
                         }
                     });
-                    const taxEnabled = el.taxEnabled?.checked ?? true;
+                    const taxEnabled = el.taxEnabled?.checked ?? false;
                     const taxRate = taxEnabled ? Math.max(0, parseFloat(el.taxRate?.value || '0')) : 0;
                     const tax = subtotal * (taxRate / 100);
                     const total = subtotal + tax;
@@ -551,7 +551,11 @@
                     }
 
                     const totalQty = items.reduce((sum, item) => sum + Number(item.qty || 0), 0);
-                    const totalValue = items.reduce((sum, item) => sum + (Number(item.qty || 0) * Number(item.price || 0)), 0);
+                    const subtotalValue = items.reduce((sum, item) => sum + (Number(item.qty || 0) * Number(item.price || 0)), 0);
+                    const taxEnabled = el.taxEnabled?.checked ?? false;
+                    const taxRate = taxEnabled ? Math.max(0, parseFloat(el.taxRate?.value || '0')) : 0;
+                    const taxValue = taxEnabled ? subtotalValue * (taxRate / 100) : 0;
+                    const totalValue = subtotalValue + taxValue;
                     const supplierName = el.supplier.options[el.supplier.selectedIndex]?.textContent || '-';
                     const paymentMethod = el.paymentMethod.value || 'tempo';
                     const dueDate = paymentMethod === 'tempo' ? (el.dueDate.value || null) : null;
@@ -573,7 +577,7 @@
                             : status === purchaseStatusDraft
                                 ? 'Simpan sebagai Draft'
                                 : 'Konfirmasi dan Buat PO',
-                        message: `Supplier: ${supplierName}\nItem: ${items.length}\nTotal Qty: ${totalQty}\nEstimasi Nilai: ${formatCurrency(totalValue)}`,
+                        message: `Supplier: ${supplierName}\nItem: ${items.length}\nTotal Qty: ${totalQty}\nSubtotal: ${formatCurrency(subtotalValue)}\nPajak: ${formatCurrency(taxValue)}\nEstimasi Nilai: ${formatCurrency(totalValue)}`,
                         icon: purchaseMode === purchaseModeSimple ? 'inventory_2' : 'shopping_cart_checkout',
                     });
                     if (!allowed) {
@@ -599,6 +603,9 @@
                                     payment_method: paymentMethod,
                                     due_date: dueDate,
                                     cash_account_id: cashAccountId,
+                                    tax_enabled: taxEnabled,
+                                    tax_rate: taxRate,
+                                    tax: taxValue,
                                     notes: el.notes.value.trim() || null,
                                     items,
                                 }),

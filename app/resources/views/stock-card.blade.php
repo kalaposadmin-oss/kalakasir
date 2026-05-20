@@ -14,7 +14,7 @@
     $stockCardFrom = trim((string) request()->query('from', ''));
     $stockCardCurrentPath = $currentPath ?? ($resolvedProductId !== ''
         ? $stockCardPortalPrefix.'/inventory/products/'.$resolvedProductId.'/stock-card'
-        : $stockCardPortalPrefix.'/inventory/stock-card');
+        : ($stockCardPortalPrefix === '/backoffice' ? '/backoffice/reports/inventory/stock-card' : '/pos/inventory/stock-card'));
     $stockCardBackUrl = $backUrl ?? ($stockCardPortalPrefix === '/pos' ? '/pos/inventory' : '/backoffice/reports/inventory');
     if ($stockCardFrom !== '' && ! isset($backUrl)) {
         if (str_starts_with($stockCardFrom, $stockCardPortalPrefix.'/')) {
@@ -457,10 +457,9 @@
                         el.locationFilter.appendChild(option);
                     });
 
-                    const hasSelectedLocation = locations.some((location) => location.id === state.locationId);
-                    if (!hasSelectedLocation) {
-                        const defaultLocation = locations.find((location) => location.is_default);
-                        state.locationId = defaultLocation?.id || locations[0]?.id || '';
+                    const hasSelectedLocation = state.locationId !== '' && locations.some((location) => location.id === state.locationId);
+                    if (state.locationId !== '' && !hasSelectedLocation) {
+                        state.locationId = '';
                     }
 
                     el.locationFilter.value = state.locationId;
@@ -864,16 +863,24 @@
 
                 el.fifoShowEmpty?.addEventListener('change', (event) => {
                     state.showEmptyLayers = event.target?.checked ?? false;
-                    reload().catch((error) => {
-                        el.layerList.innerHTML = `<div class="text-xs text-red-500">${error.message || 'Gagal memuat layer FIFO.'}</div>`;
-                    });
+                    reload()
+                        .then((data) => {
+                            renderLayers(Array.isArray(data.layers) ? data.layers : []);
+                        })
+                        .catch((error) => {
+                            el.layerList.innerHTML = `<div class="text-xs text-red-500">${error.message || 'Gagal memuat layer FIFO.'}</div>`;
+                        });
                 });
 
                 el.fifoAllocFilter?.addEventListener('change', (event) => {
                     state.allocationType = event.target?.value || 'all';
-                    reload().catch((error) => {
-                        el.allocList.innerHTML = `<div class="text-xs text-red-500">${error.message || 'Gagal memuat alokasi.'}</div>`;
-                    });
+                    reload()
+                        .then((data) => {
+                            renderAllocations(Array.isArray(data.allocations) ? data.allocations : []);
+                        })
+                        .catch((error) => {
+                            el.allocList.innerHTML = `<div class="text-xs text-red-500">${error.message || 'Gagal memuat alokasi.'}</div>`;
+                        });
                 });
 
                 el.ledgerType?.addEventListener('change', (event) => {
@@ -934,15 +941,11 @@
                         const bootstrapData = window.PosUi.unwrapApiPayload(bootstrapPayload) || bootstrapPayload;
                         const locations = Array.isArray(bootstrapData.locations) ? bootstrapData.locations : [];
                         buildLocationOptions(locations);
-                        if (!state.locationId) {
-                            const defaultLocation = locations.find((location) => location.is_default);
-                            state.locationId = defaultLocation?.id || locations[0]?.id || '';
-                            if (el.locationFilter) {
-                                el.locationFilter.value = state.locationId;
-                            }
-                            if (el.locationLabel) {
-                                el.locationLabel.textContent = el.locationFilter?.options[el.locationFilter.selectedIndex]?.textContent || 'Semua Lokasi';
-                            }
+                        if (el.locationFilter) {
+                            el.locationFilter.value = state.locationId;
+                        }
+                        if (el.locationLabel) {
+                            el.locationLabel.textContent = el.locationFilter?.options[el.locationFilter.selectedIndex]?.textContent || 'Semua Lokasi';
                         }
 
                         if (!productId) {

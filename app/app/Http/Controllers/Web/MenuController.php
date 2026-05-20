@@ -78,7 +78,7 @@ class MenuController extends Controller
             'purchases' => [
                 'title' => 'Pembelian ke Supplier',
                 'items' => [
-                    ['label' => 'Daftar Pembelian', 'icon' => 'receipt_long', 'href' => $posOrBackoffice('/pos/purchases', '/backoffice/purchases/detail'), 'feature' => 'history.purchases'],
+                    ['label' => 'Daftar Pembelian', 'icon' => 'receipt_long', 'href' => $posOrBackoffice('/pos/purchases', '/backoffice/purchases'), 'feature' => 'history.purchases'],
                     ['label' => 'Buat Pembelian Baru', 'icon' => 'add_circle', 'href' => $prefix.'/purchases/new', 'feature' => 'purchase.order'],
                     ['label' => 'Penerimaan Barang', 'icon' => 'inventory_2', 'href' => $prefix.'/receiving', 'feature' => 'purchase.receive'],
                     ['label' => 'Retur Pembelian', 'icon' => 'assignment_return', 'href' => $prefix.'/purchases/returns', 'feature' => 'purchase.return'],
@@ -107,7 +107,7 @@ class MenuController extends Controller
                     ['label' => 'Laporan Arus Kas', 'icon' => 'savings', 'href' => $posOrBackoffice('/pos/finance/summary', '/backoffice/finance/summary'), 'feature' => 'finance.summary_basic'],
                     ['label' => 'Laporan Penjualan', 'icon' => 'list_alt', 'href' => $posOrBackoffice('/pos/history', '/backoffice/reports/sales')],
                     ['label' => 'Laporan Piutang', 'icon' => 'request_quote', 'href' => $posOrBackoffice('/pos/receivables', '/backoffice/reports/receivables')],
-                    ['label' => 'Laporan Pembelian', 'icon' => 'shopping_cart', 'href' => $posOrBackoffice('/pos/purchases', '/backoffice/purchases/detail'), 'feature' => 'history.purchases'],
+                    ['label' => 'Laporan Pembelian', 'icon' => 'shopping_cart', 'href' => $posOrBackoffice('/pos/purchases', '/backoffice/purchases'), 'feature' => 'history.purchases'],
                     ['label' => 'Laporan Persediaan', 'icon' => 'inventory_2', 'href' => $posOrBackoffice('/pos/inventory', '/backoffice/reports/inventory'), 'feature' => 'reports.inventory_view'],
                     ['label' => 'Kartu Stok', 'icon' => 'receipt_long', 'href' => $posOrBackoffice('/pos/inventory/stock-card', '/backoffice/reports/inventory/stock-card'), 'feature' => 'reports.inventory_stock_card'],
                     ['label' => 'Laporan Pembayaran', 'icon' => 'payments', 'href' => $posOrBackoffice('/pos/finance/summary', '/backoffice/finance/summary'), 'feature' => 'finance.summary_basic'],

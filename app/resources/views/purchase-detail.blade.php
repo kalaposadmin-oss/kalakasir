@@ -100,13 +100,16 @@
                 <span class="text-sm font-medium" id="subtotal">Rp 0</span>
             </div>
             <div class="flex justify-between items-center mb-3">
-                <span class="text-xs text-slate-500">Pajak (PPN 11%)</span>
+                <span class="text-xs text-slate-500">Pajak</span>
                 <span class="text-sm font-medium text-red-500" id="tax">Rp 0</span>
             </div>
             <div class="flex justify-between items-center pt-3 border-t border-primary/20">
                 <span class="font-bold text-slate-900 dark:text-white">Total Akhir</span>
                 <span class="text-lg font-bold text-primary" id="total">Rp 0</span>
             </div>
+            @if ($canManagePurchaseDetail)
+                <button id="edit-tax" class="mt-3 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300" type="button">Atur Pajak</button>
+            @endif
         </div>
     </section>
     <section class="mt-3 px-4">
@@ -194,6 +197,49 @@
                 </form>
             </div>
         </div>
+
+        <div id="tax-modal" class="fixed inset-0 z-50 hidden items-end justify-center bg-slate-950/40 px-4 py-6 sm:items-center">
+            <div class="w-full max-w-[430px] max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain rounded-3xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+                <div class="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+                    <div>
+                        <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Pajak Pembelian</p>
+                        <h4 class="text-base font-bold text-slate-900 dark:text-slate-100">Atur Pajak PO</h4>
+                    </div>
+                    <button id="close-tax-modal" class="size-9 rounded-full bg-slate-100 text-slate-500 dark:bg-slate-800" type="button">
+                        <span class="material-symbols-outlined text-lg">close</span>
+                    </button>
+                </div>
+                <form id="tax-form" class="space-y-4 px-5 pt-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)]">
+                    <label class="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800">
+                        <span>
+                            <span class="block text-sm font-bold text-slate-900 dark:text-slate-100">Kenakan pajak</span>
+                            <span class="block text-xs text-slate-500">Matikan untuk pembelian non-PPN.</span>
+                        </span>
+                        <input id="tax-enabled-edit" class="size-5 rounded border-slate-300 text-primary focus:ring-primary/20" type="checkbox" />
+                    </label>
+                    <div id="tax-rate-edit-wrapper" class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-500">Tarif Pajak (%)</label>
+                            <input id="tax-rate-edit" class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold dark:border-slate-700 dark:bg-slate-800" type="number" min="0" max="100" step="0.1" />
+                        </div>
+                        <div>
+                            <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-500">Nominal Pajak</label>
+                            <input id="tax-amount-edit" class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold dark:border-slate-700 dark:bg-slate-800" type="number" min="0" step="1" />
+                        </div>
+                    </div>
+                    <div class="rounded-2xl bg-slate-50 px-4 py-3 text-sm dark:bg-slate-800/70">
+                        <div class="flex justify-between text-slate-500"><span>Subtotal</span><span id="tax-preview-subtotal">Rp 0</span></div>
+                        <div class="mt-1 flex justify-between text-slate-500"><span>Pajak</span><span id="tax-preview-tax">Rp 0</span></div>
+                        <div class="mt-2 flex justify-between border-t border-slate-200 pt-2 font-bold text-slate-900 dark:border-slate-700 dark:text-slate-100"><span>Total Baru</span><span id="tax-preview-total">Rp 0</span></div>
+                    </div>
+                    <p id="tax-feedback" class="hidden rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600"></p>
+                    <div class="flex gap-3 pt-1">
+                        <button id="cancel-tax-edit" class="flex-1 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-600 dark:border-slate-700 dark:text-slate-300" type="button">Batal</button>
+                        <button id="save-tax" class="flex-[2] rounded-2xl bg-primary px-4 py-3 text-sm font-bold text-white shadow-lg shadow-primary/20" type="button">Simpan Pajak</button>
+                    </div>
+                </form>
+            </div>
+        </div>
     @endif
 
     @include('partials.ui-helpers')
@@ -263,6 +309,20 @@
                     paymentCashHint: document.getElementById('payment-cash-hint'),
                     paymentFeedback: document.getElementById('payment-feedback'),
                     savePayment: document.getElementById('save-payment'),
+                    editTax: document.getElementById('edit-tax'),
+                    taxModal: document.getElementById('tax-modal'),
+                    closeTaxModal: document.getElementById('close-tax-modal'),
+                    cancelTaxEdit: document.getElementById('cancel-tax-edit'),
+                    taxForm: document.getElementById('tax-form'),
+                    taxEnabledEdit: document.getElementById('tax-enabled-edit'),
+                    taxRateEditWrapper: document.getElementById('tax-rate-edit-wrapper'),
+                    taxRateEdit: document.getElementById('tax-rate-edit'),
+                    taxAmountEdit: document.getElementById('tax-amount-edit'),
+                    taxPreviewSubtotal: document.getElementById('tax-preview-subtotal'),
+                    taxPreviewTax: document.getElementById('tax-preview-tax'),
+                    taxPreviewTotal: document.getElementById('tax-preview-total'),
+                    taxFeedback: document.getElementById('tax-feedback'),
+                    saveTax: document.getElementById('save-tax'),
                     receiptHistory: document.getElementById('receipt-history'),
                 };
 
@@ -271,6 +331,10 @@
                 let currentPurchasePaymentMethod = 'tempo';
                 let currentPurchaseDueDate = null;
                 let currentPurchaseCashAccountId = null;
+                let currentPurchaseSubtotal = 0;
+                let currentPurchaseTaxRate = 0;
+                let currentPurchaseTax = 0;
+                let currentPurchaseTotal = 0;
                 let currentPurchaseFlow = {
                     can_approve: false,
                     can_receive: false,
@@ -326,6 +390,62 @@
                             ? `Jatuh tempo ${formatDate(currentPurchaseDueDate)}`
                             : 'Tanggal tempo belum diisi';
                     }
+                };
+
+                const renderTotals = () => {
+                    if (el.subtotal) {
+                        el.subtotal.textContent = formatCurrency(currentPurchaseSubtotal);
+                    }
+                    if (el.tax) {
+                        const label = currentPurchaseTaxRate > 0
+                            ? `${formatCurrency(currentPurchaseTax)} (${formatQuantity(currentPurchaseTaxRate)}%)`
+                            : formatCurrency(currentPurchaseTax);
+                        el.tax.textContent = label;
+                    }
+                    if (el.total) {
+                        el.total.textContent = formatCurrency(currentPurchaseTotal);
+                    }
+                };
+
+                const syncTaxPreview = () => {
+                    if (!el.taxEnabledEdit) {
+                        return;
+                    }
+
+                    const enabled = el.taxEnabledEdit.checked;
+                    el.taxRateEditWrapper?.classList.toggle('hidden', !enabled);
+                    const rate = enabled ? Math.max(0, Number(el.taxRateEdit?.value || 0)) : 0;
+                    if (enabled && el.taxAmountEdit && document.activeElement !== el.taxAmountEdit) {
+                        el.taxAmountEdit.value = String(Math.round(currentPurchaseSubtotal * (rate / 100)));
+                    }
+                    const amount = enabled ? Math.max(0, Number(el.taxAmountEdit?.value || 0)) : 0;
+                    el.taxPreviewSubtotal.textContent = formatCurrency(currentPurchaseSubtotal);
+                    el.taxPreviewTax.textContent = formatCurrency(amount);
+                    el.taxPreviewTotal.textContent = formatCurrency(currentPurchaseSubtotal + amount);
+                };
+
+                const openTaxModal = () => {
+                    if (!el.taxModal) {
+                        return;
+                    }
+
+                    const enabled = currentPurchaseTax > 0 || currentPurchaseTaxRate > 0;
+                    el.taxEnabledEdit.checked = enabled;
+                    el.taxRateEdit.value = String(currentPurchaseTaxRate || 11);
+                    el.taxAmountEdit.value = String(Math.round(currentPurchaseTax || (enabled ? currentPurchaseSubtotal * ((currentPurchaseTaxRate || 11) / 100) : 0)));
+                    el.taxFeedback?.classList.add('hidden');
+                    syncTaxPreview();
+                    el.taxModal.classList.remove('hidden');
+                    el.taxModal.classList.add('flex');
+                };
+
+                const closeTaxModal = () => {
+                    if (!el.taxModal) {
+                        return;
+                    }
+
+                    el.taxModal.classList.add('hidden');
+                    el.taxModal.classList.remove('flex');
                 };
 
                 const syncPaymentForm = () => {
@@ -705,13 +825,86 @@
                     });
                 }
 
+                if (el.editTax && el.taxModal) {
+                    el.editTax.addEventListener('click', openTaxModal);
+                    el.closeTaxModal?.addEventListener('click', closeTaxModal);
+                    el.cancelTaxEdit?.addEventListener('click', closeTaxModal);
+                    el.taxModal.addEventListener('click', (event) => {
+                        if (event.target === el.taxModal) {
+                            closeTaxModal();
+                        }
+                    });
+                    el.taxEnabledEdit?.addEventListener('change', syncTaxPreview);
+                    el.taxRateEdit?.addEventListener('input', () => {
+                        if (el.taxAmountEdit) {
+                            el.taxAmountEdit.value = String(Math.round(currentPurchaseSubtotal * (Math.max(0, Number(el.taxRateEdit.value || 0)) / 100)));
+                        }
+                        syncTaxPreview();
+                    });
+                    el.taxAmountEdit?.addEventListener('input', syncTaxPreview);
+                    el.saveTax?.addEventListener('click', (event) => {
+                        event.preventDefault();
+                        el.taxForm?.requestSubmit();
+                    });
+                    el.taxForm?.addEventListener('submit', async (event) => {
+                        event.preventDefault();
+
+                        const taxEnabled = el.taxEnabledEdit?.checked ?? false;
+                        const taxRate = taxEnabled ? Math.max(0, Number(el.taxRateEdit?.value || 0)) : 0;
+                        const tax = taxEnabled ? Math.max(0, Number(el.taxAmountEdit?.value || 0)) : 0;
+                        const allowed = await window.PosUi.confirmRiskActionAsync({
+                            title: 'Simpan Pajak PO',
+                            message: `Subtotal: ${formatCurrency(currentPurchaseSubtotal)}\nPajak: ${formatCurrency(tax)}\nTotal Baru: ${formatCurrency(currentPurchaseSubtotal + tax)}`,
+                            confirmText: 'Simpan',
+                            icon: 'percent',
+                        });
+                        if (!allowed) {
+                            return;
+                        }
+
+                        await window.PosUi.runWithSubmitGuard(el.saveTax, async () => {
+                            el.taxFeedback?.classList.add('hidden');
+                            const response = await fetch(`/api/v1/purchases/${purchaseId}/tax`, {
+                                method: 'PATCH',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    ...(csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}),
+                                    'X-Requested-With': 'XMLHttpRequest',
+                                    ...headers,
+                                },
+                                body: JSON.stringify({ tax_enabled: taxEnabled, tax_rate: taxRate, tax }),
+                            });
+                            const responseData = await response.json().catch(() => ({}));
+                            if (!response.ok) {
+                                const message = responseData.message || 'Gagal menyimpan pajak PO.';
+                                if (el.taxFeedback) {
+                                    el.taxFeedback.textContent = message;
+                                    el.taxFeedback.classList.remove('hidden');
+                                }
+                                throw new Error(message);
+                            }
+
+                            currentPurchaseSubtotal = Number(responseData.purchase?.subtotal || currentPurchaseSubtotal);
+                            currentPurchaseTaxRate = Number(responseData.purchase?.tax_rate || 0);
+                            currentPurchaseTax = Number(responseData.purchase?.tax || 0);
+                            currentPurchaseTotal = Number(responseData.purchase?.total || (currentPurchaseSubtotal + currentPurchaseTax));
+                            renderTotals();
+                            closeTaxModal();
+                        }, {
+                            loadingHtml: '<span class="material-symbols-outlined animate-spin">progress_activity</span> MENYIMPAN',
+                        });
+                    });
+                }
+
                 (async () => {
                     try {
                         const data = await loadPurchase();
                         const items = data.items || [];
-                        const subtotal = items.reduce((sum, item) => sum + (Number(item.purchase_qty ?? item.qty) * Number(item.purchase_price ?? item.price)), 0);
-                        const tax = subtotal * 0.11;
-                        const total = subtotal + tax;
+                        const fallbackSubtotal = items.reduce((sum, item) => sum + (Number(item.purchase_qty ?? item.qty) * Number(item.purchase_price ?? item.price)), 0);
+                        currentPurchaseSubtotal = Number(data.purchase.subtotal ?? fallbackSubtotal);
+                        currentPurchaseTaxRate = Number(data.purchase.tax_rate || 0);
+                        currentPurchaseTax = Number(data.purchase.tax || 0);
+                        currentPurchaseTotal = Number(data.purchase.total ?? (currentPurchaseSubtotal + currentPurchaseTax));
                         currentPurchaseMode = normalizePurchaseMode(data.purchase.purchase_mode || purchaseFlowDefaultMode);
                         currentPurchaseFlow = data.flow || currentPurchaseFlow;
                         currentPurchasePaymentMethod = data.purchase.payment_method || 'tempo';
@@ -727,9 +920,7 @@
                         el.createdInfo.textContent = `Sistem - ${formatDate(data.purchase.created_at)}`;
                         el.statusInfo.textContent = 'Sistem';
                         setPaymentSummary();
-                        el.subtotal.textContent = formatCurrency(subtotal);
-                        el.tax.textContent = formatCurrency(tax);
-                        el.total.textContent = formatCurrency(total);
+                        renderTotals();
                         renderItems(items);
                         renderReceiptHistory(data.receipts || []);
                         setStatus(data.purchase.status || purchaseStatusSubmitted, currentPurchaseMode);

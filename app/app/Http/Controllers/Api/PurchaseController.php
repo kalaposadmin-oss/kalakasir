@@ -48,10 +48,13 @@ class PurchaseController extends Controller
             ->orderByDesc('purchases.created_at')
             ->orderByDesc('purchases.id')
             ->limit(max(1, min((int) $request->integer('limit', 100), 200)))
-            ->get([
+            ->get(array_values(array_filter([
                 'purchases.id',
                 'purchases.supplier_id',
                 'purchases.location_id',
+                Schema::hasColumn('purchases', 'subtotal') ? 'purchases.subtotal' : null,
+                Schema::hasColumn('purchases', 'tax_rate') ? 'purchases.tax_rate' : null,
+                Schema::hasColumn('purchases', 'tax') ? 'purchases.tax' : null,
                 'purchases.total',
                 'purchases.status',
                 'purchases.payment_method',
@@ -63,8 +66,11 @@ class PurchaseController extends Controller
                 'purchases.created_at',
                 'suppliers.name as supplier_name',
                 'locations.name as location_name',
-            ])
+            ])))
             ->map(function ($purchase) use ($flowResolver, $tenantPurchaseMode) {
+                $subtotal = (float) ($purchase->subtotal ?? $purchase->total ?? 0);
+                $tax = (float) ($purchase->tax ?? 0);
+
                 return [
                     'id' => $purchase->id,
                     'reference' => $this->purchaseReference($purchase->id),
@@ -72,6 +78,9 @@ class PurchaseController extends Controller
                     'supplier_name' => $purchase->supplier_name,
                     'location_id' => $purchase->location_id,
                     'location_name' => $purchase->location_name,
+                    'subtotal' => $subtotal,
+                    'tax_rate' => (float) ($purchase->tax_rate ?? 0),
+                    'tax' => $tax,
                     'total' => (float) $purchase->total,
                     'status' => $purchase->status,
                     'payment_method' => $purchase->payment_method,
@@ -152,6 +161,9 @@ class PurchaseController extends Controller
         return response()->json([
             'purchase' => [
                 'id' => $purchaseRow->id,
+                'subtotal' => (float) ($purchaseRow->subtotal ?? $purchaseRow->total ?? 0),
+                'tax_rate' => (float) ($purchaseRow->tax_rate ?? 0),
+                'tax' => (float) ($purchaseRow->tax ?? 0),
                 'total' => (float) $purchaseRow->total,
                 'status' => $purchaseRow->status,
                 'payment_method' => $purchaseRow->payment_method,
@@ -294,6 +306,9 @@ class PurchaseController extends Controller
             'items.*.qty' => ['required', 'numeric', 'min:0.01'],
             'items.*.purchase_unit' => ['nullable', 'string', 'max:30'],
             'items.*.price' => ['required', 'numeric', 'min:0'],
+            'tax_enabled' => ['nullable', 'boolean'],
+            'tax_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'tax' => ['nullable', 'numeric', 'min:0'],
         ]);
         $purchaseModeProvided = array_key_exists('purchase_mode', $validated);
 
@@ -327,9 +342,14 @@ class PurchaseController extends Controller
             ], 422);
         }
 
-        $total = collect($validated['items'])->sum(function ($item) {
+        $subtotal = collect($validated['items'])->sum(function ($item) {
             return (float) $item['qty'] * (float) $item['price'];
         });
+        $taxEnabled = (bool) ($validated['tax_enabled'] ?? false);
+        $taxRate = $taxEnabled ? (float) ($validated['tax_rate'] ?? 0) : 0.0;
+        $tax = $taxEnabled ? (float) ($validated['tax'] ?? round($subtotal * ($taxRate / 100), 2)) : 0.0;
+        $tax = max(0.0, round($tax, 2));
+        $total = round($subtotal + $tax, 2);
 
         try {
             $transactionDate = (new TransactionDateService())
@@ -402,6 +422,9 @@ class PurchaseController extends Controller
         $purchasePayload = [
             'supplier_id' => $validated['supplier_id'],
             'location_id' => $location?->id,
+            'subtotal' => $subtotal,
+            'tax_rate' => $taxRate,
+            'tax' => $tax,
             'total' => $total,
             'payment_method' => $paymentMethod,
             'due_date' => $dueDate,
@@ -693,6 +716,36 @@ class PurchaseController extends Controller
 
             return response()->json([
                 'code' => $code,
+                'message' => $exception->getMessage(),
+                'details' => [],
+            ], 422);
+        }
+    }
+
+    public function updateTax(Request $request, string $purchase)
+    {
+        $validated = $request->validate([
+            'tax_enabled' => ['nullable', 'boolean'],
+            'tax_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'tax' => ['nullable', 'numeric', 'min:0'],
+        ]);
+
+        try {
+            $result = $this->purchaseService()->updateTax($purchase, $validated, $request->user()?->id);
+            $purchaseRow = $result['purchase'];
+
+            return response()->json([
+                'purchase' => [
+                    'id' => (string) $purchaseRow->id,
+                    'subtotal' => (float) ($purchaseRow->subtotal ?? $purchaseRow->total),
+                    'tax_rate' => (float) ($purchaseRow->tax_rate ?? 0),
+                    'tax' => (float) ($purchaseRow->tax ?? 0),
+                    'total' => (float) $purchaseRow->total,
+                ],
+            ]);
+        } catch (RuntimeException $exception) {
+            return response()->json([
+                'code' => 'PURCHASE_TAX_UPDATE_FAILED',
                 'message' => $exception->getMessage(),
                 'details' => [],
             ], 422);

@@ -282,6 +282,61 @@ class PurchaseService
         });
     }
 
+    public function updateTax(string $purchaseId, array $payload, ?string $userId = null): array
+    {
+        $tenantId = TenantContext::id();
+        if (! $tenantId) {
+            throw new RuntimeException('Tenant tidak ditemukan.');
+        }
+
+        if (! Schema::hasColumn('purchases', 'tax')) {
+            throw new RuntimeException('Kolom pajak pembelian belum tersedia. Jalankan migrasi database terlebih dahulu.');
+        }
+
+        return DB::transaction(function () use ($tenantId, $purchaseId, $payload, $userId): array {
+            $purchase = Purchase::query()
+                ->where('tenant_id', $tenantId)
+                ->where('id', $purchaseId)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $normalizedStatus = PurchaseStatus::normalize((string) $purchase->status);
+            if (in_array($normalizedStatus, [PurchaseStatus::CLOSED, PurchaseStatus::CANCELLED], true)) {
+                throw new RuntimeException('Pajak pembelian yang sudah ditutup atau dibatalkan tidak bisa diedit.');
+            }
+
+            $itemSubtotal = (float) (PurchaseItem::query()
+                ->where('tenant_id', $tenantId)
+                ->where('purchase_id', $purchase->id)
+                ->selectRaw('COALESCE(SUM(purchase_qty * purchase_price), SUM(qty * price), 0) as total')
+                ->value('total') ?? 0);
+            $subtotal = round($itemSubtotal > 0 ? $itemSubtotal : (float) ($purchase->subtotal ?? $purchase->total ?? 0), 2);
+            $taxEnabled = (bool) ($payload['tax_enabled'] ?? false);
+            $taxRate = $taxEnabled ? (float) ($payload['tax_rate'] ?? 0) : 0.0;
+            $tax = $taxEnabled ? (float) ($payload['tax'] ?? round($subtotal * ($taxRate / 100), 2)) : 0.0;
+            $tax = max(0.0, round($tax, 2));
+            $total = round($subtotal + $tax, 2);
+
+            $purchase->update([
+                'subtotal' => $subtotal,
+                'tax_rate' => $taxRate,
+                'tax' => $tax,
+                'total' => $total,
+            ]);
+
+            app(PurchasePaymentCorrectionService::class)->sync(
+                $tenantId,
+                (string) $purchase->id,
+                $userId,
+                'tax_update'
+            );
+
+            return [
+                'purchase' => $purchase->fresh(),
+            ];
+        });
+    }
+
     public function receive(string $purchaseId, array $payload, ?string $userId): array
     {
         $tenantId = TenantContext::id();
@@ -320,7 +375,10 @@ class PurchaseService
             'notes' => $payload['notes'] ?? null,
             'created_at' => CarbonImmutable::now('UTC'),
             'transaction_date' => $payload['transaction_date'] ?? CarbonImmutable::now('UTC')->toDateString(),
-        ] + (Schema::hasColumn('purchases', 'purchase_mode') ? ['purchase_mode' => $purchaseMode] : []));
+        ] + (Schema::hasColumn('purchases', 'subtotal') ? ['subtotal' => $payload['subtotal'] ?? $payload['total']] : [])
+            + (Schema::hasColumn('purchases', 'tax_rate') ? ['tax_rate' => $payload['tax_rate'] ?? 0] : [])
+            + (Schema::hasColumn('purchases', 'tax') ? ['tax' => $payload['tax'] ?? 0] : [])
+            + (Schema::hasColumn('purchases', 'purchase_mode') ? ['purchase_mode' => $purchaseMode] : []));
 
         $conversion = app(UnitConversionService::class);
         $productIds = collect($payload['items'] ?? [])->pluck('product_id')->filter()->unique()->values()->all();
