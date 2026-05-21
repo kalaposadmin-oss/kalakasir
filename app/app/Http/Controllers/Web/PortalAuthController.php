@@ -40,8 +40,8 @@ class PortalAuthController extends Controller
             return redirect('/register/step-1');
         }
 
-        if (Auth::check()) {
-            $activePortal = $this->resolvePreferredPortal($request, Auth::user());
+        if (Auth::guard('web')->check()) {
+            $activePortal = $this->resolvePreferredPortal($request, Auth::guard('web')->user());
             $request->session()->put('auth_portal', $activePortal);
 
             return redirect($this->portalDashboard($activePortal));
@@ -84,7 +84,7 @@ class PortalAuthController extends Controller
             return redirect('/register/step-1');
         }
 
-        if (! Auth::check()) {
+        if (! Auth::guard('web')->check()) {
             return redirect('/backoffice');
         }
 
@@ -113,8 +113,8 @@ class PortalAuthController extends Controller
 
     private function renderPosLogin(Request $request, string $loginAction, bool $showRegisterLink)
     {
-        if (Auth::check()) {
-            $targetPortal = $this->resolveAuthenticatedPortal($request, Auth::user(), 'pos');
+        if (Auth::guard('web')->check()) {
+            $targetPortal = $this->resolveAuthenticatedPortal($request, Auth::guard('web')->user(), 'pos');
             $request->session()->put('auth_portal', $targetPortal);
 
             return redirect($this->portalDashboard($targetPortal));
@@ -136,8 +136,8 @@ class PortalAuthController extends Controller
     {
         $isSuperadminLogin = $this->isSuperadminLoginIntent($request);
 
-        if (Auth::check()) {
-            $targetPortal = $this->resolveAuthenticatedPortal($request, Auth::user(), $isSuperadminLogin ? 'superadmin' : 'backoffice');
+        if (Auth::guard('web')->check()) {
+            $targetPortal = $this->resolveAuthenticatedPortal($request, Auth::guard('web')->user(), $isSuperadminLogin ? 'superadmin' : 'backoffice');
             $request->session()->put('auth_portal', $targetPortal);
 
             return redirect($this->portalDashboard($targetPortal));
@@ -184,10 +184,16 @@ class PortalAuthController extends Controller
 
         $this->ensureNotRateLimited($request, $normalizedEmail);
 
-        if (! Auth::attempt([
+        $credentials = [
             'email' => $normalizedEmail,
             'password' => $validated['password'],
-        ])) {
+        ];
+        $tenantId = $this->resolveTenantId();
+        if ($tenantId) {
+            $credentials['tenant_id'] = $tenantId;
+        }
+
+        if (! Auth::guard('web')->attempt($credentials)) {
             $this->recordFailedAttempt($request, $normalizedEmail, $user, $forcedPortal);
 
             throw ValidationException::withMessages([
@@ -199,7 +205,7 @@ class PortalAuthController extends Controller
         $request->session()->regenerate();
 
         /** @var User|null $authenticatedUser */
-        $authenticatedUser = Auth::user();
+        $authenticatedUser = Auth::guard('web')->user();
         if (! $authenticatedUser) {
             throw new RuntimeException('Autentikasi web gagal menyelesaikan sesi pengguna.');
         }
@@ -402,7 +408,7 @@ class PortalAuthController extends Controller
 
         // For POS portal: if the user already has an open shift,
         // go directly to the checkout page for faster transaction flow.
-        return pos_default_url(Auth::user());
+        return pos_default_url(Auth::guard('web')->user());
     }
 
     private function shouldStartOnboarding(): bool

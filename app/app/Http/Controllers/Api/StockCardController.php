@@ -108,13 +108,9 @@ class StockCardController extends Controller
 
         $location = $locationId
             ? Location::query()->where('tenant_id', $tenantId)->where('id', $locationId)->first()
-            : Location::query()->where('tenant_id', $tenantId)->where('is_default', true)->first();
+            : null;
 
-        if (! $location) {
-            $location = Location::query()->where('tenant_id', $tenantId)->orderBy('name')->first();
-        }
-
-        if (! $location) {
+        if ($locationId && ! $location) {
             return response()->json([
                 'product' => [
                     'id' => $product->id,
@@ -156,9 +152,12 @@ class StockCardController extends Controller
             })
             ->where('stock_ledger.tenant_id', $tenantId)
             ->where('stock_ledger.product_id', $product->id)
-            ->where('stock_ledger.location_id', $location->id)
             ->where('stock_ledger.created_at', '>=', $startUtc)
             ->where('stock_ledger.created_at', '<', $endExclusiveUtc);
+
+        if ($location) {
+            $ledgerQuery->where('stock_ledger.location_id', $location->id);
+        }
 
         $scopeByVariant = $productVariantId !== null || $productVariants->isEmpty();
 
@@ -169,9 +168,12 @@ class StockCardController extends Controller
         $ledgerSummaryQuery = StockLedger::query()
             ->where('tenant_id', $tenantId)
             ->where('product_id', $product->id)
-            ->where('location_id', $location->id)
             ->where('created_at', '>=', $startUtc)
             ->where('created_at', '<', $endExclusiveUtc);
+
+        if ($location) {
+            $ledgerSummaryQuery->where('location_id', $location->id);
+        }
 
         if ($productVariantId !== null) {
             $ledgerSummaryQuery->where('product_variant_id', $productVariantId);
@@ -196,8 +198,11 @@ class StockCardController extends Controller
 
         $balanceQuery = InventoryBalance::query()
             ->where('tenant_id', $tenantId)
-            ->where('product_id', $product->id)
-            ->where('location_id', $location->id);
+            ->where('product_id', $product->id);
+
+        if ($location) {
+            $balanceQuery->where('location_id', $location->id);
+        }
 
         if ($scopeByVariant) {
             if ($productVariantId !== null) {
@@ -212,15 +217,22 @@ class StockCardController extends Controller
         $valuationMethod = TenantContext::get()?->inventory_valuation_method ?? 'average';
 
         [$locationBuckets, $variantBuckets] = $this->resolveBucketSummaries($tenantId, (string) $product->id);
-        $costState = $this->resolveCostState($tenantId, (string) $product->id, (string) $location->id, $productVariantId, $scopeByVariant);
-        $lastCostSource = $this->resolveLastCostSource($tenantId, (string) $product->id, (string) $location->id, $productVariantId, $scopeByVariant);
+        $costState = $location
+            ? $this->resolveCostState($tenantId, (string) $product->id, (string) $location->id, $productVariantId, $scopeByVariant)
+            : null;
+        $lastCostSource = $location
+            ? $this->resolveLastCostSource($tenantId, (string) $product->id, (string) $location->id, $productVariantId, $scopeByVariant)
+            : null;
 
         $layersQuery = InventoryLayer::query()
             ->where('tenant_id', $tenantId)
             ->where('product_id', $product->id)
-            ->where('location_id', $location->id)
             ->orderBy('received_at')
             ->orderBy('created_at');
+
+        if ($location) {
+            $layersQuery->where('location_id', $location->id);
+        }
 
         if ($productVariantId !== null) {
             $layersQuery->where('product_variant_id', $productVariantId);
@@ -255,9 +267,12 @@ class StockCardController extends Controller
             })
             ->where('inventory_issue_allocations.tenant_id', $tenantId)
             ->where('inventory_issue_allocations.product_id', $product->id)
-            ->where('inventory_issue_allocations.location_id', $location->id)
             ->where('inventory_issue_allocations.created_at', '>=', $startUtc)
             ->where('inventory_issue_allocations.created_at', '<', $endExclusiveUtc);
+
+        if ($location) {
+            $allocationsQuery->where('inventory_issue_allocations.location_id', $location->id);
+        }
 
         if ($productVariantId !== null) {
             $allocationsQuery->where('inventory_issue_allocations.product_variant_id', $productVariantId);
@@ -300,11 +315,11 @@ class StockCardController extends Controller
             ],
             'product_variants' => $productVariants,
             'selected_variant_id' => $productVariantId,
-            'location' => [
+            'location' => $location ? [
                 'id' => $location->id,
                 'name' => $location->name,
                 'branch_id' => $location->branch_id,
-            ],
+            ] : null,
             'valuation_method' => $valuationMethod,
             'balance' => $balance,
             'product_location_balances' => $locationBuckets,
@@ -525,6 +540,7 @@ class StockCardController extends Controller
     {
         return match (strtolower($referenceType)) {
             'purchase', 'purchase_receive' => 'Pembelian',
+            'purchase_return' => 'Retur Pembelian',
             'sale', 'sale_recipe_input' => 'Penjualan',
             'stock_adjustment' => 'Penyesuaian',
             'stock_opname' => 'Stock Opname',

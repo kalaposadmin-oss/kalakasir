@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\Concerns\BootsApiTenantUser;
@@ -88,6 +89,59 @@ class UserManagementTenantScopingTest extends TestCase
             'tenant_id' => $foreignTenant->id,
             'name' => $foreignUser->name,
         ]);
+    }
+
+    public function test_store_creates_login_ready_cashier_user(): void
+    {
+        [$tenant, $owner] = $this->bootApiActor('owner', 'owner+create-login-cashier@example.test');
+
+        $tenant->forceFill(['plan' => 'M'])->save();
+        $this->actingAs($owner, 'sanctum');
+
+        $rolesResponse = $this->getJson('/api/v1/users', $this->tenantHeaders($tenant->id));
+        $rolesResponse->assertOk();
+
+        $cashierRoleId = collect($rolesResponse->json('roles'))
+            ->firstWhere('name', 'Kasir')['id'] ?? null;
+
+        $this->assertNotNull($cashierRoleId);
+
+        $createResponse = $this->postJson('/api/v1/users', [
+            'name' => 'Kasir Login Siap',
+            'email' => '  Kasir.Login.Siap@example.test  ',
+            'password' => 'secret123',
+            'role_id' => $cashierRoleId,
+            'status' => 'active',
+        ], $this->tenantHeaders($tenant->id));
+
+        $createResponse->assertCreated();
+        $createdUserId = $createResponse->json('user.id');
+
+        $this->assertDatabaseHas('users', [
+            'id' => $createdUserId,
+            'tenant_id' => $tenant->id,
+            'email' => 'kasir.login.siap@example.test',
+        ]);
+        $this->assertDatabaseHas('user_roles', [
+            'tenant_id' => $tenant->id,
+            'user_id' => $createdUserId,
+            'role_id' => $cashierRoleId,
+        ]);
+
+        Auth::guard('web')->logout();
+
+        $loginResponse = $this->post('/pos/login', [
+            'email' => 'kasir.login.siap@example.test',
+            'password' => 'secret123',
+        ]);
+
+        $loginResponse->assertRedirect();
+        $loginResponse->assertSessionHasNoErrors();
+
+        $this->assertAuthenticatedAs(
+            \App\Models\User::query()->where('email', 'kasir.login.siap@example.test')->first(),
+            'web'
+        );
     }
 
     private function createBranch(Tenant $tenant, string $name): string

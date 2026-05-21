@@ -11,6 +11,7 @@ use App\Support\TenantContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -99,6 +100,9 @@ class UserManagementController extends Controller
     {
         $tenantId = TenantContext::id();
         $this->ensureDefaultRoles($tenantId);
+        $request->merge([
+            'email' => strtolower(trim((string) $request->input('email'))),
+        ]);
 
         $payload = $request->validate([
             'name' => ['required', 'string', 'max:150'],
@@ -115,16 +119,18 @@ class UserManagementController extends Controller
             'status' => ['nullable', Rule::in(['active', 'inactive'])],
         ]);
 
-        $roleExists = DB::table('roles')
+        $role = DB::table('roles')
             ->where('tenant_id', $tenantId)
             ->where('id', $payload['role_id'])
-            ->exists();
+            ->first(['id', 'name']);
 
-        if (! $roleExists) {
+        if (! $role) {
             return response()->json([
                 'message' => 'Role tidak ditemukan.',
             ], 422);
         }
+
+        $normalizedRole = app(\App\Services\UserRoleResolverService::class)->normalize((string) $role->name);
 
         $user = User::query()->create([
             'tenant_id' => $tenantId,
@@ -132,6 +138,9 @@ class UserManagementController extends Controller
             'email' => $payload['email'],
             'password' => Hash::make($payload['password']),
         ]);
+        if (Schema::hasColumn('users', 'role')) {
+            $user->forceFill(['role' => $normalizedRole])->save();
+        }
 
         $this->assignRole($tenantId, $user->id, $payload['role_id']);
 
@@ -151,6 +160,9 @@ class UserManagementController extends Controller
     public function update(Request $request, string $user)
     {
         $tenantId = TenantContext::id();
+        $request->merge([
+            'email' => strtolower(trim((string) $request->input('email'))),
+        ]);
 
         $payload = $request->validate([
             'name' => ['required', 'string', 'max:150'],
@@ -194,17 +206,22 @@ class UserManagementController extends Controller
         $userRow->update($updateData);
 
         if (! empty($payload['role_id'])) {
-            $roleExists = DB::table('roles')
+            $role = DB::table('roles')
                 ->where('tenant_id', $tenantId)
                 ->where('id', $payload['role_id'])
-                ->exists();
+                ->first(['id', 'name']);
 
-            if (! $roleExists) {
+            if (! $role) {
                 return response()->json([
                     'message' => 'Role tidak ditemukan.',
                 ], 422);
             }
 
+            if (Schema::hasColumn('users', 'role')) {
+                $userRow->forceFill([
+                    'role' => app(\App\Services\UserRoleResolverService::class)->normalize((string) $role->name),
+                ])->save();
+            }
             $this->assignRole($tenantId, $userRow->id, $payload['role_id']);
         }
 

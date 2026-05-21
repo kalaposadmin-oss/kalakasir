@@ -114,25 +114,33 @@ class PurchaseReturnController extends Controller
             $result = app(\App\Services\DatabaseTransactionService::class)->run(function () use ($tenantId, $validated, $purchase, $total, $now, $request, $transactionDate) {
                 $valuationService = app(InventoryValuationService::class);
                 $purchaseItems = $this->loadPurchaseItemsForReturn($tenantId, $purchase->id, Arr::pluck($validated['items'], 'purchase_item_id'));
+                $alreadyReturned = DB::table('purchase_return_items')
+                    ->join('purchase_returns', function ($join): void {
+                        $join->on('purchase_returns.id', '=', 'purchase_return_items.purchase_return_id')
+                            ->on('purchase_returns.tenant_id', '=', 'purchase_return_items.tenant_id');
+                    })
+                    ->where('purchase_return_items.tenant_id', $tenantId)
+                    ->where('purchase_returns.purchase_id', $purchase->id)
+                    ->whereIn('purchase_return_items.purchase_item_id', Arr::pluck($validated['items'], 'purchase_item_id'))
+                    ->select('purchase_return_items.purchase_item_id')
+                    ->selectRaw('coalesce(sum(purchase_return_items.qty), 0) as returned_qty')
+                    ->groupBy('purchase_return_items.purchase_item_id')
+                    ->pluck('returned_qty', 'purchase_item_id');
 
                 $returnId = (string) Str::uuid();
-                PurchaseReturn::query()->create([
-                    'id' => $returnId,
-                    'tenant_id' => $tenantId,
-                    'purchase_id' => $validated['purchase_id'],
-                    'supplier_id' => $purchase->supplier_id,
-                    'total' => $total,
-                    'status' => 'received',
-                    'notes' => $validated['notes'] ?? null,
-                    'created_at' => $now,
-                    'transaction_date' => $transactionDate->toDateString(),
-                ]);
-
-                $items = collect($validated['items'])->map(function ($item) use ($tenantId, $returnId, $purchaseItems) {
+                $items = collect($validated['items'])->map(function ($item) use ($tenantId, $returnId, $purchaseItems, $alreadyReturned) {
                     $purchaseItem = $purchaseItems->get((string) $item['purchase_item_id']);
 
                     if (! $purchaseItem) {
                         throw new RuntimeException('Item retur harus berasal dari purchase yang sama.');
+                    }
+
+                    $receivedQty = Decimal::qty($purchaseItem->received_qty ?? $purchaseItem->qty ?? 0);
+                    $returnedQty = Decimal::qty($alreadyReturned[(string) $purchaseItem->id] ?? 0);
+                    $remainingQty = Decimal::subtract($receivedQty, $returnedQty, Decimal::QTY_SCALE);
+
+                    if (Decimal::compare(Decimal::qty($item['qty']), $remainingQty) > 0) {
+                        throw new RuntimeException('Qty retur melebihi jumlah barang yang sudah diterima dan belum pernah diretur.');
                     }
 
                     return [
@@ -147,6 +155,18 @@ class PurchaseReturnController extends Controller
                         'reason' => $item['reason'] ?? null,
                     ];
                 })->all();
+
+                PurchaseReturn::query()->create([
+                    'id' => $returnId,
+                    'tenant_id' => $tenantId,
+                    'purchase_id' => $validated['purchase_id'],
+                    'supplier_id' => $purchase->supplier_id,
+                    'total' => $total,
+                    'status' => 'received',
+                    'notes' => $validated['notes'] ?? null,
+                    'created_at' => $now,
+                    'transaction_date' => $transactionDate->toDateString(),
+                ]);
 
                 PurchaseReturnItem::query()->insert($items);
 
@@ -338,7 +358,7 @@ class PurchaseReturnController extends Controller
             ->where('tenant_id', $tenantId)
             ->where('purchase_id', $purchaseId)
             ->whereIn('id', $purchaseItemIds)
-            ->get(['id', 'product_id', 'product_variant_id'])
+            ->get(['id', 'product_id', 'product_variant_id', 'qty', 'received_qty'])
             ->keyBy('id');
     }
 

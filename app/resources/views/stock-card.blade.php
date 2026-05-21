@@ -305,6 +305,7 @@
                     stock_transfer_in: { label: 'Mutasi Masuk', tone: 'in' },
                     stock_transfer_out: { label: 'Mutasi Keluar', tone: 'out' },
                     stock_transfer: { label: 'Mutasi Stok', tone: 'adjust' },
+                    purchase_return: { label: 'Retur Pembelian', tone: 'out' },
                     opening_balance: { label: 'Stok Awal Periode', tone: 'adjust' },
                 };
 
@@ -355,6 +356,7 @@
                         stock_transfer: 'Mutasi Stok',
                         stock_transfer_in: 'Mutasi Stok',
                         stock_transfer_out: 'Mutasi Stok',
+                        purchase_return: 'Retur Pembelian',
                         production_batch: 'Produksi',
                         opening_balance: 'Stok Awal',
                     };
@@ -381,7 +383,7 @@
                 };
 
                 const loadBootstrap = async () => {
-                    return window.PosUi.getBootstrap({ headers, ttlMs: 20000 });
+                    return window.PosUi.getBootstrap({ headers, includeInventory: true, ttlMs: 0, forceFresh: true });
                 };
 
                 const updateHistoryUrl = () => {

@@ -29,14 +29,38 @@ class SupplierController extends Controller
             ->orderBy('name')
             ->get(['id', 'name', 'balance']);
 
+        $supplierIds = $suppliers->pluck('id')->filter()->values();
+        $productCounts = DB::table('products')
+            ->where('tenant_id', $tenantId)
+            ->whereIn('supplier_id', $supplierIds)
+            ->select('supplier_id')
+            ->selectRaw('count(*) as product_count')
+            ->groupBy('supplier_id')
+            ->pluck('product_count', 'supplier_id');
+        $purchaseSummaries = DB::table('purchases')
+            ->where('tenant_id', $tenantId)
+            ->whereIn('supplier_id', $supplierIds)
+            ->select('supplier_id')
+            ->selectRaw('count(*) as purchase_count')
+            ->selectRaw('coalesce(sum(total), 0) as purchase_total')
+            ->selectRaw('max(transaction_date) as last_purchase_date')
+            ->groupBy('supplier_id')
+            ->get()
+            ->keyBy('supplier_id');
         $totalBalance = (float) $suppliers->sum('balance');
 
-        $rows = $suppliers->map(function ($supplier) {
+        $rows = $suppliers->map(function ($supplier) use ($productCounts, $purchaseSummaries) {
+            $purchaseSummary = $purchaseSummaries->get($supplier->id);
+
             return [
                 'id' => $supplier->id,
                 'name' => $supplier->name,
                 'balance' => (float) $supplier->balance,
                 'status' => (float) $supplier->balance > 0 ? 'active' : 'inactive',
+                'product_count' => (int) ($productCounts[$supplier->id] ?? 0),
+                'purchase_count' => (int) ($purchaseSummary?->purchase_count ?? 0),
+                'purchase_total' => (float) ($purchaseSummary?->purchase_total ?? 0),
+                'last_purchase_date' => $purchaseSummary?->last_purchase_date,
             ];
         });
 

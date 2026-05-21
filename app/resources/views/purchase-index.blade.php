@@ -29,7 +29,7 @@
 @section('page_title', 'Daftar Pembelian')
 @section('body_class', 'bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display')
 @section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-background-light dark:bg-background-dark shadow-2xl')
-@section('main_class', 'flex-1 overflow-hidden p-0')
+@section('main_class', 'flex-1 min-h-0 overflow-hidden p-0')
 
 @section('header')
     <x-page-header title="Daftar Pembelian" :backUrl="$purchaseIndexBackUrl" :showMenuButton="true">
@@ -44,7 +44,7 @@
 @endsection
 
 @section('content')
-    <div class="px-4 py-4 space-y-4">
+    <div class="flex h-full min-h-0 flex-col px-4 py-4">
         <label class="block">
             <span class="app-search-control relative flex items-center px-3 dark:bg-slate-900 dark:ring-slate-800">
                 <span class="material-symbols-outlined text-slate-400">search</span>
@@ -74,7 +74,7 @@
                 <p class="mt-1 text-sm font-black text-orange-700 dark:text-orange-300" data-summary="value">Rp0</p>
             </div>
         </section>
-        <div id="purchase-list" class="space-y-3 pb-24"></div>
+        <div id="purchase-list" class="mt-4 min-h-0 flex-1 space-y-3 overflow-y-auto pb-28"></div>
     </div>
 
     <script>

@@ -89,14 +89,18 @@
             </div>
         </section>
     </div>
-    <div class="fixed bottom-0 left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 p-4 bg-white/80 dark:bg-background-dark/80 ios-blur border-t border-slate-200 dark:border-slate-800 app-bottom-safe-footer">
-        <button id="submit-return" class="w-full bg-primary text-white h-14 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-primary/30 active:scale-[0.98] transition-transform">
+    <div class="fixed bottom-0 left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 border-t border-slate-200 bg-white/90 p-4 shadow-[0_-12px_28px_rgba(15,23,42,0.08)] ios-blur dark:border-slate-800 dark:bg-background-dark/90 app-bottom-safe-footer">
+        <div class="mb-3 flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3 text-sm dark:bg-slate-900">
+            <div>
+                <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Siap disimpan</p>
+                <p class="text-xs font-semibold text-slate-600 dark:text-slate-300" id="return-submit-summary">Pilih item retur dulu</p>
+            </div>
+            <p class="text-base font-black text-primary" id="return-submit-total">Rp 0</p>
+        </div>
+        <button id="submit-return" class="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-white font-black shadow-lg shadow-primary/30 transition-transform active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none dark:disabled:bg-slate-700" type="button" disabled>
             <span class="material-symbols-outlined">assignment_return</span>
             Simpan Retur
         </button>
-        <div class="mt-4 flex justify-center">
-            <div class="w-32 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full"></div>
-        </div>
     </div>
 
         <script>
@@ -110,6 +114,8 @@
                     list: document.getElementById('product-list'),
                     count: document.getElementById('product-count'),
                     total: document.getElementById('return-total'),
+                    submitTotal: document.getElementById('return-submit-total'),
+                    submitSummary: document.getElementById('return-submit-summary'),
                     notes: document.getElementById('return-notes'),
                     submit: document.getElementById('submit-return'),
                 };
@@ -142,7 +148,13 @@
 
                 const updateTotal = () => {
                     const total = items.reduce((sum, item) => sum + (item.returnQty * item.price), 0);
+                    const selectedCount = items.filter((item) => item.returnQty > 0).length;
                     el.total.textContent = formatCurrency(total);
+                    el.submitTotal.textContent = formatCurrency(total);
+                    el.submitSummary.textContent = selectedCount
+                        ? `${selectedCount} produk akan mengurangi stok`
+                        : 'Pilih item retur dulu';
+                    el.submit.disabled = selectedCount === 0 || !purchaseData;
                 };
 
                 const renderItems = () => {
@@ -164,13 +176,13 @@
                                 </div>
                                 <div class="flex-1 min-w-0">
                                     <h4 class="font-bold text-sm text-slate-900 dark:text-slate-100 truncate">${item.product_name}</h4>
-                                    <p class="text-xs text-slate-500">Diterima: ${item.qty} Pcs - ${formatCurrency(item.price)}</p>
+                                    <p class="text-xs text-slate-500">Diterima: ${item.receivedQtyLabel} - ${formatCurrency(item.price)}</p>
                                     <div class="mt-4 grid grid-cols-2 gap-3">
                                         <div class="space-y-1">
                                             <label class="text-[10px] font-bold text-slate-400 uppercase">Jml. Retur</label>
                                             <div class="flex items-center bg-slate-50 dark:bg-slate-800 rounded-lg px-2 border border-slate-100 dark:border-slate-700">
-                                                <input class="return-qty w-full bg-transparent border-none text-sm font-bold p-1 focus:ring-0" type="number" min="0" value="${item.returnQty}" data-index="${index}" />
-                                                <span class="text-[10px] font-bold text-slate-400">PCS</span>
+                                                <input class="return-qty w-full bg-transparent border-none text-sm font-bold p-1 focus:ring-0" type="number" min="0" max="${item.maxReturnQty}" step="0.0001" value="${item.returnQty}" data-index="${index}" />
+                                                <span class="text-[10px] font-bold text-slate-400">${item.unitLabel}</span>
                                             </div>
                                         </div>
                                         <div class="space-y-1">
@@ -186,7 +198,7 @@
                             </div>
                             <div class="bg-amber-50/50 dark:bg-amber-900/10 px-4 py-2 border-t border-amber-100/50 dark:border-amber-900/30 flex justify-between items-center">
                                 <span class="text-[10px] text-amber-700 dark:text-amber-500 font-medium">Adjustment Stok:</span>
-                                <span class="text-[11px] font-bold text-red-500">-${item.returnQty} Pcs (Gudang Utama)</span>
+                                <span class="text-[11px] font-bold text-red-500">-${item.returnQty} ${item.unitLabel} (${purchaseData.purchase?.location_name || 'Lokasi PO'})</span>
                             </div>
                         `;
                         el.list.appendChild(row);
@@ -205,6 +217,10 @@
                         el.supplier.textContent = data.supplier?.name || '-';
                         items = (data.items || []).map((item) => ({
                             ...item,
+                            purchaseItemId: item.id,
+                            maxReturnQty: Number(item.received_qty ?? item.qty ?? 0),
+                            unitLabel: item.unit || 'unit',
+                            receivedQtyLabel: `${Number(item.received_qty ?? item.qty ?? 0).toLocaleString('id-ID')} ${item.unit || 'unit'}`,
                             returnQty: 0,
                             reason: 'Rusak',
                         }));
@@ -221,7 +237,8 @@
                     const reasonSelect = event.target.closest('.return-reason');
                     if (qtyInput) {
                         const index = Number(qtyInput.dataset.index);
-                        items[index].returnQty = Math.max(0, Number(qtyInput.value || 0));
+                        const maxReturnQty = Number(items[index].maxReturnQty || 0);
+                        items[index].returnQty = Math.min(maxReturnQty, Math.max(0, Number(qtyInput.value || 0)));
                         renderItems();
                     }
                     if (reasonSelect) {
@@ -238,16 +255,43 @@
                     const payloadItems = items
                         .filter((item) => item.returnQty > 0)
                         .map((item) => ({
-                            product_id: item.product_id,
+                            purchase_item_id: item.purchaseItemId,
                             qty: item.returnQty,
                             price: item.price,
                             reason: item.reason,
                         }));
 
                     if (!payloadItems.length) {
-                        alert('Isi jumlah retur minimal satu produk.');
+                        if (window.PosUi?.confirmRiskActionAsync) {
+                            await window.PosUi.confirmRiskActionAsync({
+                                title: 'Belum ada item retur',
+                                message: 'Isi jumlah retur minimal satu produk.',
+                                confirmText: 'Mengerti',
+                                cancelText: 'Tutup',
+                                icon: 'info',
+                            });
+                        } else {
+                            alert('Isi jumlah retur minimal satu produk.');
+                        }
                         return;
                     }
+
+                    const confirmMessage = `PO: PO-${String(purchaseData.purchase.id).slice(0, 6).toUpperCase()}\nSupplier: ${purchaseData.supplier?.name || '-'}\nNilai Retur: ${el.total.textContent}\n\nStok barang akan berkurang dan jurnal retur pembelian akan diposting ke laporan.`;
+                    const allowed = window.PosUi?.confirmRiskActionAsync
+                        ? await window.PosUi.confirmRiskActionAsync({
+                            title: 'Simpan Retur Pembelian',
+                            message: confirmMessage,
+                            confirmText: 'Simpan Retur',
+                            cancelText: 'Batal',
+                            icon: 'assignment_return',
+                        })
+                        : window.confirm(confirmMessage);
+                    if (!allowed) {
+                        return;
+                    }
+
+                    el.submit.disabled = true;
+                    el.submit.innerHTML = '<span class="material-symbols-outlined animate-spin">progress_activity</span> Menyimpan...';
 
                     const response = await fetch('/api/v1/purchase-returns', {
                         method: 'POST',
@@ -264,11 +308,14 @@
                     });
 
                     if (!response.ok) {
-                        alert('Gagal menyimpan retur.');
+                        const payload = await response.json().catch(() => ({}));
+                        alert(payload.message || 'Gagal menyimpan retur.');
+                        el.submit.disabled = false;
+                        el.submit.innerHTML = '<span class="material-symbols-outlined">assignment_return</span> Simpan Retur';
                         return;
                     }
 
-                    alert('Retur berhasil disimpan.');
+                    sessionStorage.setItem('purchase-return-flash', 'Retur berhasil disimpan dan stok sudah dikurangi.');
                     window.location.href = @json($purchaseReturnBackUrl);
                 });
 
@@ -285,4 +332,3 @@
             })();
         </script>
     @endsection
-
