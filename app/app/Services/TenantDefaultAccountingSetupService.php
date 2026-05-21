@@ -22,6 +22,7 @@ class TenantDefaultAccountingSetupService
             '5101' => ['name' => 'Harga Pokok Penjualan', 'type' => 'expense'],
             '6101' => ['name' => 'Penyesuaian Beban', 'type' => 'expense'],
             '6201' => ['name' => 'Beban Depresiasi Peralatan', 'type' => 'expense'],
+            '6301' => ['name' => 'Beban Admin QRIS / Bank', 'type' => 'expense'],
         ];
 
         foreach ($definitions as $code => $meta) {

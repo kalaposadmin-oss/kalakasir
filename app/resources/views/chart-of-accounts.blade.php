@@ -67,6 +67,27 @@
                 <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Nama Akun</label>
                 <input id="account-name" class="w-full rounded-lg border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-sm" placeholder="Contoh: Bank Mandiri" type="text" />
             </div>
+            <div class="grid grid-cols-1 gap-3 rounded-xl border border-blue-100 bg-blue-50 p-3 dark:border-blue-900/40 dark:bg-blue-950/20">
+                <div class="flex items-start gap-2">
+                    <span class="material-symbols-outlined text-[18px] text-blue-600">account_balance</span>
+                    <div>
+                        <p class="text-xs font-black text-blue-900 dark:text-blue-100">Data rekening</p>
+                        <p class="text-[11px] leading-relaxed text-blue-700 dark:text-blue-200">Diisi untuk akun bank/QRIS agar user tahu nomor rekening yang dipakai.</p>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Nama Bank</label>
+                    <input id="account-bank-name" class="w-full rounded-lg border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 px-3 py-2 text-sm" placeholder="Contoh: BCA" type="text" />
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Nomor Rekening</label>
+                    <input id="account-bank-number" class="w-full rounded-lg border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 px-3 py-2 text-sm" placeholder="Contoh: 1234567890" type="text" />
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Atas Nama</label>
+                    <input id="account-bank-holder" class="w-full rounded-lg border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 px-3 py-2 text-sm" placeholder="Contoh: Levia Bakery" type="text" />
+                </div>
+            </div>
             <div>
                 <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Kelompok (Opsional)</label>
                 <select id="account-parent" class="w-full rounded-lg border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-sm">
@@ -94,7 +115,11 @@
     <script>
         (() => {
             const tenantId = document.querySelector('meta[name="tenant-id"]')?.content;
-            const headers = tenantId ? { 'X-Tenant-Id': tenantId } : {};
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+            const headers = {
+                ...(tenantId ? { 'X-Tenant-Id': tenantId } : {}),
+                ...(csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}),
+            };
 
             const el = {
                 list: document.getElementById('coa-list'),
@@ -106,6 +131,9 @@
                 addError: document.getElementById('add-error'),
                 code: document.getElementById('account-code'),
                 name: document.getElementById('account-name'),
+                bankName: document.getElementById('account-bank-name'),
+                bankNumber: document.getElementById('account-bank-number'),
+                bankHolder: document.getElementById('account-bank-holder'),
                 parent: document.getElementById('account-parent'),
             };
 
@@ -140,6 +168,9 @@
             const resetAddForm = () => {
                 el.code.value = '';
                 el.name.value = '';
+                el.bankName.value = '';
+                el.bankNumber.value = '';
+                el.bankHolder.value = '';
                 el.parent.value = '';
                 el.addError.classList.add('hidden');
                 el.addError.textContent = '';
@@ -260,6 +291,7 @@
                                     <span class="text-sm font-semibold text-slate-900 dark:text-slate-100">${account.name || '-'}</span>
                                 </div>
                                 <p class="text-xs text-slate-500">Saldo: -</p>
+                                ${account.bank_account_number ? `<p class="mt-1 text-xs font-semibold text-slate-500">${account.bank_name || account.name} - ${account.bank_account_number}</p>` : ''}
                             </div>
                             <div class="flex items-center gap-2">
                                 <span class="material-symbols-outlined text-slate-400 text-xl">chevron_right</span>
@@ -321,6 +353,9 @@
                         code,
                         name,
                         type: state.type,
+                        bank_name: el.bankName.value.trim() || null,
+                        bank_account_number: el.bankNumber.value.trim() || null,
+                        bank_account_name: el.bankHolder.value.trim() || null,
                         parent_id: el.parent.value || null,
                     }),
                 });

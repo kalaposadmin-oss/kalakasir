@@ -82,6 +82,23 @@ class PurchaseWorkflowStateMachineTest extends TestCase
             ->assertJsonPath('purchase.total', 20000);
     }
 
+    public function test_purchase_index_includes_item_summary_for_list_cards(): void
+    {
+        [$tenant, $user] = $this->bootApiActor('admin', 'purchase-index-summary@example.test');
+        $fixture = $this->seedCheckoutFixture($tenant->id, $user->id);
+        $supplierId = $this->insertSupplier($tenant->id, 'Supplier Summary');
+        $purchaseId = $this->createPurchase($tenant->id, $supplierId, $fixture['location_id'], $fixture['product_id'], PurchaseStatus::DRAFT, 3, 12000);
+
+        $response = $this->withHeaders($this->tenantHeaders($tenant->id))
+            ->getJson('/api/v1/purchases');
+
+        $response->assertOk()
+            ->assertJsonPath('purchases.0.id', $purchaseId)
+            ->assertJsonPath('purchases.0.item_count', 1)
+            ->assertJsonPath('purchases.0.total_item_qty', 3)
+            ->assertJsonPath('purchases.0.total', 36000);
+    }
+
     public function test_approve_purchase_from_submitted_status_succeeds(): void
     {
         [$tenant, $user] = $this->bootApiActor('admin', 'purchase-approve@example.test');

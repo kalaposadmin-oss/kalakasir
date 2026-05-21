@@ -24,6 +24,9 @@ class ChartOfAccountsController extends Controller
                 'id',
                 'code',
                 'name',
+                'bank_name',
+                'bank_account_number',
+                'bank_account_name',
                 'type',
                 'parent_id',
             ]);
@@ -75,6 +78,9 @@ class ChartOfAccountsController extends Controller
             })],
             'name' => ['required', 'string', 'max:255'],
             'type' => ['required', 'string', Rule::in(['asset', 'liability', 'equity', 'revenue', 'expense'])],
+            'bank_name' => ['nullable', 'string', 'max:120'],
+            'bank_account_number' => ['nullable', 'string', 'max:120'],
+            'bank_account_name' => ['nullable', 'string', 'max:150'],
             'parent_id' => [
                 'nullable',
                 'uuid',
@@ -88,6 +94,9 @@ class ChartOfAccountsController extends Controller
             'code' => $payload['code'],
             'name' => $payload['name'],
             'type' => $payload['type'],
+            'bank_name' => trim((string) ($payload['bank_name'] ?? '')) ?: null,
+            'bank_account_number' => trim((string) ($payload['bank_account_number'] ?? '')) ?: null,
+            'bank_account_name' => trim((string) ($payload['bank_account_name'] ?? '')) ?: null,
             'parent_id' => $payload['parent_id'] ?: null,
         ]);
 
@@ -99,7 +108,7 @@ class ChartOfAccountsController extends Controller
     public function show(ChartOfAccount $account)
     {
         return response()->json([
-            'account' => $account->only(['id', 'code', 'name', 'type', 'parent_id']),
+            'account' => $account->only(['id', 'code', 'name', 'bank_name', 'bank_account_number', 'bank_account_name', 'type', 'parent_id']),
         ]);
     }
 
@@ -115,6 +124,9 @@ class ChartOfAccountsController extends Controller
 
         $payload = $request->validate([
             'name' => ['required', 'string', 'max:255'],
+            'bank_name' => ['nullable', 'string', 'max:120'],
+            'bank_account_number' => ['nullable', 'string', 'max:120'],
+            'bank_account_name' => ['nullable', 'string', 'max:150'],
             'parent_id' => [
                 'nullable',
                 'uuid',
@@ -134,11 +146,14 @@ class ChartOfAccountsController extends Controller
 
         $account->update([
             'name' => $payload['name'],
+            'bank_name' => trim((string) ($payload['bank_name'] ?? '')) ?: null,
+            'bank_account_number' => trim((string) ($payload['bank_account_number'] ?? '')) ?: null,
+            'bank_account_name' => trim((string) ($payload['bank_account_name'] ?? '')) ?: null,
             'parent_id' => $payload['parent_id'] ?: null,
         ]);
 
         return response()->json([
-            'account' => $account->only(['id', 'code', 'name', 'type', 'parent_id']),
+            'account' => $account->only(['id', 'code', 'name', 'bank_name', 'bank_account_number', 'bank_account_name', 'type', 'parent_id']),
         ]);
     }
 

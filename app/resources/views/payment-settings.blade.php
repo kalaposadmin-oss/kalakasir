@@ -27,6 +27,9 @@
     $cashAccount = $paymentAccounts->first(fn ($account) => (string) $account->id === (string) $selectedCashAccountId);
     $bankAccount = $paymentAccounts->first(fn ($account) => (string) $account->id === (string) $selectedBankAccountId);
     $accountLabel = fn ($account) => $account ? trim(($account->code ? $account->code.' - ' : '').$account->name) : 'Belum disetel';
+    $bankDisplayName = old('bank_name', $paymentSetting->bank_name ?? '') ?: ($bankAccount->bank_name ?? $bankAccount->name ?? '');
+    $bankDisplayNumber = old('bank_account_number', $paymentSetting->bank_account_number ?? '') ?: ($bankAccount->bank_account_number ?? '');
+    $bankDisplayHolder = old('bank_account_name', $paymentSetting->bank_account_name ?? '') ?: ($bankAccount->bank_account_name ?? '');
 @endphp
 
 @section('page_title', 'Pembayaran & Rekening')
@@ -56,11 +59,11 @@
                 <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                     <div class="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-primary">
                         <span class="material-symbols-outlined text-sm">payments</span>
-                        Pusat pembayaran
+                        Pengaturan penerimaan uang
                     </div>
-                    <h2 class="mt-4 text-2xl font-black tracking-tight text-slate-950 dark:text-white lg:text-3xl">Atur uang pelanggan masuk ke mana.</h2>
+                    <h2 class="mt-4 text-2xl font-black tracking-tight text-slate-950 dark:text-white lg:text-3xl">Atur akun laporan dan info transfer pelanggan.</h2>
                     <p class="mt-3 max-w-3xl text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-                        Halaman ini menyatukan akun kas/bank untuk POS dengan instruksi pembayaran yang dikirim ke pelanggan. Owner cukup mengatur satu tempat, laporan tetap memakai akun pembukuan yang sama.
+                        Bagian atas memilih akun kas/bank untuk jurnal. Bagian bawah mengisi nomor rekening, QRIS, dan catatan yang dilihat pelanggan saat order online.
                     </p>
                     <div class="mt-5 grid gap-3 md:grid-cols-3">
                         <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900/40 dark:bg-emerald-950/20">
@@ -78,14 +81,34 @@
                     </div>
                 </div>
 
-                <aside class="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-900 shadow-sm dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100">
+                <aside class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                     <div class="flex items-start gap-3">
-                        <span class="material-symbols-outlined mt-0.5 text-amber-600 dark:text-amber-300">info</span>
-                        <div>
-                            <h3 class="text-base font-black">Satu menu, dua fungsi</h3>
-                            <p class="mt-2 text-sm leading-relaxed">
-                                Akun kas/bank dipakai untuk jurnal dan laporan. Nomor rekening, QRIS, dan catatan dipakai untuk tampilan pelanggan/order online. Keduanya disimpan dari form yang sama agar tidak terasa dobel.
-                            </p>
+                        <span class="material-symbols-outlined mt-0.5 text-primary">route</span>
+                        <div class="min-w-0">
+                            <h3 class="text-base font-black text-slate-950 dark:text-white">Alur singkat</h3>
+                            <div class="mt-4 space-y-3 text-sm">
+                                <div class="flex gap-3 rounded-xl bg-slate-50 p-3 dark:bg-slate-800/60">
+                                    <span class="flex size-7 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs font-black text-emerald-700">1</span>
+                                    <div>
+                                        <p class="font-black text-slate-900 dark:text-white">Pilih akun laporan</p>
+                                        <p class="text-xs leading-relaxed text-slate-500">Tunai masuk kas, QRIS/transfer masuk bank.</p>
+                                    </div>
+                                </div>
+                                <div class="flex gap-3 rounded-xl bg-slate-50 p-3 dark:bg-slate-800/60">
+                                    <span class="flex size-7 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-black text-blue-700">2</span>
+                                    <div>
+                                        <p class="font-black text-slate-900 dark:text-white">Isi tampilan pelanggan</p>
+                                        <p class="text-xs leading-relaxed text-slate-500">Nama bank, nomor rekening, QRIS, dan catatan pembayaran.</p>
+                                    </div>
+                                </div>
+                                <div class="flex gap-3 rounded-xl bg-slate-50 p-3 dark:bg-slate-800/60">
+                                    <span class="flex size-7 shrink-0 items-center justify-center rounded-full bg-orange-100 text-xs font-black text-orange-700">3</span>
+                                    <div>
+                                        <p class="font-black text-slate-900 dark:text-white">Simpan sekali</p>
+                                        <p class="text-xs leading-relaxed text-slate-500">POS, laporan, dan order online memakai pengaturan ini.</p>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </aside>
@@ -111,9 +134,9 @@
                     <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                         <div class="flex items-start justify-between gap-4">
                             <div>
-                                <p class="text-xs font-bold uppercase tracking-[0.22em] text-slate-400">Dipakai POS dan laporan</p>
-                                <h3 class="mt-2 text-lg font-black text-slate-950 dark:text-white">Rekening penerimaan</h3>
-                                <p class="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">Pilih akun yang dipakai saat kasir menerima pembayaran. Cash masuk ke akun kas, QRIS dan transfer masuk ke akun bank/QRIS.</p>
+                                <p class="text-xs font-bold uppercase tracking-[0.22em] text-slate-400">Langkah 1 - laporan dan jurnal</p>
+                                <h3 class="mt-2 text-lg font-black text-slate-950 dark:text-white">Akun penerimaan uang</h3>
+                                <p class="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">Ini menentukan uang tercatat ke akun mana di laporan. Tidak harus sama dengan teks rekening yang dilihat pelanggan.</p>
                             </div>
                             <span class="material-symbols-outlined text-3xl text-primary/70">account_balance_wallet</span>
                         </div>
@@ -126,11 +149,11 @@
 
                         <div class="mt-5 grid gap-4 md:grid-cols-2">
                             <label class="space-y-2">
-                                <span class="block text-[11px] font-bold uppercase tracking-wider text-slate-500">Cash / Tunai masuk ke</span>
+                                <span class="block text-[11px] font-bold uppercase tracking-wider text-slate-500">Tunai POS dicatat ke akun</span>
                                 <select name="cash_account_id" class="w-full rounded-xl border-slate-200 bg-slate-50 px-3 py-3 text-sm dark:border-slate-800 dark:bg-slate-800">
                                     <option value="">Pilih akun kas</option>
                                     @foreach ($paymentAccounts as $account)
-                                        <option value="{{ $account->id }}" @selected((string) $selectedCashAccountId === (string) $account->id)>
+                                    <option value="{{ $account->id }}" @selected((string) $selectedCashAccountId === (string) $account->id)>
                                             {{ trim(($account->code ? $account->code.' - ' : '').$account->name) }}
                                         </option>
                                     @endforeach
@@ -138,11 +161,17 @@
                             </label>
 
                             <label class="space-y-2">
-                                <span class="block text-[11px] font-bold uppercase tracking-wider text-slate-500">QRIS / transfer masuk ke</span>
+                                <span class="block text-[11px] font-bold uppercase tracking-wider text-slate-500">QRIS / transfer dicatat ke akun</span>
                                 <select name="bank_account_id" class="w-full rounded-xl border-slate-200 bg-slate-50 px-3 py-3 text-sm dark:border-slate-800 dark:bg-slate-800">
                                     <option value="">Pilih akun bank/QRIS</option>
                                     @foreach ($paymentAccounts as $account)
-                                        <option value="{{ $account->id }}" @selected((string) $selectedBankAccountId === (string) $account->id)>
+                                        <option
+                                            value="{{ $account->id }}"
+                                            data-bank-name="{{ $account->bank_name ?: $account->name }}"
+                                            data-bank-number="{{ $account->bank_account_number }}"
+                                            data-bank-holder="{{ $account->bank_account_name }}"
+                                            @selected((string) $selectedBankAccountId === (string) $account->id)
+                                        >
                                             {{ trim(($account->code ? $account->code.' - ' : '').$account->name) }}
                                         </option>
                                     @endforeach
@@ -150,8 +179,26 @@
                             </label>
                         </div>
 
+                        <div id="selected-bank-profile" class="mt-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-100">
+                            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                <div>
+                                    <p class="text-[11px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-300">Rekening akun terpilih</p>
+                                    <p class="mt-1 font-black" data-bank-profile="name">{{ $bankAccount?->bank_name ?: $bankAccount?->name ?: 'Pilih akun bank/QRIS dulu' }}</p>
+                                    <p class="mt-1 text-xs" data-bank-profile="number">
+                                        {{ $bankAccount?->bank_account_number ? 'No. '.$bankAccount->bank_account_number : 'Nomor rekening belum diisi di detail akun.' }}
+                                    </p>
+                                    <p class="text-xs" data-bank-profile="holder">
+                                        {{ $bankAccount?->bank_account_name ? 'a.n. '.$bankAccount->bank_account_name : 'Atas nama belum diisi.' }}
+                                    </p>
+                                </div>
+                                <button type="button" class="inline-flex items-center justify-center rounded-lg bg-blue-600 px-3 py-2 text-xs font-black text-white" data-copy-bank-profile>
+                                    Pakai untuk pelanggan
+                                </button>
+                            </div>
+                        </div>
+
                         <div class="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-relaxed text-slate-600 dark:border-slate-800 dark:bg-slate-800/60 dark:text-slate-300">
-                            Butuh BCA, Mandiri, atau QRIS terpisah? Tambahkan akun di
+                            Jika punya BCA, Mandiri, atau QRIS terpisah, tambahkan akun di
                             <a href="/backoffice/settings/chart-of-accounts" class="font-bold text-primary">Kelola akun kas/bank lanjutan</a>,
                             lalu pilih sebagai rekening penerimaan di sini.
                         </div>
@@ -160,9 +207,9 @@
                     <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                         <div class="flex items-start justify-between gap-4">
                             <div>
-                                <p class="text-xs font-bold uppercase tracking-[0.22em] text-slate-400">Dipakai pelanggan/order online</p>
+                                <p class="text-xs font-bold uppercase tracking-[0.22em] text-slate-400">Langkah 2 - tampilan pelanggan</p>
                                 <h3 class="mt-2 text-lg font-black text-slate-950 dark:text-white">Instruksi transfer dan QRIS</h3>
-                                <p class="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">Data ini muncul di pesan WhatsApp pembayaran, final review order online, dan catatan pembayaran pelanggan.</p>
+                                <p class="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">Data ini hanya untuk informasi pelanggan: pesan WhatsApp, final review order online, dan catatan pembayaran.</p>
                             </div>
                             <span class="material-symbols-outlined text-3xl text-emerald-600/70">qr_code_2</span>
                         </div>
@@ -170,15 +217,15 @@
                         <div class="mt-5 grid gap-4 md:grid-cols-2">
                             <label class="space-y-2">
                                 <span class="block text-[11px] font-bold uppercase tracking-wider text-slate-500">Nama Bank</span>
-                                <input name="bank_name" value="{{ old('bank_name', $paymentSetting->bank_name ?? '') }}" type="text" class="w-full rounded-xl border-slate-200 bg-slate-50 px-3 py-3 text-sm dark:border-slate-800 dark:bg-slate-800" placeholder="Contoh: BCA" />
+                                <input name="bank_name" value="{{ $bankDisplayName }}" type="text" class="w-full rounded-xl border-slate-200 bg-slate-50 px-3 py-3 text-sm dark:border-slate-800 dark:bg-slate-800" placeholder="Contoh: BCA" />
                             </label>
                             <label class="space-y-2">
                                 <span class="block text-[11px] font-bold uppercase tracking-wider text-slate-500">Nomor Rekening</span>
-                                <input name="bank_account_number" value="{{ old('bank_account_number', $paymentSetting->bank_account_number ?? '') }}" type="text" class="w-full rounded-xl border-slate-200 bg-slate-50 px-3 py-3 text-sm dark:border-slate-800 dark:bg-slate-800" placeholder="1234567890" />
+                                <input name="bank_account_number" value="{{ $bankDisplayNumber }}" type="text" class="w-full rounded-xl border-slate-200 bg-slate-50 px-3 py-3 text-sm dark:border-slate-800 dark:bg-slate-800" placeholder="1234567890" />
                             </label>
                             <label class="space-y-2">
                                 <span class="block text-[11px] font-bold uppercase tracking-wider text-slate-500">Atas Nama</span>
-                                <input name="bank_account_name" value="{{ old('bank_account_name', $paymentSetting->bank_account_name ?? '') }}" type="text" class="w-full rounded-xl border-slate-200 bg-slate-50 px-3 py-3 text-sm dark:border-slate-800 dark:bg-slate-800" placeholder="Nama pemilik rekening" />
+                                <input name="bank_account_name" value="{{ $bankDisplayHolder }}" type="text" class="w-full rounded-xl border-slate-200 bg-slate-50 px-3 py-3 text-sm dark:border-slate-800 dark:bg-slate-800" placeholder="Nama pemilik rekening" />
                             </label>
                             <label class="space-y-2">
                                 <span class="block text-[11px] font-bold uppercase tracking-wider text-slate-500">WhatsApp Admin</span>
@@ -206,18 +253,18 @@
                             <div class="flex items-start justify-between gap-3">
                                 <div>
                                     <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Transfer ke</p>
-                                    <p class="mt-1 text-base font-black text-slate-950 dark:text-white">{{ old('bank_name', $paymentSetting->bank_name ?? '') ?: 'Nama bank belum diisi' }}</p>
+                                    <p class="mt-1 text-base font-black text-slate-950 dark:text-white">{{ $bankDisplayName ?: 'Nama bank belum diisi' }}</p>
                                 </div>
                                 <span class="material-symbols-outlined text-primary">account_balance</span>
                             </div>
                             <dl class="mt-4 space-y-2 text-sm">
                                 <div class="flex justify-between gap-3">
                                     <dt class="text-slate-500">No. rekening</dt>
-                                    <dd class="font-bold text-slate-900 dark:text-white">{{ old('bank_account_number', $paymentSetting->bank_account_number ?? '') ?: '-' }}</dd>
+                                    <dd class="font-bold text-slate-900 dark:text-white">{{ $bankDisplayNumber ?: '-' }}</dd>
                                 </div>
                                 <div class="flex justify-between gap-3">
                                     <dt class="text-slate-500">Atas nama</dt>
-                                    <dd class="font-bold text-slate-900 dark:text-white">{{ old('bank_account_name', $paymentSetting->bank_account_name ?? '') ?: '-' }}</dd>
+                                    <dd class="font-bold text-slate-900 dark:text-white">{{ $bankDisplayHolder ?: '-' }}</dd>
                                 </div>
                             </dl>
 
@@ -252,4 +299,46 @@
             </form>
         </div>
     </div>
+
+    <script>
+        (() => {
+            const form = document.querySelector('form[action="/backoffice/settings/payment-settings"]');
+            if (!form) return;
+
+            const bankSelect = form.elements.bank_account_id;
+            const nameInput = form.elements.bank_name;
+            const numberInput = form.elements.bank_account_number;
+            const holderInput = form.elements.bank_account_name;
+            const profileName = document.querySelector('[data-bank-profile="name"]');
+            const profileNumber = document.querySelector('[data-bank-profile="number"]');
+            const profileHolder = document.querySelector('[data-bank-profile="holder"]');
+
+            const selectedBankData = () => {
+                const option = bankSelect?.selectedOptions?.[0];
+                return {
+                    name: option?.dataset.bankName || option?.textContent?.trim() || '',
+                    number: option?.dataset.bankNumber || '',
+                    holder: option?.dataset.bankHolder || '',
+                };
+            };
+
+            const renderSelectedBank = () => {
+                const bank = selectedBankData();
+                profileName.textContent = bank.name || 'Pilih akun bank/QRIS dulu';
+                profileNumber.textContent = bank.number ? `No. ${bank.number}` : 'Nomor rekening belum diisi di detail akun.';
+                profileHolder.textContent = bank.holder ? `a.n. ${bank.holder}` : 'Atas nama belum diisi.';
+            };
+
+            const copySelectedBank = () => {
+                const bank = selectedBankData();
+                if (bank.name) nameInput.value = bank.name;
+                if (bank.number) numberInput.value = bank.number;
+                if (bank.holder) holderInput.value = bank.holder;
+            };
+
+            bankSelect?.addEventListener('change', renderSelectedBank);
+            document.querySelector('[data-copy-bank-profile]')?.addEventListener('click', copySelectedBank);
+            renderSelectedBank();
+        })();
+    </script>
 @endsection

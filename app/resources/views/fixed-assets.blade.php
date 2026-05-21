@@ -78,7 +78,9 @@
                         <option value="">Semua status</option>
                         <option value="active">Aktif</option>
                         <option value="maintenance">Maintenance</option>
-                        <option value="retired">Pensiun</option>
+                        <option value="stored">Disimpan</option>
+                        <option value="disposed">Dihapus</option>
+                        <option value="sold">Dijual</option>
                         <option value="lost">Hilang</option>
                     </select>
                     <button class="flex size-10 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-900" type="button" id="fixed-asset-refresh" aria-label="Muat ulang">
@@ -107,10 +109,11 @@
         @if ($fixedAssetCanManage)
             <section id="fixed-asset-create" class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
                 <div class="mb-4">
-                    <h2 class="text-base font-black text-slate-950 dark:text-white">Catat Aset Baru</h2>
-                    <p class="text-sm text-slate-500">Gunakan untuk aset bernilai besar atau umur pakai panjang, bukan untuk bahan habis pakai.</p>
+                    <h2 class="text-base font-black text-slate-950 dark:text-white" data-asset-form-title>Catat Aset Baru</h2>
+                    <p class="text-sm text-slate-500" data-asset-form-subtitle>Gunakan untuk aset bernilai besar atau umur pakai panjang, bukan untuk bahan habis pakai.</p>
                 </div>
                 <form id="fixed-asset-form" class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    <input type="hidden" name="asset_id">
                     <label class="space-y-1">
                         <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Kode</span>
                         <input name="asset_code" class="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm dark:border-slate-700 dark:bg-slate-900" placeholder="AST-OVN-001" required>
@@ -131,8 +134,12 @@
                         </select>
                     </label>
                     <label class="space-y-1">
-                        <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Harga Beli</span>
+                        <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Harga / Unit</span>
                         <input name="purchase_price" type="number" min="0" step="0.01" class="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm dark:border-slate-700 dark:bg-slate-900" required>
+                    </label>
+                    <label class="space-y-1">
+                        <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Jumlah Unit</span>
+                        <input name="quantity" type="number" min="1" step="1" value="1" class="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm dark:border-slate-700 dark:bg-slate-900" required>
                     </label>
                     <label class="space-y-1">
                         <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Pembayaran</span>
@@ -174,6 +181,10 @@
                     <div class="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm dark:border-slate-800 dark:bg-slate-900 md:col-span-2 xl:col-span-3" id="fixed-asset-preview">
                         <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                             <div>
+                                <p class="text-xs font-bold uppercase tracking-wider text-slate-500">Total Pembelian</p>
+                                <p class="font-black" data-preview="purchase_total">Rp0</p>
+                            </div>
+                            <div>
                                 <p class="text-xs font-bold uppercase tracking-wider text-slate-500">Kas/Bank Keluar</p>
                                 <p class="font-black" data-preview="cash_out">Rp0</p>
                             </div>
@@ -200,9 +211,15 @@
                         </div>
                     </div>
                     <div class="flex items-end">
-                        <button class="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-black text-white shadow-sm shadow-primary/20" type="submit">
+                        <button class="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-black text-white shadow-sm shadow-primary/20" type="submit" data-asset-submit>
                             <span class="material-symbols-outlined text-[18px]">save</span>
-                            Simpan Aset
+                            <span data-asset-submit-label>Simpan Aset</span>
+                        </button>
+                    </div>
+                    <div class="hidden items-end" data-asset-cancel-wrap>
+                        <button class="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-slate-200 px-4 text-sm font-black text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900" type="button" data-asset-cancel>
+                            <span class="material-symbols-outlined text-[18px]">close</span>
+                            Batal Edit
                         </button>
                     </div>
                 </form>
@@ -283,6 +300,10 @@
                 paymentPanel: document.getElementById('fixed-asset-payment-panel'),
                 paymentForm: document.getElementById('fixed-asset-payment-form'),
                 paymentTitle: document.querySelector('[data-payment-title]'),
+                formTitle: document.querySelector('[data-asset-form-title]'),
+                formSubtitle: document.querySelector('[data-asset-form-subtitle]'),
+                submitLabel: document.querySelector('[data-asset-submit-label]'),
+                cancelWrap: document.querySelector('[data-asset-cancel-wrap]'),
             };
 
             let assets = [];
@@ -317,7 +338,9 @@
                 status: {
                     active: 'Aktif',
                     maintenance: 'Maintenance',
-                    retired: 'Pensiun',
+                    stored: 'Disimpan',
+                    disposed: 'Dihapus',
+                    sold: 'Dijual',
                     lost: 'Hilang',
                 },
             };
@@ -351,9 +374,10 @@
 
             const serializeForm = (form) => {
                 const data = Object.fromEntries(new FormData(form).entries());
-                ['purchase_price', 'residual_value', 'useful_life_months'].forEach((key) => {
+                ['purchase_price', 'quantity', 'residual_value', 'useful_life_months'].forEach((key) => {
                     if (data[key] !== '') data[key] = Number(data[key]);
                 });
+                data.unit_price = Number(data.purchase_price || 0);
                 Object.keys(data).forEach((key) => {
                     if (data[key] === '') delete data[key];
                 });
@@ -362,6 +386,7 @@
 
             const renderPreview = (preview = {}) => {
                 if (!el.preview) return;
+                el.preview.querySelector('[data-preview="purchase_total"]').textContent = rupiah(preview.purchase_total || preview.fixed_asset_increase || 0);
                 el.preview.querySelector('[data-preview="cash_out"]').textContent = rupiah(preview.cash_or_bank_out || 0);
                 el.preview.querySelector('[data-preview="asset_increase"]').textContent = rupiah(preview.fixed_asset_increase || 0);
                 el.preview.querySelector('[data-preview="monthly"]').textContent = rupiah(preview.monthly_depreciation || 0);
@@ -372,18 +397,21 @@
 
             const buildLocalPreview = () => {
                 if (!el.form) return;
-                const price = Number(el.form.elements.purchase_price.value || 0);
-                const residual = Math.min(Number(el.form.elements.residual_value.value || 0), price);
+                const unitPrice = Number(el.form.elements.purchase_price.value || 0);
+                const quantity = Math.max(1, Number(el.form.elements.quantity.value || 1));
+                const total = unitPrice * quantity;
+                const residual = Math.min(Number(el.form.elements.residual_value.value || 0), total);
                 const months = Number(el.form.elements.useful_life_months.value || 0);
                 const method = el.form.elements.payment_method.value || 'unposted';
-                const monthly = months > 0 ? Math.max(0, price - residual) / months : 0;
+                const monthly = months > 0 ? Math.max(0, total - residual) / months : 0;
                 renderPreview({
-                    cash_or_bank_out: ['cash', 'bank'].includes(method) ? price : 0,
-                    fixed_asset_increase: price,
-                    payable_increase: method === 'payable' ? price : 0,
+                    purchase_total: total,
+                    cash_or_bank_out: ['cash', 'bank'].includes(method) ? total : 0,
+                    fixed_asset_increase: total,
+                    payable_increase: method === 'payable' ? total : 0,
                     monthly_depreciation: monthly,
                     annual_depreciation: monthly * 12,
-                    book_value_after_12_months: Math.max(residual, price - (monthly * 12)),
+                    book_value_after_12_months: Math.max(residual, total - (monthly * 12)),
                 });
             };
 
@@ -398,7 +426,7 @@
             };
 
             const renderStats = () => {
-                const activeAssets = assets.filter((asset) => asset.status !== 'retired' && asset.status !== 'lost');
+                const activeAssets = assets.filter((asset) => !['disposed', 'sold', 'lost'].includes(asset.status));
                 const sum = (key) => activeAssets.reduce((total, asset) => total + Number(asset[key] || 0), 0);
                 el.stats.querySelector('[data-stat="count"]').textContent = activeAssets.length;
                 el.stats.querySelector('[data-stat="purchase"]').textContent = rupiah(sum('purchase_price'));
@@ -419,6 +447,9 @@
                                 <span class="material-symbols-outlined text-[18px]">payments</span>
                             </button>
                         ` : ''}
+                        <button class="flex size-8 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100" type="button" data-action="edit" data-id="${asset.id}" title="Edit aset">
+                            <span class="material-symbols-outlined text-[18px]">edit</span>
+                        </button>
                         <button class="flex size-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50" type="button" data-action="maintenance" data-id="${asset.id}" title="Catat maintenance">
                             <span class="material-symbols-outlined text-[18px]">build</span>
                         </button>
@@ -448,6 +479,7 @@
                             <td class="px-4 py-3">
                                 <div class="font-black text-slate-950 dark:text-white">${asset.name || '-'}</div>
                                 <div class="text-xs font-semibold text-slate-500">${asset.asset_code || '-'} - ${labelMaps.status[asset.status] || asset.status || '-'}</div>
+                                <div class="mt-1 text-xs text-slate-500">${Number(asset.quantity || 1).toLocaleString('id-ID')} unit x ${rupiah(asset.unit_price || asset.purchase_price || 0)}</div>
                             </td>
                             <td class="px-4 py-3 text-slate-600 dark:text-slate-300">${labelMaps.asset_category[asset.asset_category] || asset.asset_category || '-'}</td>
                             <td class="px-4 py-3 text-right font-bold">${rupiah(asset.book_value)}</td>
@@ -503,6 +535,46 @@
                 el.paymentPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
             };
 
+            const resetAssetFormMode = () => {
+                if (!el.form) return;
+                el.form.reset();
+                el.form.elements.asset_id.value = '';
+                el.form.elements.useful_life_months.value = 48;
+                el.form.elements.quantity.value = 1;
+                el.form.elements.residual_value.value = 0;
+                el.form.elements.payment_method.value = 'cash';
+                el.formTitle.textContent = 'Catat Aset Baru';
+                el.formSubtitle.textContent = 'Gunakan untuk aset bernilai besar atau umur pakai panjang, bukan untuk bahan habis pakai.';
+                el.submitLabel.textContent = 'Simpan Aset';
+                el.cancelWrap.classList.add('hidden');
+                el.cancelWrap.classList.remove('flex');
+                buildLocalPreview();
+            };
+
+            const openEditForm = (asset) => {
+                if (!el.form) return;
+                el.form.elements.asset_id.value = asset.id || '';
+                el.form.elements.asset_code.value = asset.asset_code || '';
+                el.form.elements.name.value = asset.name || '';
+                el.form.elements.asset_category.value = asset.asset_category || 'other';
+                el.form.elements.purchase_price.value = Number(asset.unit_price || asset.purchase_price || 0);
+                el.form.elements.quantity.value = Number(asset.quantity || 1);
+                el.form.elements.payment_method.value = asset.payment_method || 'unposted';
+                el.form.elements.purchase_date.value = asset.purchase_date || '';
+                el.form.elements.useful_life_months.value = Number(asset.useful_life_months || 0);
+                el.form.elements.residual_value.value = Number(asset.residual_value || 0);
+                el.form.elements.condition.value = asset.condition || 'good';
+                el.form.elements.next_maintenance_at.value = asset.next_maintenance_at || '';
+                el.form.elements.notes.value = asset.notes || '';
+                el.formTitle.textContent = 'Edit Aset';
+                el.formSubtitle.textContent = `${asset.name || 'Aset'} - data nilai hanya bisa diubah sebelum ada jurnal/depresiasi/pembayaran.`;
+                el.submitLabel.textContent = 'Update Aset';
+                el.cancelWrap.classList.remove('hidden');
+                el.cancelWrap.classList.add('flex');
+                buildLocalPreview();
+                el.create?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            };
+
             const loadAssets = async () => {
                 el.table.innerHTML = '<tr><td class="px-4 py-8 text-center text-sm text-slate-500" colspan="7">Memuat aset...</td></tr>';
                 const payload = await apiJson('/api/v1/fixed-assets');
@@ -519,6 +591,11 @@
 
                 if (button.dataset.action === 'payment') {
                     openPaymentPanel(asset);
+                    return;
+                }
+
+                if (button.dataset.action === 'edit') {
+                    openEditForm(asset);
                     return;
                 }
 
@@ -572,7 +649,7 @@
             el.refresh?.addEventListener('click', () => loadAssets().catch((error) => showAlert(error.message, 'error')));
             el.filter?.addEventListener('change', renderTable);
             document.querySelector('[data-scroll-create]')?.addEventListener('click', () => el.create?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-            ['purchase_price', 'residual_value', 'useful_life_months', 'payment_method'].forEach((name) => {
+            ['purchase_price', 'quantity', 'residual_value', 'useful_life_months', 'payment_method'].forEach((name) => {
                 el.form?.elements[name]?.addEventListener('input', buildLocalPreview);
                 el.form?.elements[name]?.addEventListener('change', buildLocalPreview);
             });
@@ -580,6 +657,7 @@
                 el.paymentPanel?.classList.add('hidden');
                 selectedPaymentAsset = null;
             });
+            document.querySelector('[data-asset-cancel]')?.addEventListener('click', resetAssetFormMode);
             el.paymentForm?.elements.amount?.addEventListener('input', renderPaymentPreview);
             el.paymentForm?.addEventListener('submit', async (event) => {
                 event.preventDefault();
@@ -611,17 +689,15 @@
                 const submit = event.submitter;
                 try {
                     await window.PosUi.runWithSubmitGuard(submit, async () => {
-                        await apiJson('/api/v1/fixed-assets', {
-                            method: 'POST',
+                        const assetId = el.form.elements.asset_id.value;
+                        await apiJson(assetId ? `/api/v1/fixed-assets/${assetId}` : '/api/v1/fixed-assets', {
+                            method: assetId ? 'PUT' : 'POST',
                             body: JSON.stringify(serializeForm(el.form)),
                         });
                     });
-                    el.form.reset();
-                    el.form.elements.useful_life_months.value = 48;
-                    el.form.elements.residual_value.value = 0;
-                    el.form.elements.payment_method.value = 'cash';
-                    buildLocalPreview();
-                    showAlert('Aset tetap berhasil dicatat.');
+                    const wasEdit = Boolean(el.form.elements.asset_id.value);
+                    resetAssetFormMode();
+                    showAlert(wasEdit ? 'Aset tetap berhasil diperbarui.' : 'Aset tetap berhasil dicatat.');
                     await loadAssets();
                 } catch (error) {
                     showAlert(error.message, 'error');

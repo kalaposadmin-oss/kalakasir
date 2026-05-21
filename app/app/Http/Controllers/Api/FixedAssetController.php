@@ -57,13 +57,15 @@ class FixedAssetController extends Controller
 
         $payload = $request->validate([
             'purchase_price' => ['required', 'numeric', 'min:0'],
+            'quantity' => ['nullable', 'numeric', 'min:0.0001', 'max:999999999'],
+            'unit_price' => ['nullable', 'numeric', 'min:0'],
             'residual_value' => ['nullable', 'numeric', 'min:0'],
             'useful_life_months' => ['nullable', 'integer', 'min:0', 'max:600'],
             'payment_method' => ['nullable', Rule::in(self::PAYMENT_METHODS)],
             'payment_account_id' => ['nullable', 'uuid'],
         ]);
 
-        $purchasePrice = (float) $payload['purchase_price'];
+        [$quantity, $unitPrice, $purchasePrice] = $this->normalizePurchaseAmounts($payload);
         $residualValue = min((float) ($payload['residual_value'] ?? 0), $purchasePrice);
         $usefulLifeMonths = (int) ($payload['useful_life_months'] ?? 0);
         $monthlyDepreciation = $usefulLifeMonths > 0
@@ -72,6 +74,9 @@ class FixedAssetController extends Controller
 
         return response()->json([
             'preview' => array_merge($this->buildPreview($purchasePrice, $residualValue, $usefulLifeMonths, $payload['payment_method'] ?? 'unposted'), [
+                'quantity' => $quantity,
+                'unit_price' => $unitPrice,
+                'purchase_total' => $purchasePrice,
                 'monthly_depreciation' => $monthlyDepreciation,
                 'annual_depreciation' => round($monthlyDepreciation * 12, 2),
                 'book_value_after_12_months' => max($residualValue, round($purchasePrice - ($monthlyDepreciation * 12), 2)),
@@ -98,6 +103,8 @@ class FixedAssetController extends Controller
             'serial_number' => ['nullable', 'string', 'max:120'],
             'purchase_date' => ['nullable', 'date'],
             'purchase_price' => ['nullable', 'numeric', 'min:0'],
+            'quantity' => ['nullable', 'numeric', 'min:0.0001', 'max:999999999'],
+            'unit_price' => ['nullable', 'numeric', 'min:0'],
             'residual_value' => ['nullable', 'numeric', 'min:0'],
             'useful_life_months' => ['nullable', 'integer', 'min:0', 'max:600'],
             'depreciation_method' => ['nullable', Rule::in(FixedAsset::DEPRECIATION_METHODS)],
@@ -108,7 +115,7 @@ class FixedAssetController extends Controller
             'notes' => ['nullable', 'string'],
         ]);
 
-        $purchasePrice = (float) ($payload['purchase_price'] ?? 0);
+        [$quantity, $unitPrice, $purchasePrice] = $this->normalizePurchaseAmounts($payload);
         $residualValue = min((float) ($payload['residual_value'] ?? 0), $purchasePrice);
         $method = (string) ($payload['depreciation_method'] ?? 'straight_line');
         $usefulLifeMonths = (int) ($payload['useful_life_months'] ?? 0);
@@ -121,7 +128,7 @@ class FixedAssetController extends Controller
             ], 422);
         }
 
-        $asset = DB::transaction(function () use ($tenantId, $payload, $purchasePrice, $residualValue, $usefulLifeMonths, $method, $paymentMethod, $request) {
+        $asset = DB::transaction(function () use ($tenantId, $payload, $quantity, $unitPrice, $purchasePrice, $residualValue, $usefulLifeMonths, $method, $paymentMethod, $request) {
             $defaults = $this->accountingDefaults($tenantId, $request->user()?->id);
             $paymentAccountId = $this->resolvePaymentAccountId($tenantId, $paymentMethod, $payload['payment_account_id'] ?? null, $defaults);
 
@@ -130,6 +137,8 @@ class FixedAssetController extends Controller
                 'asset_code' => $payload['asset_code'],
                 'name' => $payload['name'],
                 'asset_category' => $payload['asset_category'] ?? 'equipment',
+                'quantity' => $quantity,
+                'unit_price' => $unitPrice,
                 'location_id' => $payload['location_id'] ?? null,
                 'supplier_id' => $payload['supplier_id'] ?? null,
                 'payment_method' => $paymentMethod,
@@ -168,7 +177,11 @@ class FixedAssetController extends Controller
 
         return response()->json([
             'asset' => $this->mapAsset($asset),
-            'preview' => $this->buildPreview($purchasePrice, $residualValue, $usefulLifeMonths, $paymentMethod),
+            'preview' => array_merge($this->buildPreview($purchasePrice, $residualValue, $usefulLifeMonths, $paymentMethod), [
+                'quantity' => $quantity,
+                'unit_price' => $unitPrice,
+                'purchase_total' => $purchasePrice,
+            ]),
         ], 201);
     }
 
@@ -203,6 +216,92 @@ class FixedAssetController extends Controller
                 ->where('fixed_asset_id', $assetRow->id)
                 ->orderByDesc('payment_date')
                 ->get(),
+        ]);
+    }
+
+    public function update(Request $request, string $asset)
+    {
+        $tenantId = TenantContext::id();
+        if (! $tenantId) {
+            return response()->json(['message' => 'Tenant tidak ditemukan.'], 400);
+        }
+
+        $assetRow = $this->resolveAsset($tenantId, $asset);
+
+        $payload = $request->validate([
+            'asset_code' => ['required', 'string', 'max:80', Rule::unique('fixed_assets', 'asset_code')->where('tenant_id', $tenantId)->ignore($assetRow->id)],
+            'name' => ['required', 'string', 'max:150'],
+            'asset_category' => ['nullable', 'string', 'max:80'],
+            'location_id' => ['nullable', 'uuid', Rule::exists('locations', 'id')->where('tenant_id', $tenantId)],
+            'supplier_id' => ['nullable', 'uuid', Rule::exists('suppliers', 'id')->where('tenant_id', $tenantId)],
+            'serial_number' => ['nullable', 'string', 'max:120'],
+            'purchase_date' => ['nullable', 'date'],
+            'purchase_price' => ['nullable', 'numeric', 'min:0'],
+            'quantity' => ['nullable', 'numeric', 'min:0.0001', 'max:999999999'],
+            'unit_price' => ['nullable', 'numeric', 'min:0'],
+            'residual_value' => ['nullable', 'numeric', 'min:0'],
+            'useful_life_months' => ['nullable', 'integer', 'min:0', 'max:600'],
+            'depreciation_method' => ['nullable', Rule::in(FixedAsset::DEPRECIATION_METHODS)],
+            'condition' => ['nullable', Rule::in(FixedAsset::CONDITIONS)],
+            'status' => ['nullable', Rule::in(FixedAsset::STATUSES)],
+            'warranty_until' => ['nullable', 'date'],
+            'next_maintenance_at' => ['nullable', 'date'],
+            'notes' => ['nullable', 'string'],
+        ]);
+
+        [$quantity, $unitPrice, $purchasePrice] = $this->normalizePurchaseAmounts($payload);
+        $residualValue = min((float) ($payload['residual_value'] ?? 0), $purchasePrice);
+        $usefulLifeMonths = (int) ($payload['useful_life_months'] ?? 0);
+        $method = (string) ($payload['depreciation_method'] ?? $assetRow->depreciation_method ?? 'straight_line');
+
+        if ($method === 'straight_line' && $purchasePrice > 0 && $usefulLifeMonths <= 0) {
+            return response()->json([
+                'message' => 'Umur pakai wajib diisi untuk aset dengan depresiasi straight line.',
+                'errors' => ['useful_life_months' => ['Umur pakai wajib diisi.']],
+            ], 422);
+        }
+
+        $financialChanged = $this->assetFinancialFieldsChanged($assetRow, $quantity, $unitPrice, $purchasePrice, $residualValue, $usefulLifeMonths, $method);
+        $hasFinancialHistory = filled($assetRow->purchase_journal_entry_id)
+            || (float) $assetRow->accumulated_depreciation > 0
+            || (float) $assetRow->liability_paid_amount > 0;
+
+        if ($financialChanged && $hasFinancialHistory) {
+            return response()->json([
+                'message' => 'Nilai pembelian, jumlah, umur pakai, dan metode depresiasi tidak bisa diubah karena aset sudah punya jurnal/depresiasi/pembayaran. Ubah data umum saja atau buat penyesuaian akuntansi.',
+            ], 422);
+        }
+
+        $assetRow->forceFill([
+            'asset_code' => $payload['asset_code'],
+            'name' => $payload['name'],
+            'asset_category' => $payload['asset_category'] ?? $assetRow->asset_category,
+            'quantity' => $financialChanged ? $quantity : $assetRow->quantity,
+            'unit_price' => $financialChanged ? $unitPrice : $assetRow->unit_price,
+            'location_id' => $payload['location_id'] ?? null,
+            'supplier_id' => $payload['supplier_id'] ?? null,
+            'serial_number' => $payload['serial_number'] ?? null,
+            'purchase_date' => $payload['purchase_date'] ?? null,
+            'purchase_price' => $financialChanged ? $purchasePrice : $assetRow->purchase_price,
+            'residual_value' => $financialChanged ? $residualValue : $assetRow->residual_value,
+            'useful_life_months' => $financialChanged ? $usefulLifeMonths : $assetRow->useful_life_months,
+            'depreciation_method' => $financialChanged ? $method : $assetRow->depreciation_method,
+            'book_value' => $financialChanged ? $purchasePrice : $assetRow->book_value,
+            'condition' => $payload['condition'] ?? $assetRow->condition,
+            'status' => $payload['status'] ?? $assetRow->status,
+            'warranty_until' => $payload['warranty_until'] ?? null,
+            'next_maintenance_at' => $payload['next_maintenance_at'] ?? null,
+            'notes' => $payload['notes'] ?? null,
+            'updated_by' => $request->user()?->id,
+        ])->save();
+
+        return response()->json([
+            'asset' => $this->mapAsset($assetRow->fresh()),
+            'preview' => array_merge($this->buildPreview((float) $assetRow->purchase_price, (float) $assetRow->residual_value, (int) $assetRow->useful_life_months, (string) $assetRow->payment_method), [
+                'quantity' => (float) $assetRow->quantity,
+                'unit_price' => (float) $assetRow->unit_price,
+                'purchase_total' => (float) $assetRow->purchase_price,
+            ]),
         ]);
     }
 
@@ -421,6 +520,8 @@ class FixedAssetController extends Controller
             'asset_code' => $asset->asset_code,
             'name' => $asset->name,
             'asset_category' => $asset->asset_category,
+            'quantity' => (float) ($asset->quantity ?? 1),
+            'unit_price' => (float) ($asset->unit_price ?? $asset->purchase_price),
             'location_id' => $asset->location_id,
             'supplier_id' => $asset->supplier_id,
             'payment_method' => $asset->payment_method,
@@ -711,6 +812,27 @@ class FixedAssetController extends Controller
             'annual_depreciation' => round($monthlyDepreciation * 12, 2),
             'book_value_after_12_months' => max($residualValue, round($purchasePrice - ($monthlyDepreciation * 12), 2)),
         ];
+    }
+
+    private function normalizePurchaseAmounts(array $payload): array
+    {
+        $quantity = round(max(0.0001, (float) ($payload['quantity'] ?? 1)), 4);
+        $unitPrice = array_key_exists('unit_price', $payload)
+            ? (float) $payload['unit_price']
+            : (float) ($payload['purchase_price'] ?? 0);
+        $purchasePrice = round($quantity * max(0, $unitPrice), 2);
+
+        return [$quantity, round(max(0, $unitPrice), 2), $purchasePrice];
+    }
+
+    private function assetFinancialFieldsChanged(FixedAsset $asset, float $quantity, float $unitPrice, float $purchasePrice, float $residualValue, int $usefulLifeMonths, string $method): bool
+    {
+        return round((float) ($asset->quantity ?? 1), 4) !== round($quantity, 4)
+            || round((float) ($asset->unit_price ?? $asset->purchase_price), 2) !== round($unitPrice, 2)
+            || round((float) $asset->purchase_price, 2) !== round($purchasePrice, 2)
+            || round((float) $asset->residual_value, 2) !== round($residualValue, 2)
+            || (int) $asset->useful_life_months !== $usefulLifeMonths
+            || (string) $asset->depreciation_method !== $method;
     }
 
     private function assetPayableRemaining(FixedAsset $asset): float

@@ -123,9 +123,28 @@ class ChartOfAccountsTenantScopingTest extends TestCase
         $storeResponse->assertStatus(422)
             ->assertJsonValidationErrors(['parent_id']);
 
+        $bankStoreResponse = $this->withHeaders($this->tenantHeaders($tenant->id))
+            ->postJson('/api/v1/chart-of-accounts', [
+                'code' => '1103',
+                'name' => 'Bank BCA',
+                'type' => 'asset',
+                'parent_id' => $tenantParentId,
+                'bank_name' => 'BCA',
+                'bank_account_number' => '1234567890',
+                'bank_account_name' => 'Levia Bakery',
+            ]);
+
+        $bankStoreResponse->assertCreated()
+            ->assertJsonPath('account.bank_name', 'BCA')
+            ->assertJsonPath('account.bank_account_number', '1234567890')
+            ->assertJsonPath('account.bank_account_name', 'Levia Bakery');
+
         $updateResponse = $this->withHeaders($this->tenantHeaders($tenant->id))
             ->patchJson('/api/v1/chart-of-accounts/'.$tenantCashId, [
                 'name' => 'Kas Update',
+                'bank_name' => 'Kas Toko',
+                'bank_account_number' => 'KAS-UTAMA',
+                'bank_account_name' => 'Levia',
                 'parent_id' => $foreignParentId,
             ]);
 
@@ -136,5 +155,12 @@ class ChartOfAccountsTenantScopingTest extends TestCase
             ->getJson('/api/v1/chart-of-accounts/'.$foreignParentId);
 
         $showResponse->assertStatus(404);
+
+        $bankShowResponse = $this->withHeaders($this->tenantHeaders($tenant->id))
+            ->getJson('/api/v1/chart-of-accounts/'.$bankStoreResponse->json('account.id'));
+
+        $bankShowResponse->assertOk()
+            ->assertJsonPath('account.bank_name', 'BCA')
+            ->assertJsonPath('account.bank_account_number', '1234567890');
     }
 }

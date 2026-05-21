@@ -60,6 +60,20 @@
                 <a class="text-xs font-semibold text-primary" href="{{ $purchaseIndexPortalPrefix.'/receiving' }}">Buka Receiving</a>
             </div>
         </div>
+        <section class="grid grid-cols-3 gap-2" id="purchase-summary">
+            <div class="rounded-xl border border-slate-200 bg-white px-3 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total PO</p>
+                <p class="mt-1 text-sm font-black text-slate-950 dark:text-white" data-summary="po">0</p>
+            </div>
+            <div class="rounded-xl border border-slate-200 bg-white px-3 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Item</p>
+                <p class="mt-1 text-sm font-black text-slate-950 dark:text-white" data-summary="items">0</p>
+            </div>
+            <div class="rounded-xl border border-orange-200 bg-orange-50 px-3 py-3 shadow-sm dark:border-orange-900/40 dark:bg-orange-950/20">
+                <p class="text-[10px] font-bold uppercase tracking-wider text-orange-700 dark:text-orange-300">Nilai</p>
+                <p class="mt-1 text-sm font-black text-orange-700 dark:text-orange-300" data-summary="value">Rp0</p>
+            </div>
+        </section>
         <div id="purchase-list" class="space-y-3 pb-24"></div>
     </div>
 
@@ -80,6 +94,7 @@
                 count: document.getElementById('purchase-count'),
                 list: document.getElementById('purchase-list'),
                 search: document.getElementById('purchase-search'),
+                summary: document.getElementById('purchase-summary'),
             };
 
             const state = {
@@ -92,6 +107,16 @@
                 month: 'short',
                 year: 'numeric',
             }).format(new Date(value));
+
+            const rupiah = (value) => new Intl.NumberFormat('id-ID', {
+                style: 'currency',
+                currency: 'IDR',
+                maximumFractionDigits: 0,
+            }).format(Number(value || 0));
+
+            const formatQty = (value) => new Intl.NumberFormat('id-ID', {
+                maximumFractionDigits: 2,
+            }).format(Number(value || 0));
 
             const statusClassMap = {
                 draft: 'bg-slate-100 text-slate-600',
@@ -118,6 +143,9 @@
                 });
 
                 el.count.textContent = `${rows.length} PO`;
+                el.summary.querySelector('[data-summary="po"]').textContent = rows.length;
+                el.summary.querySelector('[data-summary="items"]').textContent = rows.reduce((total, purchase) => total + Number(purchase.item_count || 0), 0);
+                el.summary.querySelector('[data-summary="value"]').textContent = rupiah(rows.reduce((total, purchase) => total + Number(purchase.total || 0), 0));
                 el.list.innerHTML = '';
 
                 if (!rows.length) {
@@ -147,6 +175,20 @@
                         <div class="mt-3 flex items-center justify-between text-xs text-slate-500">
                             <span>${formatDate(purchase.created_at)}</span>
                             <span class="font-semibold text-primary">Lihat Detail</span>
+                        </div>
+                        <div class="mt-3 grid grid-cols-3 gap-2 rounded-xl bg-slate-50 p-2 text-xs dark:bg-slate-800/60">
+                            <div>
+                                <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Item</p>
+                                <p class="mt-1 font-black text-slate-900 dark:text-white">${Number(purchase.item_count || 0).toLocaleString('id-ID')}</p>
+                            </div>
+                            <div>
+                                <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Qty</p>
+                                <p class="mt-1 font-black text-slate-900 dark:text-white">${formatQty(purchase.total_item_qty || 0)}</p>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total</p>
+                                <p class="mt-1 font-black text-primary">${rupiah(purchase.total || 0)}</p>
+                            </div>
                         </div>
                     `;
                     el.list.appendChild(row);

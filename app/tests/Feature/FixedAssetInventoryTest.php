@@ -178,6 +178,124 @@ class FixedAssetInventoryTest extends TestCase
         ));
     }
 
+    public function test_asset_purchase_quantity_uses_total_cost_for_book_value_and_depreciation(): void
+    {
+        [$tenant] = $this->bootApiActor('Owner', 'owner+fixed-assets-qty@example.test');
+
+        $previewResponse = $this->postJson('/api/v1/fixed-assets/preview', [
+            'purchase_price' => 2500000,
+            'quantity' => 2,
+            'residual_value' => 1000000,
+            'useful_life_months' => 40,
+            'payment_method' => 'payable',
+        ], $this->tenantHeaders($tenant->id));
+
+        $previewResponse->assertOk()
+            ->assertJsonPath('preview.quantity', 2)
+            ->assertJsonPath('preview.unit_price', 2500000)
+            ->assertJsonPath('preview.purchase_total', 5000000)
+            ->assertJsonPath('preview.payable_increase', 5000000)
+            ->assertJsonPath('preview.monthly_depreciation', 100000);
+
+        $createResponse = $this->postJson('/api/v1/fixed-assets', [
+            'asset_code' => 'AST-SHW-002',
+            'name' => 'Showcase Pendingin',
+            'asset_category' => 'display_equipment',
+            'purchase_date' => '2026-02-18',
+            'purchase_price' => 2500000,
+            'quantity' => 2,
+            'residual_value' => 1000000,
+            'useful_life_months' => 40,
+            'payment_method' => 'unposted',
+        ], $this->tenantHeaders($tenant->id));
+
+        $createResponse->assertCreated()
+            ->assertJsonPath('asset.quantity', 2)
+            ->assertJsonPath('asset.unit_price', 2500000)
+            ->assertJsonPath('asset.purchase_price', 5000000)
+            ->assertJsonPath('asset.book_value', 5000000)
+            ->assertJsonPath('preview.monthly_depreciation', 100000);
+    }
+
+    public function test_asset_can_be_edited_after_save_with_financial_guardrails(): void
+    {
+        [$tenant, $user] = $this->bootApiActor('Owner', 'owner+fixed-assets-edit@example.test');
+        app(TenantDefaultAccountingSetupService::class)->ensure((string) $tenant->id, (string) $user->id);
+
+        $createResponse = $this->postJson('/api/v1/fixed-assets', [
+            'asset_code' => 'AST-EDT-001',
+            'name' => 'Rak Cooling',
+            'asset_category' => 'cooling_equipment',
+            'purchase_price' => 1000000,
+            'quantity' => 1,
+            'residual_value' => 0,
+            'useful_life_months' => 20,
+            'payment_method' => 'unposted',
+        ], $this->tenantHeaders($tenant->id));
+
+        $assetId = (string) $createResponse->json('asset.id');
+
+        $updateResponse = $this->putJson('/api/v1/fixed-assets/'.$assetId, [
+            'asset_code' => 'AST-EDT-001',
+            'name' => 'Rak Cooling Display',
+            'asset_category' => 'display_equipment',
+            'purchase_price' => 1200000,
+            'quantity' => 2,
+            'residual_value' => 400000,
+            'useful_life_months' => 40,
+            'depreciation_method' => 'straight_line',
+            'condition' => 'good',
+            'status' => 'active',
+            'notes' => 'Dipindah ke area display.',
+        ], $this->tenantHeaders($tenant->id));
+
+        $updateResponse->assertOk()
+            ->assertJsonPath('asset.name', 'Rak Cooling Display')
+            ->assertJsonPath('asset.quantity', 2)
+            ->assertJsonPath('asset.unit_price', 1200000)
+            ->assertJsonPath('asset.purchase_price', 2400000)
+            ->assertJsonPath('asset.book_value', 2400000);
+
+        $this->postJson('/api/v1/fixed-assets/'.$assetId.'/depreciation', [
+            'period_date' => '2026-03-01',
+        ], $this->tenantHeaders($tenant->id))->assertCreated();
+
+        $blockedResponse = $this->putJson('/api/v1/fixed-assets/'.$assetId, [
+            'asset_code' => 'AST-EDT-001',
+            'name' => 'Rak Cooling Display Revisi',
+            'asset_category' => 'display_equipment',
+            'purchase_price' => 1300000,
+            'quantity' => 2,
+            'residual_value' => 400000,
+            'useful_life_months' => 40,
+            'depreciation_method' => 'straight_line',
+            'condition' => 'good',
+            'status' => 'active',
+        ], $this->tenantHeaders($tenant->id));
+
+        $blockedResponse->assertUnprocessable();
+
+        $safeResponse = $this->putJson('/api/v1/fixed-assets/'.$assetId, [
+            'asset_code' => 'AST-EDT-001',
+            'name' => 'Rak Cooling Display Revisi',
+            'asset_category' => 'display_equipment',
+            'purchase_price' => 1200000,
+            'quantity' => 2,
+            'residual_value' => 400000,
+            'useful_life_months' => 40,
+            'depreciation_method' => 'straight_line',
+            'condition' => 'needs_repair',
+            'status' => 'maintenance',
+            'notes' => 'Perlu cek pintu.',
+        ], $this->tenantHeaders($tenant->id));
+
+        $safeResponse->assertOk()
+            ->assertJsonPath('asset.name', 'Rak Cooling Display Revisi')
+            ->assertJsonPath('asset.condition', 'needs_repair')
+            ->assertJsonPath('asset.status', 'maintenance')
+            ->assertJsonPath('asset.purchase_price', 2400000);
+    }
+
     public function test_payable_asset_purchase_can_be_paid_from_cash_and_reduces_liability(): void
     {
         [$tenant, $user] = $this->bootApiActor('Owner', 'owner+fixed-assets-payable@example.test');

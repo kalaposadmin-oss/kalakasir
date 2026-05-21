@@ -17,7 +17,7 @@ class BankAccountsController extends Controller
 
         return response()->json([
             'parent' => $parent ? $parent->only(['id', 'code', 'name']) : null,
-            'accounts' => $accounts->map(fn ($account) => $account->only(['id', 'code', 'name', 'parent_id'])),
+            'accounts' => $accounts->map(fn ($account) => $account->only(['id', 'code', 'name', 'bank_name', 'bank_account_number', 'bank_account_name', 'parent_id'])),
         ]);
     }
 
@@ -71,7 +71,7 @@ class BankAccountsController extends Controller
             });
 
         return response()->json([
-            'account' => $accountRow->only(['id', 'code', 'name']),
+            'account' => $accountRow->only(['id', 'code', 'name', 'bank_name', 'bank_account_number', 'bank_account_name']),
             'transactions' => $transactions,
         ]);
     }
@@ -121,7 +121,7 @@ class BankAccountsController extends Controller
             ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
             ->where('parent_id', $parent->id)
             ->orderBy('code')
-            ->get(['id', 'code', 'name', 'parent_id'])
+            ->get(['id', 'code', 'name', 'bank_name', 'bank_account_number', 'bank_account_name', 'parent_id'])
             ->filter(fn ($account) => preg_match('/^11\d+$/', (string) ($account->code ?? '')));
 
         if ($accounts->isEmpty()) {

@@ -22,6 +22,7 @@ use App\Http\Controllers\Api\LockPeriodController;
 use App\Http\Controllers\Api\LoyaltyController;
 use App\Http\Controllers\Api\MaterialController;
 use App\Http\Controllers\Api\ObservabilityController;
+use App\Http\Controllers\Api\PaymentSettlementController;
 use App\Http\Controllers\Api\PurchaseController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\ProductionBatchController;
@@ -60,6 +61,9 @@ Route::prefix('v1')
         Route::get('branches/{branch}', [BranchController::class, 'show']);
         Route::get('bank-accounts', [BankAccountsController::class, 'index'])->middleware('feature_gate:finance.bank_accounts');
         Route::get('bank-accounts/{account}/transactions', [BankAccountsController::class, 'transactions'])->middleware('feature_gate:finance.bank_accounts');
+        Route::get('payment-settlements/pending', [PaymentSettlementController::class, 'pending'])->middleware(['role:cashier,staff,warehouse,supervisor,admin,owner,superadmin', 'feature_gate:finance.bank_accounts']);
+        Route::get('payment-settlements', [PaymentSettlementController::class, 'index'])->middleware(['role:admin,owner,superadmin', 'feature_gate:finance.bank_accounts']);
+        Route::post('payment-settlements', [PaymentSettlementController::class, 'store'])->middleware(['role:admin,owner,superadmin', 'feature_gate:finance.bank_accounts']);
         Route::get('cashiers', [CashierController::class, 'index']);
         Route::get('categories', [CategoryController::class, 'index'])->middleware('feature_gate:product.category');
         Route::get('categories/{category}', [CategoryController::class, 'show'])->middleware('feature_gate:product.category');
@@ -88,6 +92,7 @@ Route::prefix('v1')
         Route::post('fixed-assets/preview', [FixedAssetController::class, 'preview'])->middleware(['role:admin,owner,superadmin']);
         Route::post('fixed-assets', [FixedAssetController::class, 'store'])->middleware(['role:admin,owner,superadmin']);
         Route::get('fixed-assets/{asset}', [FixedAssetController::class, 'show'])->middleware(['role:warehouse,supervisor,admin,owner,superadmin']);
+        Route::put('fixed-assets/{asset}', [FixedAssetController::class, 'update'])->middleware(['role:admin,owner,superadmin']);
         Route::post('fixed-assets/{asset}/maintenance', [FixedAssetController::class, 'maintenance'])->middleware(['role:admin,owner,superadmin']);
         Route::post('fixed-assets/{asset}/depreciation', [FixedAssetController::class, 'depreciate'])->middleware(['role:admin,owner,superadmin']);
         Route::post('fixed-assets/{asset}/payments', [FixedAssetController::class, 'payment'])->middleware(['role:admin,owner,superadmin']);

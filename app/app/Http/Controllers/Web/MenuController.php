@@ -111,6 +111,7 @@ class MenuController extends Controller
                     ['label' => 'Laporan Persediaan', 'icon' => 'inventory_2', 'href' => $posOrBackoffice('/pos/inventory', '/backoffice/reports/inventory'), 'feature' => 'reports.inventory_view'],
                     ['label' => 'Kartu Stok', 'icon' => 'receipt_long', 'href' => $posOrBackoffice('/pos/inventory/stock-card', '/backoffice/reports/inventory/stock-card'), 'feature' => 'reports.inventory_stock_card'],
                     ['label' => 'Laporan Pembayaran', 'icon' => 'payments', 'href' => $posOrBackoffice('/pos/finance/summary', '/backoffice/finance/summary'), 'feature' => 'finance.summary_basic'],
+                    ['label' => 'Settlement QRIS', 'icon' => 'price_check', 'href' => $backofficeOnly('/backoffice/finance/payment-settlements'), 'feature' => 'finance.bank_accounts'],
                 ],
             ],
             'settings' => [

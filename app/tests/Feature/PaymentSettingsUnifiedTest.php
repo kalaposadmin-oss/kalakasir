@@ -32,6 +32,12 @@ class PaymentSettingsUnifiedTest extends TestCase
             ->where('code', '1102')
             ->firstOrFail();
 
+        $bankAccount->forceFill([
+            'bank_name' => 'BCA Bisnis',
+            'bank_account_number' => '9876543210',
+            'bank_account_name' => 'Levia Roti',
+        ])->save();
+
         $this->actingAs($user)
             ->withSession(['auth_portal' => 'backoffice'])
             ->post('/backoffice/settings/payment-settings', [
@@ -59,6 +65,45 @@ class PaymentSettingsUnifiedTest extends TestCase
         $this->assertSame('https://example.test/qris.png', $setting->qris_image_url);
         $this->assertTrue((bool) $setting->is_active);
         $this->assertTrue(Hash::check('1234', $user->fresh()->manager_pin_hash));
+    }
+
+    public function test_payment_settings_can_use_selected_bank_account_profile_when_customer_fields_are_empty(): void
+    {
+        [$tenant, $user] = $this->createWebActor('owner', 'payment-settings-bank-profile@example.test');
+
+        app(TenantDefaultAccountingSetupService::class)->ensure($tenant->id, $user->id);
+
+        $cashAccount = ChartOfAccount::query()
+            ->where('tenant_id', $tenant->id)
+            ->where('code', '1101')
+            ->firstOrFail();
+        $bankAccount = ChartOfAccount::query()
+            ->where('tenant_id', $tenant->id)
+            ->where('code', '1102')
+            ->firstOrFail();
+
+        $bankAccount->forceFill([
+            'bank_name' => 'Mandiri',
+            'bank_account_number' => '1400012345678',
+            'bank_account_name' => 'Kala Bakery',
+        ])->save();
+
+        $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->post('/backoffice/settings/payment-settings', [
+                'cash_account_id' => $cashAccount->id,
+                'bank_account_id' => $bankAccount->id,
+                'bank_name' => '',
+                'bank_account_number' => '',
+                'bank_account_name' => '',
+                'is_active' => '1',
+            ])
+            ->assertRedirect();
+
+        $setting = PaymentSetting::query()->where('tenant_id', $tenant->id)->firstOrFail();
+        $this->assertSame('Mandiri', $setting->bank_name);
+        $this->assertSame('1400012345678', $setting->bank_account_number);
+        $this->assertSame('Kala Bakery', $setting->bank_account_name);
     }
 
     private function createWebActor(string $role, string $email, string $name = 'Payment Owner'): array

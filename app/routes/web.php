@@ -475,6 +475,7 @@ Route::middleware(['canonical_portal_host:backoffice'])->group(function () {
         ->middleware('web_access:backoffice,admin|owner|superadmin');
     Route::get('/backoffice/settings/observability', [TenantViewController::class, 'show'])->defaults('view', 'observability')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,admin|owner|superadmin,settings.observability');
     Route::get('/backoffice/settings/chart-of-accounts', [TenantViewController::class, 'show'])->defaults('view', 'chart-of-accounts')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,admin|owner|superadmin,finance.bank_accounts');
+    Route::get('/backoffice/finance/payment-settlements', [TenantViewController::class, 'show'])->defaults('view', 'payment-settlements')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,admin|owner|superadmin,finance.bank_accounts');
     Route::get('/backoffice/settings/chart-of-accounts/{account}', [TenantViewController::class, 'showWithRouteParam'])
         ->defaults('view', 'chart-of-accounts-detail')
         ->defaults('routeParam', 'account')

@@ -194,7 +194,7 @@ class BackofficePageController extends Controller
                         ->orWhere('name', 'like', '%qris%');
                 })
                 ->orderBy('code')
-                ->get(['id', 'code', 'name', 'type', 'parent_id'])
+                ->get(['id', 'code', 'name', 'type', 'parent_id', 'bank_name', 'bank_account_number', 'bank_account_name'])
             : collect();
 
         return view('payment-settings', $this->routeContext->withTenant([
@@ -233,6 +233,11 @@ class BackofficePageController extends Controller
             ]);
         }
 
+        $selectedBankAccount = ChartOfAccount::query()
+            ->where('tenant_id', $tenantId)
+            ->where('id', $validated['bank_account_id'])
+            ->first();
+
         $accountMapping = AccountMapping::query()->where('tenant_id', $tenantId)->first();
         if ($accountMapping) {
             $accountMapping->forceFill([
@@ -255,9 +260,9 @@ class BackofficePageController extends Controller
         }
 
         $paymentSetting->forceFill([
-            'bank_name' => trim((string) ($validated['bank_name'] ?? '')) ?: null,
-            'bank_account_number' => trim((string) ($validated['bank_account_number'] ?? '')) ?: null,
-            'bank_account_name' => trim((string) ($validated['bank_account_name'] ?? '')) ?: null,
+            'bank_name' => trim((string) ($validated['bank_name'] ?? '')) ?: ($selectedBankAccount?->bank_name ?: $selectedBankAccount?->name),
+            'bank_account_number' => trim((string) ($validated['bank_account_number'] ?? '')) ?: ($selectedBankAccount?->bank_account_number ?: null),
+            'bank_account_name' => trim((string) ($validated['bank_account_name'] ?? '')) ?: ($selectedBankAccount?->bank_account_name ?: null),
             'admin_whatsapp_number' => trim((string) ($validated['admin_whatsapp_number'] ?? '')) ?: null,
             'qris_image_url' => trim((string) ($validated['qris_image_url'] ?? '')) ?: null,
             'payment_note' => trim((string) ($validated['payment_note'] ?? '')) ?: null,

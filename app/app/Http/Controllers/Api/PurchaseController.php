@@ -44,6 +44,18 @@ class PurchaseController extends Controller
                 $join->on('locations.id', '=', 'purchases.location_id')
                     ->on('locations.tenant_id', '=', 'purchases.tenant_id');
             })
+            ->leftJoinSub(
+                DB::table('purchase_items')
+                    ->select('tenant_id', 'purchase_id')
+                    ->selectRaw('count(*) as item_count')
+                    ->selectRaw('coalesce(sum(coalesce(purchase_qty, qty)), 0) as total_item_qty')
+                    ->groupBy('tenant_id', 'purchase_id'),
+                'purchase_item_summary',
+                function ($join) {
+                    $join->on('purchase_item_summary.purchase_id', '=', 'purchases.id')
+                        ->on('purchase_item_summary.tenant_id', '=', 'purchases.tenant_id');
+                }
+            )
             ->where('purchases.tenant_id', $tenantId)
             ->orderByDesc('purchases.created_at')
             ->orderByDesc('purchases.id')
@@ -66,6 +78,8 @@ class PurchaseController extends Controller
                 'purchases.created_at',
                 'suppliers.name as supplier_name',
                 'locations.name as location_name',
+                DB::raw('coalesce(purchase_item_summary.item_count, 0) as item_count'),
+                DB::raw('coalesce(purchase_item_summary.total_item_qty, 0) as total_item_qty'),
             ])))
             ->map(function ($purchase) use ($flowResolver, $tenantPurchaseMode) {
                 $subtotal = (float) ($purchase->subtotal ?? $purchase->total ?? 0);
@@ -82,6 +96,8 @@ class PurchaseController extends Controller
                     'tax_rate' => (float) ($purchase->tax_rate ?? 0),
                     'tax' => $tax,
                     'total' => (float) $purchase->total,
+                    'item_count' => (int) $purchase->item_count,
+                    'total_item_qty' => (float) $purchase->total_item_qty,
                     'status' => $purchase->status,
                     'payment_method' => $purchase->payment_method,
                     'cash_account_id' => $purchase->cash_account_id,
