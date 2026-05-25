@@ -7,8 +7,6 @@ use App\Support\TenantContext;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Str;
-use Throwable;
 use Symfony\Component\HttpFoundation\Response;
 
 class TenantResolver
@@ -19,32 +17,28 @@ class TenantResolver
             return $next($request);
         }
 
-        $requiresTenant = $request->is('api/*');
-
-        $tenant = $this->resolveTenant($request);
         $sanctumUser = config('auth.guards.sanctum') ? auth('sanctum')->user() : null;
         $authUser = $sanctumUser ?: $request->user();
+        $requiresTenant = $this->requiresTenant($request);
 
-        if ($requiresTenant && $authUser?->tenant_id) {
-            $userTenant = Tenant::query()->where('id', $authUser->tenant_id)->first();
+        $tenant = null;
 
-            if (! $userTenant) {
-                return response()->json([
-                    'code' => 'TENANT_NOT_RESOLVED',
-                    'message' => 'Tenant user tidak ditemukan.',
-                    'details' => [],
-                ], 400);
-            }
+        if ($authUser && $this->shouldResolveAuthenticatedTenant($request)) {
+            $tenant = $this->resolveAuthenticatedTenant($request, $authUser);
+        } elseif (! $authUser) {
+            $tenant = $this->resolveTenantFromRequest($request);
+        }
 
-            if ($tenant && (string) $tenant->id !== (string) $userTenant->id) {
-                return response()->json([
-                    'code' => 'TENANT_MISMATCH',
-                    'message' => 'Tenant context tidak sesuai dengan tenant user.',
-                    'details' => [],
-                ], 403);
-            }
+        if ($tenant instanceof Response) {
+            return $tenant;
+        }
 
-            $tenant = $userTenant;
+        if ($requiresTenant && $authUser && $this->userTenantIds($authUser) !== [] && ! $tenant) {
+            return response()->json([
+                'code' => 'TENANT_NOT_RESOLVED',
+                'message' => 'Tenant user tidak ditemukan.',
+                'details' => [],
+            ], 400);
         }
 
         if (! $tenant && $requiresTenant) {
@@ -68,7 +62,71 @@ class TenantResolver
         }
     }
 
-    private function resolveTenant(Request $request): ?Tenant
+    private function resolveAuthenticatedTenant(Request $request, mixed $user): Tenant|Response|null
+    {
+        if (! Schema::hasTable('tenants')) {
+            return null;
+        }
+
+        $allowedTenantIds = $this->userTenantIds($user);
+        $requestedTenantId = $request->header('X-Tenant-Id');
+
+        if ($requestedTenantId && ! in_array((string) $requestedTenantId, $allowedTenantIds, true)) {
+            return response()->json([
+                'code' => 'TENANT_MISMATCH',
+                'message' => 'Tenant context tidak sesuai dengan tenant user.',
+                'details' => [],
+            ], 403);
+        }
+
+        $tenantId = $allowedTenantIds[0] ?? null;
+
+        if (! $tenantId) {
+            return null;
+        }
+
+        return Tenant::query()->where('id', $tenantId)->first();
+    }
+
+    private function userTenantIds(mixed $user): array
+    {
+        $tenantIds = [
+            $user->current_tenant_id ?? null,
+            $user->tenant_id ?? null,
+        ];
+
+        return collect($tenantIds)
+            ->filter(fn ($tenantId) => filled($tenantId))
+            ->map(fn ($tenantId) => (string) $tenantId)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private function requiresTenant(Request $request): bool
+    {
+        return $request->is('api/*')
+            && ! $request->is('api/platform*')
+            && ! $request->is('api/v1/platform*');
+    }
+
+    private function shouldResolveAuthenticatedTenant(Request $request): bool
+    {
+        if ($request->is('api/platform*') || $request->is('api/v1/platform*')) {
+            return false;
+        }
+
+        if ($request->is('superadmin*') || $request->is('platform*')) {
+            return false;
+        }
+
+        return $this->requiresTenant($request)
+            || $request->is('pos*')
+            || $request->is('backoffice*')
+            || $request->is('admin*');
+    }
+
+    private function resolveTenantFromRequest(Request $request): ?Tenant
     {
         if (! Schema::hasTable('tenants')) {
             return null;
