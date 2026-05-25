@@ -1229,8 +1229,15 @@
                             <p class="text-[11px] text-slate-400" data-bom-variant-hint></p>
                         </div>
                         <div class="space-y-1.5">
-                            <label class="text-xs font-semibold text-slate-500">Qty per 1 resep</label>
-                            <input class="h-12 w-full rounded-xl border-slate-200 bg-white px-4 text-base text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" data-bom-qty type="number" min="0.0001" step="0.0001" value="${line.qty ?? ''}" placeholder="Contoh: 2" />
+                            <div class="flex items-center justify-between gap-3">
+                                <label class="text-xs font-semibold text-slate-500">Qty per 1 resep</label>
+                                <span class="hidden rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600 dark:bg-slate-700 dark:text-slate-200" data-bom-unit-badge></span>
+                            </div>
+                            <div class="relative">
+                                <input class="h-12 w-full rounded-xl border-slate-200 bg-white px-4 pr-24 text-base text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" data-bom-qty type="number" min="0.0001" step="0.0001" value="${line.qty ?? ''}" placeholder="Contoh: 2" />
+                                <span class="pointer-events-none absolute inset-y-0 right-4 hidden items-center text-xs font-bold text-slate-400" data-bom-unit-suffix></span>
+                            </div>
+                            <p class="text-[11px] text-slate-400" data-bom-unit-hint></p>
                         </div>
                     `;
 
@@ -1314,6 +1321,40 @@
                     }
 
                     return productDetailCache.get(targetId) || null;
+                };
+
+                const resolveBomUnitLabel = (unit) => {
+                    const unitLabel = String(unit || '').trim();
+                    return unitLabel !== '' ? unitLabel : 'unit';
+                };
+
+                const updateBomUnitHint = (row, productId, product = null) => {
+                    const badge = row.querySelector('[data-bom-unit-badge]');
+                    const suffix = row.querySelector('[data-bom-unit-suffix]');
+                    const hint = row.querySelector('[data-bom-unit-hint]');
+                    const selectedProduct = product || resolveBomProductDraft(productId);
+
+                    if (!badge || !suffix || !hint) {
+                        return;
+                    }
+
+                    if (!productId || !selectedProduct) {
+                        badge.classList.add('hidden');
+                        suffix.classList.add('hidden');
+                        suffix.classList.remove('flex');
+                        badge.textContent = '';
+                        suffix.textContent = '';
+                        hint.textContent = '';
+                        return;
+                    }
+
+                    const unitLabel = resolveBomUnitLabel(selectedProduct.unit);
+                    badge.textContent = unitLabel;
+                    suffix.textContent = unitLabel;
+                    hint.textContent = `Qty mengikuti satuan stok bahan: ${unitLabel}.`;
+                    badge.classList.remove('hidden');
+                    suffix.classList.remove('hidden');
+                    suffix.classList.add('flex');
                 };
 
                 const inspectBomItems = () => {
@@ -1443,6 +1484,7 @@
                     const hint = row.querySelector('[data-bom-variant-hint]');
 
                     if (!productId) {
+                        updateBomUnitHint(row, '');
                         wrap.classList.add('hidden');
                         variantSelect.innerHTML = '<option value="">Pilih variant</option>';
                         variantSelect.value = '';
@@ -1451,6 +1493,7 @@
                     }
 
                     const productDetail = await loadProductDetail(productId);
+                    updateBomUnitHint(row, productId, productDetail);
                     const variants = Array.isArray(productDetail?.product_variants) ? productDetail.product_variants : [];
 
                     if (!variants.length) {
@@ -1476,11 +1519,20 @@
                     hint.textContent = 'Raw material ini punya variants. Variant wajib dipilih eksplisit.';
                 };
 
-                const appendBomLine = async (line = {}) => {
+                const appendBomLine = async (line = {}, options = {}) => {
                     const row = createBomLineRow(line);
-                    el.bomLineList.appendChild(row);
+                    if (options.prepend) {
+                        el.bomLineList.prepend(row);
+                    } else {
+                        el.bomLineList.appendChild(row);
+                    }
                     await configureBomVariantField(row, line.product_id || '', line.product_variant_id || null);
                     updateBomLineCountHint();
+
+                    if (options.focus) {
+                        row.scrollIntoView({ block: 'start', behavior: 'smooth' });
+                        window.setTimeout(() => row.querySelector('[data-bom-product]')?.focus(), 120);
+                    }
                 };
 
                 const collectBomItems = () => {
@@ -2028,7 +2080,7 @@
                     }
 
                     try {
-                        await appendBomLine({});
+                        await appendBomLine({}, { prepend: true, focus: true });
                         refreshProductionReadiness();
                     } catch (error) {
                         showError(error.message || 'Gagal menambah line BOM.');

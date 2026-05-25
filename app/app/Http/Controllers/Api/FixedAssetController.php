@@ -11,6 +11,7 @@ use App\Models\FixedAssetPaymentLog;
 use App\Models\CashTransaction;
 use App\Models\JournalEntry;
 use App\Models\JournalItem;
+use App\Models\Supplier;
 use App\Services\TenantDefaultAccountingSetupService;
 use App\Support\TenantContext;
 use Carbon\CarbonImmutable;
@@ -36,12 +37,23 @@ class FixedAssetController extends Controller
             ->when($request->filled('asset_category'), fn ($query) => $query->where('asset_category', $request->query('asset_category')))
             ->orderBy('asset_code')
             ->get();
+        $supplierOptions = Supplier::query()
+            ->where('tenant_id', $tenantId)
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn (Supplier $supplier) => [
+                'id' => $supplier->id,
+                'name' => $supplier->name,
+            ])
+            ->values();
+        $supplierNames = $supplierOptions->pluck('name', 'id')->all();
 
-        $mappedAssets = $assets->map(fn (FixedAsset $asset) => $this->mapAsset($asset))->values();
+        $mappedAssets = $assets->map(fn (FixedAsset $asset) => $this->mapAsset($asset, $supplierNames))->values();
 
         return response()->json([
             'assets' => $mappedAssets,
             'data' => $mappedAssets,
+            'suppliers' => $supplierOptions,
             'accounting_defaults' => $this->accountingDefaults($tenantId),
         ]);
     }
@@ -513,8 +525,13 @@ class FixedAssetController extends Controller
             ->firstOrFail();
     }
 
-    private function mapAsset(FixedAsset $asset): array
+    /**
+     * @param  array<string, string>  $supplierNames
+     */
+    private function mapAsset(FixedAsset $asset, array $supplierNames = []): array
     {
+        $supplierId = $asset->supplier_id ? (string) $asset->supplier_id : null;
+
         return [
             'id' => $asset->id,
             'asset_code' => $asset->asset_code,
@@ -523,7 +540,10 @@ class FixedAssetController extends Controller
             'quantity' => (float) ($asset->quantity ?? 1),
             'unit_price' => (float) ($asset->unit_price ?? $asset->purchase_price),
             'location_id' => $asset->location_id,
-            'supplier_id' => $asset->supplier_id,
+            'supplier_id' => $supplierId,
+            'supplier_name' => $supplierId
+                ? ($supplierNames[$supplierId] ?? Supplier::query()->where('tenant_id', $asset->tenant_id)->where('id', $supplierId)->value('name'))
+                : null,
             'payment_method' => $asset->payment_method,
             'payment_account_id' => $asset->payment_account_id,
             'fixed_asset_account_id' => $asset->fixed_asset_account_id,

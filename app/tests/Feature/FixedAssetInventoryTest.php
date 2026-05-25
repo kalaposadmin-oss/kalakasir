@@ -221,11 +221,30 @@ class FixedAssetInventoryTest extends TestCase
     {
         [$tenant, $user] = $this->bootApiActor('Owner', 'owner+fixed-assets-edit@example.test');
         app(TenantDefaultAccountingSetupService::class)->ensure((string) $tenant->id, (string) $user->id);
+        $supplierId = (string) Str::uuid();
+        $replacementSupplierId = (string) Str::uuid();
+        DB::table('suppliers')->insert([
+            [
+                'id' => $supplierId,
+                'tenant_id' => $tenant->id,
+                'name' => 'Toko Peralatan Bakery',
+                'balance' => 0,
+                'created_at' => now('UTC'),
+            ],
+            [
+                'id' => $replacementSupplierId,
+                'tenant_id' => $tenant->id,
+                'name' => 'Supplier Mesin Pendingin',
+                'balance' => 0,
+                'created_at' => now('UTC'),
+            ],
+        ]);
 
         $createResponse = $this->postJson('/api/v1/fixed-assets', [
             'asset_code' => 'AST-EDT-001',
             'name' => 'Rak Cooling',
             'asset_category' => 'cooling_equipment',
+            'supplier_id' => $supplierId,
             'purchase_price' => 1000000,
             'quantity' => 1,
             'residual_value' => 0,
@@ -233,12 +252,23 @@ class FixedAssetInventoryTest extends TestCase
             'payment_method' => 'unposted',
         ], $this->tenantHeaders($tenant->id));
 
+        $createResponse->assertCreated()
+            ->assertJsonPath('asset.supplier_id', $supplierId)
+            ->assertJsonPath('asset.supplier_name', 'Toko Peralatan Bakery');
+
         $assetId = (string) $createResponse->json('asset.id');
+
+        $indexResponse = $this->getJson('/api/v1/fixed-assets', $this->tenantHeaders($tenant->id));
+        $indexResponse->assertOk()
+            ->assertJsonPath('data.0.supplier_name', 'Toko Peralatan Bakery')
+            ->assertJsonPath('suppliers.0.name', 'Supplier Mesin Pendingin')
+            ->assertJsonPath('suppliers.1.name', 'Toko Peralatan Bakery');
 
         $updateResponse = $this->putJson('/api/v1/fixed-assets/'.$assetId, [
             'asset_code' => 'AST-EDT-001',
             'name' => 'Rak Cooling Display',
             'asset_category' => 'display_equipment',
+            'supplier_id' => $supplierId,
             'purchase_price' => 1200000,
             'quantity' => 2,
             'residual_value' => 400000,
@@ -264,6 +294,7 @@ class FixedAssetInventoryTest extends TestCase
             'asset_code' => 'AST-EDT-001',
             'name' => 'Rak Cooling Display Revisi',
             'asset_category' => 'display_equipment',
+            'supplier_id' => $replacementSupplierId,
             'purchase_price' => 1300000,
             'quantity' => 2,
             'residual_value' => 400000,
@@ -279,6 +310,7 @@ class FixedAssetInventoryTest extends TestCase
             'asset_code' => 'AST-EDT-001',
             'name' => 'Rak Cooling Display Revisi',
             'asset_category' => 'display_equipment',
+            'supplier_id' => $replacementSupplierId,
             'purchase_price' => 1200000,
             'quantity' => 2,
             'residual_value' => 400000,
@@ -291,6 +323,8 @@ class FixedAssetInventoryTest extends TestCase
 
         $safeResponse->assertOk()
             ->assertJsonPath('asset.name', 'Rak Cooling Display Revisi')
+            ->assertJsonPath('asset.supplier_id', $replacementSupplierId)
+            ->assertJsonPath('asset.supplier_name', 'Supplier Mesin Pendingin')
             ->assertJsonPath('asset.condition', 'needs_repair')
             ->assertJsonPath('asset.status', 'maintenance')
             ->assertJsonPath('asset.purchase_price', 2400000);

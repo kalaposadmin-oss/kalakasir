@@ -134,6 +134,12 @@
                         </select>
                     </label>
                     <label class="space-y-1">
+                        <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Supplier</span>
+                        <select name="supplier_id" class="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm dark:border-slate-700 dark:bg-slate-900">
+                            <option value="">Belum dipilih</option>
+                        </select>
+                    </label>
+                    <label class="space-y-1">
                         <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Harga / Unit</span>
                         <input name="purchase_price" type="number" min="0" step="0.01" class="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm dark:border-slate-700 dark:bg-slate-900" required>
                     </label>
@@ -176,7 +182,7 @@
                     </label>
                     <label class="space-y-1 md:col-span-2 xl:col-span-3">
                         <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Catatan</span>
-                        <input name="notes" class="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm dark:border-slate-700 dark:bg-slate-900" placeholder="Nomor seri, supplier, garansi, atau lokasi">
+                        <input name="notes" class="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm dark:border-slate-700 dark:bg-slate-900" placeholder="Nomor seri, garansi, atau lokasi">
                     </label>
                     <div class="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm dark:border-slate-800 dark:bg-slate-900 md:col-span-2 xl:col-span-3" id="fixed-asset-preview">
                         <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -307,6 +313,7 @@
             };
 
             let assets = [];
+            let suppliers = [];
             let accountingDefaults = {};
             let selectedPaymentAsset = null;
 
@@ -435,6 +442,18 @@
                 el.stats.querySelector('[data-stat="payable"]').textContent = rupiah(activeAssets.reduce((total, asset) => total + Number(asset.liability_remaining_amount || 0), 0));
             };
 
+            const renderSupplierOptions = () => {
+                if (!el.form?.elements.supplier_id) return;
+                const selected = el.form.elements.supplier_id.value;
+                el.form.elements.supplier_id.innerHTML = [
+                    '<option value="">Belum dipilih</option>',
+                    ...suppliers.map((supplier) => `<option value="${supplier.id}">${supplier.name}</option>`),
+                ].join('');
+                if (selected) {
+                    el.form.elements.supplier_id.value = selected;
+                }
+            };
+
             const actionButtons = (asset) => {
                 if (!canManage) {
                     return '<span class="text-xs font-semibold text-slate-400">Lihat saja</span>';
@@ -480,6 +499,7 @@
                                 <div class="font-black text-slate-950 dark:text-white">${asset.name || '-'}</div>
                                 <div class="text-xs font-semibold text-slate-500">${asset.asset_code || '-'} - ${labelMaps.status[asset.status] || asset.status || '-'}</div>
                                 <div class="mt-1 text-xs text-slate-500">${Number(asset.quantity || 1).toLocaleString('id-ID')} unit x ${rupiah(asset.unit_price || asset.purchase_price || 0)}</div>
+                                <div class="mt-1 text-xs font-semibold ${asset.supplier_name ? 'text-slate-600 dark:text-slate-300' : 'text-amber-600'}">Supplier: ${asset.supplier_name || 'belum diisi'}</div>
                             </td>
                             <td class="px-4 py-3 text-slate-600 dark:text-slate-300">${labelMaps.asset_category[asset.asset_category] || asset.asset_category || '-'}</td>
                             <td class="px-4 py-3 text-right font-bold">${rupiah(asset.book_value)}</td>
@@ -541,6 +561,7 @@
                 el.form.elements.asset_id.value = '';
                 el.form.elements.useful_life_months.value = 48;
                 el.form.elements.quantity.value = 1;
+                el.form.elements.supplier_id.value = '';
                 el.form.elements.residual_value.value = 0;
                 el.form.elements.payment_method.value = 'cash';
                 el.formTitle.textContent = 'Catat Aset Baru';
@@ -557,6 +578,8 @@
                 el.form.elements.asset_code.value = asset.asset_code || '';
                 el.form.elements.name.value = asset.name || '';
                 el.form.elements.asset_category.value = asset.asset_category || 'other';
+                renderSupplierOptions();
+                el.form.elements.supplier_id.value = asset.supplier_id || '';
                 el.form.elements.purchase_price.value = Number(asset.unit_price || asset.purchase_price || 0);
                 el.form.elements.quantity.value = Number(asset.quantity || 1);
                 el.form.elements.payment_method.value = asset.payment_method || 'unposted';
@@ -579,7 +602,9 @@
                 el.table.innerHTML = '<tr><td class="px-4 py-8 text-center text-sm text-slate-500" colspan="7">Memuat aset...</td></tr>';
                 const payload = await apiJson('/api/v1/fixed-assets');
                 assets = payload.data || [];
+                suppliers = payload.suppliers || [];
                 accountingDefaults = payload.accounting_defaults || {};
+                renderSupplierOptions();
                 renderPaymentAccountOptions();
                 renderStats();
                 renderTable();
