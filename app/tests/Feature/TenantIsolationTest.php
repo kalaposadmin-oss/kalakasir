@@ -179,4 +179,128 @@ class TenantIsolationTest extends TestCase
 
         $this->assertStringNotContainsString('Produk Asing', json_encode($response->json(), JSON_THROW_ON_ERROR));
     }
+
+    public function test_products_api_uses_authenticated_user_tenant_when_domain_is_empty(): void
+    {
+        [$tenant] = $this->bootApiActor('Admin', 'admin+empty-domain-products@example.test');
+
+        DB::table('tenants')->where('id', $tenant->id)->update([
+            'domain' => null,
+            'subdomain' => null,
+        ]);
+
+        $productId = $this->insertProductForTenant($tenant->id, [
+            'sku' => 'EMPTY-DOMAIN-001',
+            'name' => 'Produk Tenant Domain Kosong',
+        ]);
+
+        $response = $this->getJson('/api/v1/products');
+
+        $response->assertOk()
+            ->assertJsonPath('products.0.id', $productId)
+            ->assertJsonPath('products.0.name', 'Produk Tenant Domain Kosong');
+    }
+
+    public function test_products_api_prioritizes_current_tenant_id_over_user_tenant_id(): void
+    {
+        [$tenantA, $user] = $this->bootApiActor('Admin', 'admin+current-tenant-products@example.test');
+
+        $tenantB = Tenant::query()->create([
+            'name' => 'Tenant Current',
+            'timezone' => 'UTC',
+            'domain' => null,
+            'subdomain' => null,
+        ]);
+
+        $user->forceFill(['current_tenant_id' => $tenantB->id])->save();
+        $this->insertRoleForTenant($tenantB->id, $user->id, 'Admin');
+
+        $this->insertProductForTenant($tenantA->id, [
+            'sku' => 'BASE-TENANT-001',
+            'name' => 'Produk Tenant Awal',
+        ]);
+        $currentProductId = $this->insertProductForTenant($tenantB->id, [
+            'sku' => 'CURRENT-TENANT-001',
+            'name' => 'Produk Tenant Current',
+        ]);
+
+        $response = $this->getJson('/api/v1/products');
+
+        $response->assertOk()
+            ->assertJsonPath('products.0.id', $currentProductId)
+            ->assertJsonPath('products.0.name', 'Produk Tenant Current');
+
+        $this->assertStringNotContainsString('Produk Tenant Awal', json_encode($response->json(), JSON_THROW_ON_ERROR));
+    }
+
+    public function test_products_api_rejects_x_tenant_id_outside_authenticated_user_tenants(): void
+    {
+        [$tenant] = $this->bootApiActor('Admin', 'admin+tenant-mismatch@example.test');
+
+        $foreignTenant = Tenant::query()->create([
+            'name' => 'Tenant Foreign',
+            'timezone' => 'UTC',
+        ]);
+
+        $this->insertProductForTenant($tenant->id, [
+            'sku' => 'MATCH-001',
+            'name' => 'Produk Match',
+        ]);
+
+        $response = $this->getJson('/api/v1/products', [
+            'X-Tenant-Id' => $foreignTenant->id,
+        ]);
+
+        $response->assertForbidden()
+            ->assertJsonPath('code', 'TENANT_MISMATCH');
+    }
+
+    private function insertProductForTenant(string $tenantId, array $overrides = []): string
+    {
+        $productId = (string) Str::uuid();
+
+        DB::table('products')->insert(array_merge([
+            'id' => $productId,
+            'tenant_id' => $tenantId,
+            'sku' => 'TENANT-PRODUCT',
+            'name' => 'Produk Tenant',
+            'price' => 12000,
+            'hpp_average' => 9000,
+            'image_url' => null,
+            'category_id' => null,
+            'is_active' => true,
+            'track_stock' => true,
+            'product_mode' => 'default',
+            'production_mode' => 'none',
+            'item_type' => 'finished_good',
+            'variants' => json_encode([]),
+            'bom_items' => json_encode([]),
+            'bundle_items' => json_encode([]),
+            'created_by' => null,
+            'updated_by' => null,
+            'created_at' => now('UTC'),
+            'updated_at' => now('UTC'),
+            'deleted_at' => null,
+        ], $overrides));
+
+        return $productId;
+    }
+
+    private function insertRoleForTenant(string $tenantId, string $userId, string $role): void
+    {
+        $roleId = (string) Str::uuid();
+
+        DB::table('roles')->insert([
+            'id' => $roleId,
+            'tenant_id' => $tenantId,
+            'name' => $role,
+        ]);
+
+        DB::table('user_roles')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $tenantId,
+            'user_id' => $userId,
+            'role_id' => $roleId,
+        ]);
+    }
 }
