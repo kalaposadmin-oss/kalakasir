@@ -638,7 +638,8 @@
                     rawMaterialProducts.forEach((product) => {
                         const selected = String(product.id) === String(selectedId || '') ? 'selected' : '';
                         const suffix = product.sku ? ` (${product.sku})` : '';
-                        options.push(`<option value="${product.id}" ${selected}>${product.name}${suffix}</option>`);
+                        const unitLabel = resolveBomUnitLabel(product.unit);
+                        options.push(`<option value="${product.id}" ${selected}>${product.name}${suffix} - ${unitLabel}</option>`);
                     });
 
                     return options.join('');
@@ -782,6 +783,7 @@
                     const badge = row.querySelector('[data-bom-unit-badge]');
                     const suffix = row.querySelector('[data-bom-unit-suffix]');
                     const hint = row.querySelector('[data-bom-unit-hint]');
+                    const qtyInput = row.querySelector('[data-bom-qty]');
                     const selectedProduct = product || resolveBomProductDraft(productId);
 
                     if (!badge || !suffix || !hint) {
@@ -795,16 +797,25 @@
                         badge.textContent = '';
                         suffix.textContent = '';
                         hint.textContent = '';
+                        hint.classList.add('hidden');
+                        qtyInput?.setAttribute('placeholder', 'Contoh: 2');
+                        qtyInput?.removeAttribute('aria-label');
                         return;
                     }
 
                     const unitLabel = resolveBomUnitLabel(selectedProduct.unit);
+                    const hasExplicitUnit = String(selectedProduct.unit || '').trim() !== '';
                     badge.textContent = unitLabel;
                     suffix.textContent = unitLabel;
-                    hint.textContent = `Qty mengikuti satuan stok bahan: ${unitLabel}.`;
+                    hint.textContent = hasExplicitUnit
+                        ? `Satuan resep otomatis dari bahan: ${unitLabel}. Contoh: isi 200 berarti 200 ${unitLabel}.`
+                        : 'Satuan bahan belum diisi. Lengkapi satuan di master bahan baku agar resep lebih jelas.';
                     badge.classList.remove('hidden');
                     suffix.classList.remove('hidden');
                     suffix.classList.add('flex');
+                    hint.classList.remove('hidden');
+                    qtyInput?.setAttribute('placeholder', `Contoh: 200 ${unitLabel}`);
+                    qtyInput?.setAttribute('aria-label', `Qty per 1 resep dalam ${unitLabel}`);
                 };
 
                 const inspectBomItems = () => {
@@ -1203,13 +1214,13 @@
                         <div class="space-y-1.5">
                             <div class="flex items-center justify-between gap-3">
                                 <label class="text-xs font-semibold text-slate-500">Qty per 1 resep</label>
-                                <span class="hidden rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600" data-bom-unit-badge></span>
+                                <span class="hidden rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-bold text-primary" data-bom-unit-badge></span>
                             </div>
                             <div class="relative">
                                 <input class="w-full rounded-xl border-slate-200 pr-24 text-sm text-slate-900" data-bom-qty type="number" min="0.0001" step="0.0001" value="${line.qty ?? ''}" />
-                                <span class="pointer-events-none absolute inset-y-0 right-4 hidden items-center text-xs font-bold text-slate-400" data-bom-unit-suffix></span>
+                                <span class="pointer-events-none absolute inset-y-0 right-4 hidden items-center rounded-r-xl bg-white pl-3 text-xs font-bold text-primary" data-bom-unit-suffix></span>
                             </div>
-                            <p class="text-[11px] text-slate-400" data-bom-unit-hint></p>
+                            <p class="hidden rounded-lg bg-primary/5 px-3 py-2 text-[11px] font-semibold text-primary" data-bom-unit-hint></p>
                         </div>
                     `;
 
@@ -1238,8 +1249,9 @@
 
                     const option = document.createElement('option');
                     option.value = targetId;
+                    const unitLabel = resolveBomUnitLabel(productDetail.unit);
                     option.textContent = productDetail.sku
-                        ? `${productDetail.name} (${productDetail.sku})`
+                        ? `${productDetail.name} (${productDetail.sku}) - ${unitLabel}`
                         : (productDetail.name || 'Raw Material');
                     productSelect.appendChild(option);
                     productSelect.value = targetId;
@@ -1259,7 +1271,15 @@
                         return;
                     }
 
-                    const productDetail = await loadProductDetailCached(targetProductId);
+                    updateBomUnitHint(row, targetProductId);
+
+                    let productDetail = null;
+                    try {
+                        productDetail = await loadProductDetailCached(targetProductId);
+                    } catch (error) {
+                        productDetail = resolveBomProductDraft(targetProductId);
+                    }
+
                     updateBomUnitHint(row, targetProductId, productDetail);
                     const variants = Array.isArray(productDetail?.product_variants) ? productDetail.product_variants : [];
 
