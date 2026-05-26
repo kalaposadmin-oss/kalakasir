@@ -208,7 +208,7 @@
                             <label class="block space-y-1.5">
                                 <span class="text-sm font-bold text-slate-800">Hasil Standar per 1 Resep</span>
                                 <input id="edit-recipe-output-qty" class="w-full rounded-xl border-slate-200 text-sm text-slate-900" type="number" min="0.0001" step="0.0001" placeholder="Contoh: 10" />
-                                <span class="block text-xs text-slate-500">Isi hasil jadi normal dari 1 resep. Angka ini dipakai untuk output harapan batch.</span>
+                                <span class="block text-xs text-slate-500">Isi 1 resep normalnya menghasilkan berapa produk jadi. Angka ini dipakai untuk cek HPP per output dan rencana produksi.</span>
                             </label>
                             <div class="flex items-center justify-between">
                                 <p id="edit-bom-hint" class="text-xs text-slate-500">Belum ada line BOM.</p>
@@ -398,12 +398,6 @@
 
                     if (autoConsume) {
                         el.trackStock.checked = false;
-                    }
-
-                    const recipeOutputWrap = el.recipeOutputQty?.closest('label');
-                    recipeOutputWrap?.classList.toggle('hidden', !batchProduction);
-                    if (!batchProduction && el.recipeOutputQty) {
-                        el.recipeOutputQty.value = '';
                     }
 
                     setToggleDisabled(el.trackStock, productType === 'service' || autoConsume || batchProduction);
@@ -1217,7 +1211,7 @@
                                 <span class="hidden rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-bold text-primary" data-bom-unit-badge></span>
                             </div>
                             <div class="relative">
-                                <input class="w-full rounded-xl border-slate-200 pr-24 text-sm text-slate-900" data-bom-qty type="number" min="0.0001" step="0.0001" value="${line.qty ?? ''}" />
+                                <input class="w-full rounded-xl border-slate-200 pr-24 text-sm text-slate-900" data-bom-qty type="number" min="0" step="any" value="${line.qty ?? ''}" />
                                 <span class="pointer-events-none absolute inset-y-0 right-4 hidden items-center rounded-r-xl bg-white pl-3 text-xs font-bold text-primary" data-bom-unit-suffix></span>
                             </div>
                             <p class="hidden rounded-lg bg-primary/5 px-3 py-2 text-[11px] font-semibold text-primary" data-bom-unit-hint></p>
@@ -1556,6 +1550,14 @@
                     refreshProductionReadiness();
                 });
 
+                el.bomLineList.addEventListener('wheel', (event) => {
+                    if (!event.target.closest('[data-bom-qty]')) {
+                        return;
+                    }
+
+                    event.preventDefault();
+                }, { passive: false });
+
                 el.form.addEventListener('submit', async (event) => {
                     event.preventDefault();
                     showError('');
@@ -1630,11 +1632,9 @@
                             }
 
                             const productionMode = getSelectedRecipeProductionMode();
-                            payload.recipe_output_qty = productionMode === 'batch_production'
-                                ? Number(el.recipeOutputQty?.value || 0)
-                                : null;
-                            if (productionMode === 'batch_production' && !(payload.recipe_output_qty > 0)) {
-                                showError('Hasil standar per 1 resep wajib lebih dari 0 untuk produksi batch.');
+                            payload.recipe_output_qty = Number(el.recipeOutputQty?.value || 0);
+                            if (!(payload.recipe_output_qty > 0)) {
+                                showError('Hasil standar per 1 resep wajib lebih dari 0.');
                                 return;
                             }
                             payload.product_mode = 'bom';

@@ -23,6 +23,8 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class ProductController extends Controller
 {
@@ -85,6 +87,121 @@ class ProductController extends Controller
 
         return response()->json([
             'products' => $products,
+        ]);
+    }
+
+    public function exportRecipes(Request $request)
+    {
+        $tenantId = TenantContext::id();
+        if (! $tenantId) {
+            return response()->json(['message' => 'Tenant tidak ditemukan.'], 400);
+        }
+
+        $products = Product::query()
+            ->where('tenant_id', $tenantId)
+            ->where('product_mode', 'bom')
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'sku', 'name', 'production_mode', 'recipe_output_qty', 'bom_items']);
+
+        $componentIds = $products
+            ->flatMap(fn (Product $product) => collect($this->decodeBomItems($product->bom_items))->pluck('product_id'))
+            ->filter()
+            ->map(fn ($id) => (string) $id)
+            ->unique()
+            ->values();
+
+        $components = Product::query()
+            ->where('tenant_id', $tenantId)
+            ->whereIn('id', $componentIds)
+            ->get(['id', 'sku', 'name', 'unit', 'hpp_average'])
+            ->keyBy(fn (Product $product) => (string) $product->id);
+
+        $variantIds = $products
+            ->flatMap(fn (Product $product) => collect($this->decodeBomItems($product->bom_items))->pluck('product_variant_id'))
+            ->filter()
+            ->map(fn ($id) => (string) $id)
+            ->unique()
+            ->values();
+
+        $variants = DB::table('product_variants')
+            ->where('tenant_id', $tenantId)
+            ->whereIn('id', $variantIds)
+            ->get(['id', 'sku', 'name'])
+            ->keyBy(fn ($variant) => (string) $variant->id);
+
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Resep Produk');
+        $sheet->fromArray([
+            'Produk',
+            'SKU Produk',
+            'Mode Produksi',
+            'Hasil per 1 Resep',
+            'Bahan',
+            'SKU Bahan',
+            'Variant',
+            'Qty Resep',
+            'Satuan',
+            'HPP per Satuan',
+            'Total HPP Line',
+            'Total HPP Resep',
+            'Estimasi HPP per Output',
+        ], null, 'A1');
+
+        $rowNumber = 2;
+        foreach ($products as $product) {
+            $bomItems = $this->decodeBomItems($product->bom_items);
+            if ($bomItems === []) {
+                continue;
+            }
+
+            $lineTotals = collect($bomItems)->map(function (array $line) use ($components): float {
+                $component = $components->get((string) ($line['product_id'] ?? ''));
+
+                return (float) ($line['qty'] ?? 0) * (float) ($component?->hpp_average ?? 0);
+            });
+
+            $recipeTotal = round((float) $lineTotals->sum(), 4);
+            $recipeOutputQty = (float) ($product->recipe_output_qty ?? 0);
+            $hppPerOutput = $recipeOutputQty > 0 ? round($recipeTotal / $recipeOutputQty, 4) : null;
+
+            foreach ($bomItems as $line) {
+                $component = $components->get((string) ($line['product_id'] ?? ''));
+                $variant = $variants->get((string) ($line['product_variant_id'] ?? ''));
+                $qty = (float) ($line['qty'] ?? 0);
+                $unitCost = (float) ($component?->hpp_average ?? 0);
+                $lineTotal = round($qty * $unitCost, 4);
+
+                $sheet->fromArray([
+                    $product->name,
+                    $product->sku,
+                    $product->production_mode,
+                    $recipeOutputQty ?: '',
+                    $component?->name ?? ($line['product_name'] ?? ''),
+                    $component?->sku ?? '',
+                    $variant ? trim(($variant->name ?? '').(($variant->sku ?? '') ? ' ('.$variant->sku.')' : '')) : '',
+                    $qty,
+                    $component?->unit ?: 'unit',
+                    $unitCost,
+                    $lineTotal,
+                    $recipeTotal,
+                    $hppPerOutput ?? '',
+                ], null, 'A'.$rowNumber);
+                $rowNumber++;
+            }
+        }
+
+        foreach (range('A', 'M') as $column) {
+            $sheet->getColumnDimension($column)->setAutoSize(true);
+        }
+
+        $filename = 'resep-produk-'.now('Asia/Jakarta')->format('Ymd-His').'.xlsx';
+
+        return response()->streamDownload(function () use ($spreadsheet) {
+            (new Xlsx($spreadsheet))->save('php://output');
+        }, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         ]);
     }
 

@@ -58,6 +58,9 @@
 @section('header')
     <x-page-header title="Daftar Produk" :backUrl="$productsBackUrl" :showMenuButton="true">
         <x-slot:actions>
+            <a class="flex items-center justify-center size-9 rounded-full bg-white text-slate-600 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:ring-slate-800" href="/api/v1/products/recipes/export" aria-label="Export semua resep produk" title="Export semua resep produk">
+                <span class="material-symbols-outlined text-[20px]">download</span>
+            </a>
             @if ($canManageProducts)
                 <a class="flex items-center justify-center size-9 rounded-full bg-primary text-white" href="{{ $productsPortalPrefix.'/products/new?from='.rawurlencode($productsCurrentPath) }}" aria-label="Tambah produk">
                     <span class="material-symbols-outlined">add</span>

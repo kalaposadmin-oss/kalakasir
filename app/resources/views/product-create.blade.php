@@ -349,7 +349,7 @@
                             <label class="block space-y-1.5">
                                 <span class="text-sm font-semibold text-slate-900 dark:text-slate-100">Hasil Standar per 1 Resep</span>
                                 <input id="recipe-output-qty" class="h-12 w-full rounded-xl border-slate-200 px-4 text-base text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" type="number" min="0.0001" step="0.0001" placeholder="Contoh: 10" />
-                                <span class="block text-xs text-slate-500 dark:text-slate-400">Isi hasil jadi normal dari 1 resep. Angka ini dipakai untuk menghitung output harapan di batch produksi.</span>
+                                <span class="block text-xs text-slate-500 dark:text-slate-400">Isi 1 resep normalnya menghasilkan berapa produk jadi. Angka ini dipakai untuk cek HPP per output dan rencana produksi.</span>
                             </label>
                             <div class="space-y-3">
                                 <p id="bom-editor-hint" class="text-xs text-slate-500 dark:text-slate-400">Belum ada line BOM.</p>
@@ -614,12 +614,6 @@
 
                     if (autoConsume) {
                         el.trackStock.checked = false;
-                    }
-
-                    const recipeOutputWrap = el.recipeOutputQty?.closest('label');
-                    recipeOutputWrap?.classList.toggle('hidden', !batchProduction);
-                    if (!batchProduction && el.recipeOutputQty) {
-                        el.recipeOutputQty.value = '';
                     }
 
                     setToggleDisabled(el.trackStock, productType === 'service' || autoConsume || batchProduction);
@@ -1235,7 +1229,7 @@
                                 <span class="hidden rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-bold text-primary" data-bom-unit-badge></span>
                             </div>
                             <div class="relative">
-                                <input class="h-12 w-full rounded-xl border-slate-200 bg-white px-4 pr-24 text-base text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" data-bom-qty type="number" min="0.0001" step="0.0001" value="${line.qty ?? ''}" placeholder="Contoh: 2" />
+                                <input class="h-12 w-full rounded-xl border-slate-200 bg-white px-4 pr-24 text-base text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" data-bom-qty type="number" min="0" step="any" value="${line.qty ?? ''}" placeholder="Contoh: 2" />
                                 <span class="pointer-events-none absolute inset-y-0 right-4 hidden items-center rounded-r-xl bg-white pl-3 text-xs font-bold text-primary dark:bg-slate-900" data-bom-unit-suffix></span>
                             </div>
                             <p class="hidden rounded-lg bg-primary/5 px-3 py-2 text-[11px] font-semibold text-primary" data-bom-unit-hint></p>
@@ -1847,11 +1841,9 @@
                         payload.unit = null;
                     } else if (canManageRecipe && el.enableBom.checked) {
                         const productionMode = getSelectedRecipeProductionMode();
-                        payload.recipe_output_qty = productionMode === 'batch_production'
-                            ? Number(el.recipeOutputQty?.value || 0)
-                            : null;
-                        if (productionMode === 'batch_production' && !(payload.recipe_output_qty > 0)) {
-                            showError('Hasil standar per 1 resep wajib lebih dari 0 untuk produksi batch.');
+                        payload.recipe_output_qty = Number(el.recipeOutputQty?.value || 0);
+                        if (!(payload.recipe_output_qty > 0)) {
+                            showError('Hasil standar per 1 resep wajib lebih dari 0.');
                             focusInvalidField(el.recipeOutputQty, 'production');
                             return;
                         }
@@ -2140,6 +2132,14 @@
                 el.bomLineList.addEventListener('input', () => {
                     refreshProductionReadiness();
                 });
+
+                el.bomLineList.addEventListener('wheel', (event) => {
+                    if (!event.target.closest('[data-bom-qty]')) {
+                        return;
+                    }
+
+                    event.preventDefault();
+                }, { passive: false });
 
                 el.tierList.addEventListener('click', (event) => {
                     const remove = event.target.closest('[data-tier-remove]');

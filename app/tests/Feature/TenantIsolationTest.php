@@ -255,6 +255,43 @@ class TenantIsolationTest extends TestCase
             ->assertJsonPath('code', 'TENANT_MISMATCH');
     }
 
+    public function test_can_export_all_product_recipes_as_excel(): void
+    {
+        [$tenant] = $this->bootApiActor('Admin', 'admin+recipe-export@example.test');
+
+        $componentId = $this->insertProductForTenant($tenant->id, [
+            'sku' => 'RAW-GULA',
+            'name' => 'Gula',
+            'unit' => 'gram',
+            'hpp_average' => 20,
+            'product_mode' => 'add_on',
+            'item_type' => 'raw_material',
+        ]);
+
+        $this->insertProductForTenant($tenant->id, [
+            'sku' => 'FG-ROTI',
+            'name' => 'Roti Manis',
+            'product_mode' => 'bom',
+            'production_mode' => 'auto_consume_on_sell',
+            'item_type' => 'finished_good',
+            'recipe_output_qty' => 2,
+            'bom_items' => json_encode([
+                [
+                    'product_id' => $componentId,
+                    'product_variant_id' => null,
+                    'qty' => 70,
+                ],
+            ]),
+        ]);
+
+        $response = $this->get('/api/v1/products/recipes/export', $this->tenantHeaders($tenant->id));
+
+        $response->assertOk();
+        $response->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        $response->assertDownload();
+        $this->assertStringStartsWith('PK', $response->streamedContent());
+    }
+
     private function insertProductForTenant(string $tenantId, array $overrides = []): string
     {
         $productId = (string) Str::uuid();
