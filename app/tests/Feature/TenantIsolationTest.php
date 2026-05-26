@@ -292,6 +292,65 @@ class TenantIsolationTest extends TestCase
         $this->assertStringStartsWith('PK', $response->streamedContent());
     }
 
+    public function test_product_show_returns_recipe_hpp_detail_and_can_export_single_recipe_cost(): void
+    {
+        [$tenant] = $this->bootApiActor('Admin', 'admin+recipe-cost-detail@example.test');
+
+        $flourId = $this->insertProductForTenant($tenant->id, [
+            'sku' => 'RAW-TEPUNG',
+            'name' => 'Tepung',
+            'unit' => 'gram',
+            'hpp_average' => 12.5,
+            'product_mode' => 'add_on',
+            'item_type' => 'raw_material',
+        ]);
+        $sugarId = $this->insertProductForTenant($tenant->id, [
+            'sku' => 'RAW-GULA',
+            'name' => 'Gula',
+            'unit' => 'gram',
+            'hpp_average' => 20,
+            'product_mode' => 'add_on',
+            'item_type' => 'raw_material',
+        ]);
+
+        $productId = $this->insertProductForTenant($tenant->id, [
+            'sku' => 'FG-BUN',
+            'name' => 'Sweet Bun',
+            'hpp_average' => 900,
+            'product_mode' => 'bom',
+            'production_mode' => 'batch_production',
+            'item_type' => 'finished_good',
+            'recipe_output_qty' => 5,
+            'bom_items' => json_encode([
+                [
+                    'product_id' => $flourId,
+                    'product_variant_id' => null,
+                    'qty' => 100,
+                ],
+                [
+                    'product_id' => $sugarId,
+                    'product_variant_id' => null,
+                    'qty' => 25,
+                ],
+            ]),
+        ]);
+
+        $this->getJson('/api/v1/products/'.$productId, $this->tenantHeaders($tenant->id))
+            ->assertOk()
+            ->assertJsonPath('product.recipe_cost_detail.recipe_total_cost', 1750)
+            ->assertJsonPath('product.recipe_cost_detail.hpp_per_output', 350)
+            ->assertJsonPath('product.recipe_cost_detail.hpp_difference', -550)
+            ->assertJsonPath('product.recipe_cost_detail.lines.0.component_name', 'Tepung')
+            ->assertJsonPath('product.recipe_cost_detail.lines.0.line_total', 1250);
+
+        $response = $this->get('/api/v1/products/'.$productId.'/recipe-cost/export', $this->tenantHeaders($tenant->id));
+
+        $response->assertOk();
+        $response->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        $response->assertDownload();
+        $this->assertStringStartsWith('PK', $response->streamedContent());
+    }
+
     private function insertProductForTenant(string $tenantId, array $overrides = []): string
     {
         $productId = (string) Str::uuid();

@@ -118,6 +118,7 @@ Route::prefix('v1')
         Route::get('purchases/{purchase}', [PurchaseController::class, 'show'])->middleware('feature_gate:history.purchases');
         Route::get('products', [ProductController::class, 'index'])->middleware('feature_gate:product.list');
         Route::get('products/recipes/export', [ProductController::class, 'exportRecipes'])->middleware('feature_gate:product.list');
+        Route::get('products/{product}/recipe-cost/export', [ProductController::class, 'exportRecipeCost'])->middleware('feature_gate:product.list');
         Route::get('products/{product}', [ProductController::class, 'show'])->middleware('feature_gate:product.list');
         Route::get('production-batches', [ProductionBatchController::class, 'index'])->middleware('feature_gate:inventory.production_batches');
         Route::get('production-batches/export/problematic', [ProductionBatchController::class, 'exportProblematicCsv'])->middleware(['role:warehouse,supervisor,admin,owner', 'feature_gate:inventory.production_batches']);

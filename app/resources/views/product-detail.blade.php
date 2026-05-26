@@ -107,6 +107,32 @@
                 </div>
                 <div id="location-list" class="divide-y divide-slate-50"></div>
             </section>
+            <section id="recipe-cost-section" class="mt-2 bg-white hidden">
+                <div class="px-4 py-3 flex items-center justify-between gap-3 border-b border-slate-50">
+                    <div>
+                        <h3 class="font-bold text-slate-800">Detail HPP Resep</h3>
+                        <p id="recipe-cost-mode" class="mt-0.5 text-[11px] font-medium text-slate-500">-</p>
+                    </div>
+                    <a id="recipe-cost-export" class="inline-flex size-9 items-center justify-center rounded-full bg-primary text-white shadow-sm shadow-primary/20" href="#" aria-label="Export HPP resep" title="Export HPP resep">
+                        <span class="material-symbols-outlined text-[20px]">download</span>
+                    </a>
+                </div>
+                <div class="grid grid-cols-3 gap-px bg-slate-100">
+                    <div class="bg-white px-4 py-3">
+                        <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Total Resep</p>
+                        <p id="recipe-total-cost" class="mt-1 text-sm font-black text-slate-900">Rp 0</p>
+                    </div>
+                    <div class="bg-white px-4 py-3">
+                        <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Per Output</p>
+                        <p id="recipe-hpp-output" class="mt-1 text-sm font-black text-slate-900">Rp 0</p>
+                    </div>
+                    <div class="bg-white px-4 py-3">
+                        <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Selisih</p>
+                        <p id="recipe-hpp-diff" class="mt-1 text-sm font-black text-slate-900">Rp 0</p>
+                    </div>
+                </div>
+                <div id="recipe-cost-lines" class="divide-y divide-slate-50"></div>
+            </section>
             <section class="mt-4 px-4 pb-8">
                 @if ($canViewStockCardReport)
                     <button id="stock-history-btn" class="w-full bg-white border-2 border-primary/10 text-primary py-4 px-4 rounded-2xl flex items-center justify-between active:bg-slate-50 transition-colors">
@@ -176,6 +202,13 @@
                     infoSupplier: document.getElementById('info-supplier'),
                     infoMinStock: document.getElementById('info-min-stock'),
                     stockHistoryBtn: document.getElementById('stock-history-btn'),
+                    recipeCostSection: document.getElementById('recipe-cost-section'),
+                    recipeCostMode: document.getElementById('recipe-cost-mode'),
+                    recipeCostExport: document.getElementById('recipe-cost-export'),
+                    recipeTotalCost: document.getElementById('recipe-total-cost'),
+                    recipeHppOutput: document.getElementById('recipe-hpp-output'),
+                    recipeHppDiff: document.getElementById('recipe-hpp-diff'),
+                    recipeCostLines: document.getElementById('recipe-cost-lines'),
                 };
 
                 const productId = @json($resolvedProductId) || new URLSearchParams(window.location.search).get('product_id');
@@ -201,6 +234,62 @@
                 const resolveUnitLabel = (value) => {
                     const unit = String(value || '').trim();
                     return unit !== '' ? unit : 'unit';
+                };
+
+                const formatQty = (value) => new Intl.NumberFormat('id-ID', {
+                    maximumFractionDigits: 4,
+                }).format(Number(value || 0));
+                const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;',
+                    "'": '&#039;',
+                }[char]));
+
+                const renderRecipeCost = (product) => {
+                    const detail = product.recipe_cost_detail || null;
+                    const lines = Array.isArray(detail?.lines) ? detail.lines : [];
+
+                    if (!detail || !lines.length) {
+                        el.recipeCostSection?.classList.add('hidden');
+                        return;
+                    }
+
+                    el.recipeCostSection?.classList.remove('hidden');
+                    el.recipeCostMode.textContent = `${detail.production_mode || '-'} • hasil ${formatQty(detail.recipe_output_qty || 0)} ${resolveUnitLabel(product.unit)}`;
+                    el.recipeCostExport.href = `/api/v1/products/${encodeURIComponent(product.id)}/recipe-cost/export`;
+                    el.recipeTotalCost.textContent = formatCurrency(detail.recipe_total_cost || 0);
+                    el.recipeHppOutput.textContent = detail.hpp_per_output !== null && detail.hpp_per_output !== undefined
+                        ? formatCurrency(detail.hpp_per_output)
+                        : '-';
+                    const diff = Number(detail.hpp_difference || 0);
+                    el.recipeHppDiff.textContent = detail.hpp_difference !== null && detail.hpp_difference !== undefined
+                        ? formatCurrency(diff)
+                        : '-';
+                    el.recipeHppDiff.className = `mt-1 text-sm font-black ${diff > 0 ? 'text-orange-600' : (diff < 0 ? 'text-emerald-600' : 'text-slate-900')}`;
+
+                    el.recipeCostLines.innerHTML = '';
+                    lines.forEach((line) => {
+                        const row = document.createElement('div');
+                        row.className = 'px-4 py-3';
+                        const componentName = escapeHtml(line.component_name || 'Bahan');
+                        const componentSku = escapeHtml(line.component_sku || '-');
+                        const variantLabel = escapeHtml(line.variant_label || '');
+                        row.innerHTML = `
+                            <div class="flex items-start justify-between gap-3">
+                                <div class="min-w-0">
+                                    <p class="truncate text-sm font-bold text-slate-800">${componentName}</p>
+                                    <p class="mt-0.5 text-[11px] font-medium text-slate-500">${componentSku}${variantLabel ? ` • ${variantLabel}` : ''}</p>
+                                </div>
+                                <div class="shrink-0 text-right">
+                                    <p class="text-sm font-black text-slate-900">${formatCurrency(line.line_total || 0)}</p>
+                                    <p class="mt-0.5 text-[11px] font-medium text-slate-500">${formatQty(line.qty)} ${resolveUnitLabel(line.unit)} x ${formatCurrency(line.unit_cost || 0)}</p>
+                                </div>
+                            </div>
+                        `;
+                        el.recipeCostLines.appendChild(row);
+                    });
                 };
 
                 const renderLocations = (locations) => {
@@ -266,6 +355,7 @@
                         el.infoMinStock.textContent = product.min_stock ? `${product.min_stock} ${unitLabel}` : '-';
 
                         renderLocations(locations);
+                        renderRecipeCost(product);
                     } catch (error) {
                         el.name.textContent = error.message;
                     }

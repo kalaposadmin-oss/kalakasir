@@ -101,6 +101,9 @@ class WebOperationalPagesSmokeTest extends TestCase
         $this->assertStringContainsString('Detail Produk', $contents);
         $this->assertStringContainsString('Transfer Stok', $contents);
         $this->assertStringContainsString('Penyesuaian', $contents);
+        $this->assertStringContainsString('Detail HPP Resep', $contents);
+        $this->assertStringContainsString('recipe_cost_detail', $contents);
+        $this->assertStringContainsString('/recipe-cost/export', $contents);
         $this->assertStringContainsString('bg-emerald-500', $contents);
         $this->assertStringNotContainsString('bg-success', $contents);
         $this->assertStringNotContainsString('text-success', $contents);

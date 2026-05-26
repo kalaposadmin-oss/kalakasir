@@ -102,33 +102,9 @@ class ProductController extends Controller
             ->where('product_mode', 'bom')
             ->where('is_active', true)
             ->orderBy('name')
-            ->get(['id', 'sku', 'name', 'production_mode', 'recipe_output_qty', 'bom_items']);
+            ->get(['id', 'sku', 'name', 'hpp_average', 'production_mode', 'recipe_output_qty', 'bom_items']);
 
-        $componentIds = $products
-            ->flatMap(fn (Product $product) => collect($this->decodeBomItems($product->bom_items))->pluck('product_id'))
-            ->filter()
-            ->map(fn ($id) => (string) $id)
-            ->unique()
-            ->values();
-
-        $components = Product::query()
-            ->where('tenant_id', $tenantId)
-            ->whereIn('id', $componentIds)
-            ->get(['id', 'sku', 'name', 'unit', 'hpp_average'])
-            ->keyBy(fn (Product $product) => (string) $product->id);
-
-        $variantIds = $products
-            ->flatMap(fn (Product $product) => collect($this->decodeBomItems($product->bom_items))->pluck('product_variant_id'))
-            ->filter()
-            ->map(fn ($id) => (string) $id)
-            ->unique()
-            ->values();
-
-        $variants = DB::table('product_variants')
-            ->where('tenant_id', $tenantId)
-            ->whereIn('id', $variantIds)
-            ->get(['id', 'sku', 'name'])
-            ->keyBy(fn ($variant) => (string) $variant->id);
+        $recipeCosts = $this->buildRecipeCostDetailsForProducts($tenantId, $products);
 
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
@@ -137,7 +113,6 @@ class ProductController extends Controller
             'Produk',
             'SKU Produk',
             'Mode Produksi',
-            'Hasil per 1 Resep',
             'Bahan',
             'SKU Bahan',
             'Variant',
@@ -146,57 +121,118 @@ class ProductController extends Controller
             'HPP per Satuan',
             'Total HPP Line',
             'Total HPP Resep',
+            'Hasil per 1 Resep',
             'Estimasi HPP per Output',
+            'HPP Produk Saat Ini',
+            'Selisih HPP Resep vs Produk',
         ], null, 'A1');
 
         $rowNumber = 2;
         foreach ($products as $product) {
-            $bomItems = $this->decodeBomItems($product->bom_items);
-            if ($bomItems === []) {
+            $recipeCost = $recipeCosts[(string) $product->id] ?? null;
+            if (! $recipeCost || ($recipeCost['lines'] ?? []) === []) {
                 continue;
             }
 
-            $lineTotals = collect($bomItems)->map(function (array $line) use ($components): float {
-                $component = $components->get((string) ($line['product_id'] ?? ''));
-
-                return (float) ($line['qty'] ?? 0) * (float) ($component?->hpp_average ?? 0);
-            });
-
-            $recipeTotal = round((float) $lineTotals->sum(), 4);
-            $recipeOutputQty = (float) ($product->recipe_output_qty ?? 0);
-            $hppPerOutput = $recipeOutputQty > 0 ? round($recipeTotal / $recipeOutputQty, 4) : null;
-
-            foreach ($bomItems as $line) {
-                $component = $components->get((string) ($line['product_id'] ?? ''));
-                $variant = $variants->get((string) ($line['product_variant_id'] ?? ''));
-                $qty = (float) ($line['qty'] ?? 0);
-                $unitCost = (float) ($component?->hpp_average ?? 0);
-                $lineTotal = round($qty * $unitCost, 4);
-
+            foreach ($recipeCost['lines'] as $line) {
                 $sheet->fromArray([
                     $product->name,
                     $product->sku,
                     $product->production_mode,
-                    $recipeOutputQty ?: '',
-                    $component?->name ?? ($line['product_name'] ?? ''),
-                    $component?->sku ?? '',
-                    $variant ? trim(($variant->name ?? '').(($variant->sku ?? '') ? ' ('.$variant->sku.')' : '')) : '',
-                    $qty,
-                    $component?->unit ?: 'unit',
-                    $unitCost,
-                    $lineTotal,
-                    $recipeTotal,
-                    $hppPerOutput ?? '',
+                    $line['component_name'],
+                    $line['component_sku'],
+                    $line['variant_label'],
+                    $line['qty'],
+                    $line['unit'],
+                    $line['unit_cost'],
+                    $line['line_total'],
+                    $recipeCost['recipe_total_cost'],
+                    $recipeCost['recipe_output_qty'] ?: '',
+                    $recipeCost['hpp_per_output'] ?? '',
+                    $recipeCost['product_hpp_average'],
+                    $recipeCost['hpp_difference'] ?? '',
                 ], null, 'A'.$rowNumber);
                 $rowNumber++;
             }
         }
 
-        foreach (range('A', 'M') as $column) {
+        foreach (range('A', 'O') as $column) {
             $sheet->getColumnDimension($column)->setAutoSize(true);
         }
 
         $filename = 'resep-produk-'.now('Asia/Jakarta')->format('Ymd-His').'.xlsx';
+
+        return response()->streamDownload(function () use ($spreadsheet) {
+            (new Xlsx($spreadsheet))->save('php://output');
+        }, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ]);
+    }
+
+    public function exportRecipeCost(string $product)
+    {
+        $tenantId = TenantContext::id();
+        if (! $tenantId) {
+            return response()->json(['message' => 'Tenant tidak ditemukan.'], 400);
+        }
+
+        $productRow = Product::query()
+            ->where('tenant_id', $tenantId)
+            ->where('id', $product)
+            ->firstOrFail(['id', 'sku', 'name', 'hpp_average', 'production_mode', 'recipe_output_qty', 'bom_items']);
+
+        $recipeCost = $this->buildRecipeCostDetailsForProducts($tenantId, collect([$productRow]))[(string) $productRow->id] ?? null;
+        if (! $recipeCost || ($recipeCost['lines'] ?? []) === []) {
+            return response()->json(['message' => 'Produk ini belum memiliki detail HPP resep.'], 422);
+        }
+
+        $spreadsheet = new Spreadsheet();
+        $summary = $spreadsheet->getActiveSheet();
+        $summary->setTitle('Ringkasan HPP');
+        $summary->fromArray([
+            ['Produk', $recipeCost['product_name']],
+            ['SKU', $recipeCost['product_sku']],
+            ['Mode Produksi', $recipeCost['production_mode']],
+            ['Total HPP Resep', $recipeCost['recipe_total_cost']],
+            ['Hasil per 1 Resep', $recipeCost['recipe_output_qty'] ?: ''],
+            ['Estimasi HPP per Output', $recipeCost['hpp_per_output'] ?? ''],
+            ['HPP Produk Saat Ini', $recipeCost['product_hpp_average']],
+            ['Selisih HPP Resep vs Produk', $recipeCost['hpp_difference'] ?? ''],
+        ], null, 'A1');
+        $summary->getColumnDimension('A')->setAutoSize(true);
+        $summary->getColumnDimension('B')->setAutoSize(true);
+
+        $lines = $spreadsheet->createSheet();
+        $lines->setTitle('Detail Bahan');
+        $lines->fromArray([
+            'Bahan',
+            'SKU Bahan',
+            'Variant',
+            'Qty Resep',
+            'Satuan',
+            'HPP per Satuan',
+            'Total HPP Line',
+        ], null, 'A1');
+
+        $rowNumber = 2;
+        foreach ($recipeCost['lines'] as $line) {
+            $lines->fromArray([
+                $line['component_name'],
+                $line['component_sku'],
+                $line['variant_label'],
+                $line['qty'],
+                $line['unit'],
+                $line['unit_cost'],
+                $line['line_total'],
+            ], null, 'A'.$rowNumber);
+            $rowNumber++;
+        }
+
+        foreach (range('A', 'G') as $column) {
+            $lines->getColumnDimension($column)->setAutoSize(true);
+        }
+
+        $filename = 'hpp-resep-'.Str::slug((string) $productRow->name, '-').'-'.now('Asia/Jakarta')->format('Ymd-His').'.xlsx';
 
         return response()->streamDownload(function () use ($spreadsheet) {
             (new Xlsx($spreadsheet))->save('php://output');
@@ -610,6 +646,7 @@ class ProductController extends Controller
         $productPayload['recipe_output_qty'] = $productRow->recipe_output_qty !== null
             ? $this->normalizeRecipeOutputQty($productRow->recipe_output_qty)
             : null;
+        $productPayload['recipe_cost_detail'] = $this->buildRecipeCostDetailsForProducts($tenantId, collect([$productRow]))[(string) $productRow->id] ?? null;
         $productPayload['product_variants'] = $productVariants;
         $productPayload['has_variants'] = $productVariants->isNotEmpty();
         $productPayload['production_batch_eligibility'] = app(ProductionEligibilityService::class)
@@ -906,6 +943,89 @@ class ProductController extends Controller
         }
 
         return [];
+    }
+
+    private function buildRecipeCostDetailsForProducts(string $tenantId, Collection $products): array
+    {
+        $componentIds = $products
+            ->flatMap(fn (Product $product) => collect($this->decodeBomItems($product->bom_items))->pluck('product_id'))
+            ->filter()
+            ->map(fn ($id) => (string) $id)
+            ->unique()
+            ->values();
+
+        $components = Product::query()
+            ->where('tenant_id', $tenantId)
+            ->whereIn('id', $componentIds)
+            ->get(['id', 'sku', 'name', 'unit', 'hpp_average'])
+            ->keyBy(fn (Product $product) => (string) $product->id);
+
+        $variantIds = $products
+            ->flatMap(fn (Product $product) => collect($this->decodeBomItems($product->bom_items))->pluck('product_variant_id'))
+            ->filter()
+            ->map(fn ($id) => (string) $id)
+            ->unique()
+            ->values();
+
+        $variants = DB::table('product_variants')
+            ->where('tenant_id', $tenantId)
+            ->whereIn('id', $variantIds)
+            ->get(['id', 'sku', 'name'])
+            ->keyBy(fn ($variant) => (string) $variant->id);
+
+        return $products
+            ->mapWithKeys(function (Product $product) use ($components, $variants): array {
+                $bomItems = collect($this->decodeBomItems($product->bom_items))
+                    ->filter(fn ($line) => is_array($line) && ! empty($line['product_id']))
+                    ->values();
+
+                $lines = $bomItems->map(function (array $line) use ($components, $variants): array {
+                    $component = $components->get((string) ($line['product_id'] ?? ''));
+                    $variant = $variants->get((string) ($line['product_variant_id'] ?? ''));
+                    $qty = (float) ($line['qty'] ?? 0);
+                    $unitCost = (float) ($component?->hpp_average ?? 0);
+                    $lineTotal = round($qty * $unitCost, 4);
+                    $variantLabel = $variant
+                        ? trim(($variant->name ?? '').(($variant->sku ?? '') ? ' ('.$variant->sku.')' : ''))
+                        : '';
+
+                    return [
+                        'component_id' => (string) ($line['product_id'] ?? ''),
+                        'component_variant_id' => isset($line['product_variant_id']) && $line['product_variant_id'] !== ''
+                            ? (string) $line['product_variant_id']
+                            : null,
+                        'component_name' => $component?->name ?? ($line['product_name'] ?? 'Bahan tidak ditemukan'),
+                        'component_sku' => $component?->sku ?? '',
+                        'variant_label' => $variantLabel,
+                        'qty' => $qty,
+                        'unit' => $component?->unit ?: ($line['unit'] ?? 'unit'),
+                        'unit_cost' => round($unitCost, 4),
+                        'line_total' => $lineTotal,
+                        'missing_component' => $component === null,
+                    ];
+                })->values();
+
+                $recipeTotal = round((float) $lines->sum('line_total'), 4);
+                $recipeOutputQty = (float) ($product->recipe_output_qty ?? 0);
+                $hppPerOutput = $recipeOutputQty > 0 ? round($recipeTotal / $recipeOutputQty, 4) : null;
+                $productHpp = round((float) ($product->hpp_average ?? 0), 4);
+
+                return [
+                    (string) $product->id => [
+                        'product_id' => (string) $product->id,
+                        'product_name' => (string) $product->name,
+                        'product_sku' => (string) ($product->sku ?? ''),
+                        'production_mode' => (string) ($product->production_mode ?? Product::PRODUCTION_MODE_NONE),
+                        'recipe_output_qty' => round($recipeOutputQty, 4),
+                        'recipe_total_cost' => $recipeTotal,
+                        'hpp_per_output' => $hppPerOutput,
+                        'product_hpp_average' => $productHpp,
+                        'hpp_difference' => $hppPerOutput !== null ? round($hppPerOutput - $productHpp, 4) : null,
+                        'lines' => $lines->all(),
+                    ],
+                ];
+            })
+            ->all();
     }
 
     private function normalizeVariantPayload(array $variants): array
