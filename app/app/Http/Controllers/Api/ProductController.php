@@ -24,6 +24,10 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class ProductController extends Controller
@@ -187,24 +191,28 @@ class ProductController extends Controller
         }
 
         $spreadsheet = new Spreadsheet();
-        $summary = $spreadsheet->getActiveSheet();
-        $summary->setTitle('Ringkasan HPP');
-        $summary->fromArray([
-            ['Produk', $recipeCost['product_name']],
-            ['SKU', $recipeCost['product_sku']],
-            ['Mode Produksi', $recipeCost['production_mode']],
-            ['Total HPP Resep', $recipeCost['recipe_total_cost']],
-            ['Hasil per 1 Resep', $recipeCost['recipe_output_qty'] ?: ''],
-            ['Estimasi HPP per Output', $recipeCost['hpp_per_output'] ?? ''],
-            ['HPP Produk Saat Ini', $recipeCost['product_hpp_average']],
-            ['Selisih HPP Resep vs Produk', $recipeCost['hpp_difference'] ?? ''],
-        ], null, 'A1');
-        $summary->getColumnDimension('A')->setAutoSize(true);
-        $summary->getColumnDimension('B')->setAutoSize(true);
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('HPP Resep');
 
-        $lines = $spreadsheet->createSheet();
-        $lines->setTitle('Detail Bahan');
-        $lines->fromArray([
+        $sheet->mergeCells('A1:H1');
+        $sheet->setCellValue('A1', 'Detail HPP Resep');
+        $sheet->mergeCells('A2:H2');
+        $sheet->setCellValue('A2', trim($recipeCost['product_name'].' | SKU: '.($recipeCost['product_sku'] ?: '-')));
+
+        $sheet->fromArray([
+            ['Mode Produksi', $recipeCost['production_mode']],
+            ['Hasil per 1 Resep', $recipeCost['recipe_output_qty'] ?: '-'],
+            ['HPP Produk Saat Ini', $recipeCost['product_hpp_average']],
+        ], null, 'A4');
+
+        $sheet->fromArray([
+            ['Total HPP Resep', 'Estimasi HPP per Output', 'Selisih Resep vs Produk'],
+            [$recipeCost['recipe_total_cost'], $recipeCost['hpp_per_output'] ?? '', $recipeCost['hpp_difference'] ?? ''],
+        ], null, 'D4');
+
+        $tableHeaderRow = 8;
+        $sheet->fromArray([
+            'No',
             'Bahan',
             'SKU Bahan',
             'Variant',
@@ -212,24 +220,68 @@ class ProductController extends Controller
             'Satuan',
             'HPP per Satuan',
             'Total HPP Line',
-        ], null, 'A1');
+        ], null, 'A'.$tableHeaderRow);
 
-        $rowNumber = 2;
+        $rowNumber = $tableHeaderRow + 1;
+        $lineNumber = 1;
         foreach ($recipeCost['lines'] as $line) {
-            $lines->fromArray([
+            $sheet->fromArray([
+                $lineNumber,
                 $line['component_name'],
                 $line['component_sku'],
-                $line['variant_label'],
+                $line['variant_label'] ?: '-',
                 $line['qty'],
                 $line['unit'],
                 $line['unit_cost'],
                 $line['line_total'],
             ], null, 'A'.$rowNumber);
             $rowNumber++;
+            $lineNumber++;
         }
 
-        foreach (range('A', 'G') as $column) {
-            $lines->getColumnDimension($column)->setAutoSize(true);
+        $totalRow = $rowNumber;
+        $sheet->mergeCells('A'.$totalRow.':G'.$totalRow);
+        $sheet->setCellValue('A'.$totalRow, 'Total HPP Resep');
+        $sheet->setCellValue('H'.$totalRow, $recipeCost['recipe_total_cost']);
+
+        $noteRow = $totalRow + 2;
+        $sheet->mergeCells('A'.$noteRow.':H'.$noteRow);
+        $sheet->setCellValue('A'.$noteRow, 'Catatan: HPP line dihitung dari Qty Resep x HPP per Satuan bahan. Estimasi HPP per output = Total HPP Resep dibagi Hasil per 1 Resep.');
+
+        $currencyFormat = '"Rp" #,##0';
+        $qtyFormat = '#,##0.####';
+        $lastDataRow = max($tableHeaderRow + 1, $totalRow - 1);
+
+        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(16)->getColor()->setRGB('0F172A');
+        $sheet->getStyle('A2')->getFont()->setBold(true)->getColor()->setRGB('475569');
+        $sheet->getStyle('A1:A2')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        $sheet->getStyle('A4:A6')->getFont()->setBold(true)->getColor()->setRGB('64748B');
+        $sheet->getStyle('B6')->getNumberFormat()->setFormatCode($currencyFormat);
+
+        $sheet->getStyle('D4:F4')->getFont()->setBold(true)->getColor()->setRGB('64748B');
+        $sheet->getStyle('D4:F5')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        $sheet->getStyle('D4:F5')->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN)->getColor()->setRGB('E2E8F0');
+        $sheet->getStyle('D4:F4')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('F8FAFC');
+        $sheet->getStyle('D5:F5')->getFont()->setBold(true)->setSize(12);
+        $sheet->getStyle('D5:F5')->getNumberFormat()->setFormatCode($currencyFormat);
+
+        $sheet->getStyle('A'.$tableHeaderRow.':H'.$tableHeaderRow)->getFont()->setBold(true)->getColor()->setRGB('FFFFFF');
+        $sheet->getStyle('A'.$tableHeaderRow.':H'.$tableHeaderRow)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('0F172A');
+        $sheet->getStyle('A'.$tableHeaderRow.':H'.$totalRow)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN)->getColor()->setRGB('E2E8F0');
+        $sheet->getStyle('A'.$tableHeaderRow.':H'.$tableHeaderRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        $sheet->getStyle('A'.($tableHeaderRow + 1).':A'.$lastDataRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        $sheet->getStyle('E'.($tableHeaderRow + 1).':E'.$lastDataRow)->getNumberFormat()->setFormatCode($qtyFormat);
+        $sheet->getStyle('G'.($tableHeaderRow + 1).':H'.$totalRow)->getNumberFormat()->setFormatCode($currencyFormat);
+        $sheet->getStyle('A'.$totalRow.':H'.$totalRow)->getFont()->setBold(true);
+        $sheet->getStyle('A'.$totalRow.':H'.$totalRow)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('FFF7ED');
+        $sheet->getStyle('A'.$noteRow)->getFont()->setItalic(true)->getColor()->setRGB('64748B');
+
+        $sheet->freezePane('A'.($tableHeaderRow + 1));
+        $sheet->setAutoFilter('A'.$tableHeaderRow.':H'.$lastDataRow);
+        $sheet->getPageSetup()->setFitToWidth(1);
+
+        foreach (range('A', 'H') as $column) {
+            $sheet->getColumnDimension($column)->setAutoSize(true);
         }
 
         $filename = 'hpp-resep-'.Str::slug((string) $productRow->name, '-').'-'.now('Asia/Jakarta')->format('Ymd-His').'.xlsx';

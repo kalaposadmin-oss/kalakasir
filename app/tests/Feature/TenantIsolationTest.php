@@ -8,6 +8,7 @@ use App\Support\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 use Tests\Concerns\BootsApiTenantUser;
 use Tests\TestCase;
 
@@ -289,7 +290,8 @@ class TenantIsolationTest extends TestCase
         $response->assertOk();
         $response->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         $response->assertDownload();
-        $this->assertStringStartsWith('PK', $response->streamedContent());
+        $content = $response->streamedContent();
+        $this->assertStringStartsWith('PK', $content);
     }
 
     public function test_product_show_returns_recipe_hpp_detail_and_can_export_single_recipe_cost(): void
@@ -348,7 +350,21 @@ class TenantIsolationTest extends TestCase
         $response->assertOk();
         $response->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         $response->assertDownload();
-        $this->assertStringStartsWith('PK', $response->streamedContent());
+        $content = $response->streamedContent();
+        $this->assertStringStartsWith('PK', $content);
+
+        $path = tempnam(sys_get_temp_dir(), 'recipe-cost-');
+        file_put_contents($path, $content);
+        $workbook = IOFactory::load($path);
+        @unlink($path);
+
+        $sheet = $workbook->getSheetByName('HPP Resep');
+        $this->assertNotNull($sheet);
+        $this->assertSame('Detail HPP Resep', $sheet->getCell('A1')->getValue());
+        $this->assertSame('Total HPP Resep', $sheet->getCell('D4')->getValue());
+        $this->assertSame('Bahan', $sheet->getCell('B8')->getValue());
+        $this->assertSame('Tepung', $sheet->getCell('B9')->getValue());
+        $this->assertSame(1750.0, (float) $sheet->getCell('H11')->getCalculatedValue());
     }
 
     private function insertProductForTenant(string $tenantId, array $overrides = []): string
