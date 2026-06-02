@@ -12,6 +12,7 @@ use App\Models\PurchaseItem;
 use App\Models\Sale;
 use App\Models\Supplier;
 use App\Services\AnomalyService;
+use App\Services\LockPeriodService;
 use App\Services\PurchaseService;
 use App\Services\TransactionDateService;
 use App\Support\PurchaseFlowResolver;
@@ -407,6 +408,8 @@ class PurchaseController extends Controller
             $dueDate = now('UTC')->addDays(14)->toDateString();
         }
 
+        $isDirectPurchase = $status !== PurchaseStatus::DRAFT && $purchaseMode === PurchaseMode::SIMPLE;
+
         if ($paymentMethod === 'tunai') {
             $cashAccountId = $cashAccountId ?: $this->resolveDefaultCashAccountId($tenantId);
 
@@ -418,20 +421,22 @@ class PurchaseController extends Controller
                 ], 422);
             }
 
-            $availableCash = $this->resolveCashAccountBalance($tenantId, $cashAccountId, $transactionDate->toDateString());
-            if ($availableCash <= 0) {
-                $availableCash = $this->resolveEstimatedAvailableCash($tenantId);
-            }
+            if ($isDirectPurchase) {
+                $availableCash = $this->resolveCashAccountBalance($tenantId, $cashAccountId, $transactionDate->toDateString());
+                if ($availableCash <= 0) {
+                    $availableCash = $this->resolveEstimatedAvailableCash($tenantId);
+                }
 
-            if ($total > $availableCash) {
-                return response()->json([
-                    'code' => 'INSUFFICIENT_CASH_BALANCE',
-                    'message' => 'Saldo kas akun tidak cukup untuk pembelian tunai.',
-                    'details' => [
-                        'available_cash' => round($availableCash, 2),
-                        'required_amount' => round($total, 2),
-                    ],
-                ], 422);
+                if ($total > $availableCash) {
+                    return response()->json([
+                        'code' => 'INSUFFICIENT_CASH_BALANCE',
+                        'message' => 'Saldo kas akun tidak cukup untuk pembelian tunai.',
+                        'details' => [
+                            'available_cash' => round($availableCash, 2),
+                            'required_amount' => round($total, 2),
+                        ],
+                    ], 422);
+                }
             }
         }
 
@@ -636,6 +641,42 @@ class PurchaseController extends Controller
     public function receive(Request $request, string $purchase, PurchaseService $service)
     {
         $tenantId = TenantContext::id();
+
+        $datePayload = $request->validate([
+            'transaction_date' => ['nullable', 'date'],
+        ]);
+
+        try {
+            if ($tenantId) {
+                $transactionDate = (new TransactionDateService())
+                    ->resolve($datePayload['transaction_date'] ?? null);
+                (new LockPeriodService())->ensureNotLocked($transactionDate, $tenantId);
+            }
+        } catch (LockPeriodException $exception) {
+            return response()->json([
+                'code' => $exception->errorCode(),
+                'message' => $exception->getMessage(),
+                'details' => [],
+            ], $exception->status());
+        } catch (InvalidArgumentException $exception) {
+            if ($tenantId) {
+                app(AnomalyService::class)->raise(
+                    tenantId: $tenantId,
+                    severity: 'low',
+                    type: 'invalid_transaction_date_attempt',
+                    payload: [
+                        'source' => 'purchase_receive',
+                        'message' => $exception->getMessage(),
+                    ]
+                );
+            }
+
+            return response()->json([
+                'code' => 'INVALID_TRANSACTION_DATE',
+                'message' => $exception->getMessage(),
+                'details' => [],
+            ], 422);
+        }
 
         $payload = $request->validate([
             'items' => ['required', 'array', 'min:1'],

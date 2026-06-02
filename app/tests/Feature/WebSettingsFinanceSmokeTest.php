@@ -185,9 +185,12 @@ class WebSettingsFinanceSmokeTest extends TestCase
         $this->assertContains('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,finance.lock_period', $middleware);
         $this->assertNotContains('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview', $middleware);
         $this->assertTrue(view()->exists('lock-periods'));
-        $this->assertStringContainsString('Penguncian Periode', $contents);
+        $this->assertStringContainsString('Tutup Buku Bulanan', $contents);
         $this->assertStringContainsString('/backoffice/finance/summary', $contents);
-        $this->assertStringContainsString('Tambah Periode Baru', $contents);
+        $this->assertStringContainsString('Tutup Periode', $contents);
+        $this->assertStringContainsString('/api/v1/lock-periods/preview', $contents);
+        $this->assertStringContainsString('/api/v1/lock-periods/close', $contents);
+        $this->assertStringContainsString('/reopen', $contents);
         $this->assertStringContainsString('Daftar Periode Akuntansi', $contents);
         $this->assertStringContainsString('create-period', $contents);
         $this->assertStringContainsString('toggle-checkbox', $contents);

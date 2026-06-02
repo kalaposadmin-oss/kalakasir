@@ -17,6 +17,23 @@ class PurchasePaymentUpdateTest extends TestCase
     use BuildsCheckoutRequestFixture;
     use RefreshDatabase;
 
+    public function test_create_submitted_cash_po_does_not_require_available_cash_before_receiving(): void
+    {
+        [$tenant, $user] = $this->bootApiActor('admin', 'purchase-cash-po-create@example.test');
+        $fixture = $this->seedCheckoutFixture($tenant->id, $user->id);
+        $supplierId = $this->insertSupplier($tenant->id, 'Supplier Cash PO');
+
+        $purchaseId = $this->createPurchase($tenant->id, $supplierId, $fixture['location_id'], $fixture['product_id'], 'tunai', $fixture['cash_account_id']);
+
+        $this->assertDatabaseHas('purchases', [
+            'id' => $purchaseId,
+            'tenant_id' => $tenant->id,
+            'status' => PurchaseStatus::SUBMITTED,
+            'payment_method' => 'tunai',
+            'cash_account_id' => $fixture['cash_account_id'],
+        ]);
+    }
+
     public function test_update_purchase_payment_from_tempo_to_tunai_updates_cash_account_and_clears_due_date(): void
     {
         [$tenant, $user] = $this->bootApiActor('admin', 'purchase-payment-edit-tempo@example.test');

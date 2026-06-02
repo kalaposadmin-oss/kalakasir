@@ -107,6 +107,7 @@ Route::prefix('v1')
         Route::get('reports/inventory/export/pdf', [InventoryReportController::class, 'exportPdf'])->middleware(['role:warehouse,supervisor,admin,owner', 'feature_gate:reports.download_pdf']);
         Route::get('reports/inventory/stock-card/{product}/export/csv', [InventoryReportController::class, 'exportStockCardCsv'])->middleware(['role:warehouse,supervisor,admin,owner', 'feature_gate:reports.inventory_stock_card', 'feature_gate:reports.export_csv']);
         Route::get('lock-periods', [LockPeriodController::class, 'index'])->middleware('feature_gate:finance.lock_period');
+        Route::get('lock-periods/preview', [LockPeriodController::class, 'preview'])->middleware('feature_gate:finance.lock_period');
         Route::get('loyalty', [LoyaltyController::class, 'index'])->middleware('feature_gate:loyalty.program');
         Route::get('materials', [MaterialController::class, 'index'])->middleware(['role:admin,owner,superadmin', 'feature_gate:product.materials']);
         Route::get('materials/{material}', [MaterialController::class, 'show'])->middleware(['role:admin,owner,superadmin', 'feature_gate:product.materials']);
@@ -204,7 +205,9 @@ Route::prefix('v1')
         Route::delete('customer-categories/{customerCategory}', [CustomerCategoryController::class, 'destroy'])->middleware(['role:admin,owner,superadmin', 'feature_gate:customer.manage']);
         Route::delete('products/{product}', [ProductController::class, 'destroy'])->middleware(['role:admin,owner', 'feature_gate:product.list']);
         Route::post('lock-periods', [LockPeriodController::class, 'store'])->middleware(['role:admin,owner', 'feature_gate:finance.lock_period']);
+        Route::post('lock-periods/close', [LockPeriodController::class, 'close'])->middleware(['role:admin,owner', 'feature_gate:finance.lock_period']);
         Route::post('materials', [MaterialController::class, 'store'])->middleware(['role:admin,owner,superadmin', 'feature_gate:product.materials']);
+        Route::post('lock-periods/{period}/reopen', [LockPeriodController::class, 'reopen'])->middleware(['role:admin,owner', 'feature_gate:finance.lock_period']);
         Route::patch('lock-periods/{period}', [LockPeriodController::class, 'toggle'])->middleware(['role:admin,owner', 'feature_gate:finance.lock_period']);
         Route::put('materials/{material}', [MaterialController::class, 'update'])->middleware(['role:admin,owner,superadmin', 'feature_gate:product.materials']);
         Route::patch('taxes/{tax}', [SettingsController::class, 'updateTax'])->middleware(['role:admin,owner', 'feature_gate:settings.tax']);

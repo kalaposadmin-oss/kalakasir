@@ -74,11 +74,18 @@
             const payload = await parseJsonSafe(response);
             const code = payload?.code || null;
             const mapped = code && errorMap[code] ? errorMap[code] : null;
+            const details = payload?.details && typeof payload.details === 'object'
+                ? Object.values(payload.details).flat().filter(Boolean)
+                : [];
 
             return {
                 code,
                 payload,
-                message: mapped || payload?.message || fallbackMessage,
+                details,
+                message: [
+                    mapped || payload?.message || fallbackMessage,
+                    ...details,
+                ].filter(Boolean).join('\n'),
             };
         };
 
