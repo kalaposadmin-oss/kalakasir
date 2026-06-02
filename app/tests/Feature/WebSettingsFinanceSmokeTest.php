@@ -192,6 +192,9 @@ class WebSettingsFinanceSmokeTest extends TestCase
         $this->assertTrue(view()->exists('lock-periods'));
         $this->assertStringContainsString('Tutup Buku Bulanan', $contents);
         $this->assertStringContainsString('/backoffice/finance/summary', $contents);
+        $this->assertStringContainsString('Langkah Tutup Buku', $contents);
+        $this->assertStringContainsString('closing-assistant-banner', $contents);
+        $this->assertStringContainsString('/api/v1/lock-periods/assistant', $contents);
         $this->assertStringContainsString('Tutup Periode', $contents);
         $this->assertStringContainsString('/api/v1/lock-periods/preview', $contents);
         $this->assertStringContainsString('/api/v1/lock-periods/close', $contents);

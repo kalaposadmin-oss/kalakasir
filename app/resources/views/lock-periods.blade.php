@@ -61,6 +61,30 @@
                     </div>
                 </div>
             </div>
+            <section class="px-4 mb-6">
+                <div id="closing-assistant-banner" class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                    <div class="flex items-start gap-3">
+                        <div id="assistant-icon-wrap" class="flex size-11 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500 dark:bg-slate-800">
+                            <span class="material-symbols-outlined">event_available</span>
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <p id="assistant-status-label" class="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Memuat status</p>
+                            <h3 id="assistant-title" class="mt-1 text-base font-bold text-slate-900 dark:text-white">Menyiapkan asisten tutup buku...</h3>
+                            <p id="assistant-message" class="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">Sistem sedang mengecek periode yang perlu ditutup.</p>
+                        </div>
+                    </div>
+                    <div id="assistant-restrictions" class="mt-3 hidden rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800"></div>
+                </div>
+            </section>
+            <section class="px-4 mb-8">
+                <div class="flex justify-between items-center px-1 mb-3">
+                    <h3 class="text-sm font-bold text-slate-500 uppercase tracking-widest">Langkah Tutup Buku</h3>
+                    <span class="text-[10px] font-bold text-slate-400" id="assistant-period-label">-</span>
+                </div>
+                <div id="assistant-checklist" class="space-y-3">
+                    <div class="text-sm text-slate-400">Memuat checklist tutup buku...</div>
+                </div>
+            </section>
             <section class="px-4 mb-8">
                 <h3 class="text-sm font-bold text-slate-500 uppercase tracking-widest px-1 mb-3">Tutup Periode</h3>
                 <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
@@ -116,6 +140,14 @@
                     reason: document.getElementById('period-reason'),
                     list: document.getElementById('period-list'),
                     count: document.getElementById('period-count'),
+                    assistantBanner: document.getElementById('closing-assistant-banner'),
+                    assistantIconWrap: document.getElementById('assistant-icon-wrap'),
+                    assistantStatusLabel: document.getElementById('assistant-status-label'),
+                    assistantTitle: document.getElementById('assistant-title'),
+                    assistantMessage: document.getElementById('assistant-message'),
+                    assistantRestrictions: document.getElementById('assistant-restrictions'),
+                    assistantPeriodLabel: document.getElementById('assistant-period-label'),
+                    assistantChecklist: document.getElementById('assistant-checklist'),
                 };
 
                 const formatDate = (value) => new Intl.DateTimeFormat('id-ID', {
@@ -190,11 +222,156 @@
                     return data.periods || [];
                 };
 
+                const loadAssistant = async () => {
+                    const response = await fetch('/api/v1/lock-periods/assistant', { headers });
+                    if (!response.ok) {
+                        return null;
+                    }
+
+                    return response.json();
+                };
+
                 const formatCurrency = (value) => new Intl.NumberFormat('id-ID', {
                     style: 'currency',
                     currency: 'IDR',
                     maximumFractionDigits: 0,
                 }).format(value || 0);
+
+                const formatMetric = (step) => {
+                    const value = step?.metric_value ?? 0;
+                    if (['sales_review', 'cash_bank', 'debt_receivable'].includes(step?.key)) {
+                        return formatCurrency(value);
+                    }
+
+                    return new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(value || 0);
+                };
+
+                const checklistTone = (status) => {
+                    if (status === 'blocked') {
+                        return {
+                            icon: 'error',
+                            card: 'border-rose-200 bg-rose-50 dark:border-rose-900/40 dark:bg-rose-950/20',
+                            iconWrap: 'bg-rose-100 text-rose-600',
+                            label: 'Wajib dibereskan',
+                            labelClass: 'text-rose-600',
+                        };
+                    }
+                    if (status === 'warning') {
+                        return {
+                            icon: 'warning',
+                            card: 'border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/20',
+                            iconWrap: 'bg-amber-100 text-amber-600',
+                            label: 'Perlu review',
+                            labelClass: 'text-amber-700',
+                        };
+                    }
+                    if (status === 'ready') {
+                        return {
+                            icon: 'verified',
+                            card: 'border-primary/20 bg-primary/5',
+                            iconWrap: 'bg-primary/10 text-primary',
+                            label: 'Siap',
+                            labelClass: 'text-primary',
+                        };
+                    }
+
+                    return {
+                        icon: status === 'review' ? 'fact_check' : 'check_circle',
+                        card: 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900',
+                        iconWrap: status === 'review' ? 'bg-blue-100 text-blue-600' : 'bg-emerald-100 text-emerald-600',
+                        label: status === 'review' ? 'Cek manual' : 'Aman',
+                        labelClass: status === 'review' ? 'text-blue-600' : 'text-emerald-600',
+                    };
+                };
+
+                const renderAssistant = (assistant) => {
+                    if (!assistant) {
+                        el.assistantTitle.textContent = 'Status tutup buku belum tersedia';
+                        el.assistantMessage.textContent = 'Coba muat ulang halaman atau cek koneksi.';
+                        el.assistantChecklist.innerHTML = '<div class="text-sm text-slate-400">Checklist belum bisa dimuat.</div>';
+                        return;
+                    }
+
+                    const status = assistant.status || {};
+                    const target = assistant.target_period || {};
+                    const severity = status.severity || 'safe';
+                    const severityLabel = {
+                        safe: 'Aman',
+                        review: 'Awal bulan',
+                        due: 'Perlu ditutup',
+                        urgent: 'Wajib ditutup',
+                    }[severity] || 'Status';
+                    const icon = {
+                        safe: 'verified_user',
+                        review: 'event_available',
+                        due: 'notification_important',
+                        urgent: 'priority_high',
+                    }[severity] || 'event_available';
+                    const iconClass = {
+                        safe: 'bg-emerald-100 text-emerald-600',
+                        review: 'bg-blue-100 text-blue-600',
+                        due: 'bg-amber-100 text-amber-700',
+                        urgent: 'bg-rose-100 text-rose-600',
+                    }[severity] || 'bg-slate-100 text-slate-500';
+
+                    el.assistantIconWrap.className = `flex size-11 shrink-0 items-center justify-center rounded-xl ${iconClass}`;
+                    el.assistantIconWrap.innerHTML = `<span class="material-symbols-outlined">${icon}</span>`;
+                    el.assistantStatusLabel.textContent = severityLabel;
+                    el.assistantTitle.textContent = status.title || 'Asisten tutup buku';
+                    el.assistantMessage.textContent = status.message || '';
+                    el.assistantPeriodLabel.textContent = target.label || '-';
+
+                    if (target.start_date && target.end_date) {
+                        el.start.value = target.start_date;
+                        el.end.value = target.end_date;
+                        if (!el.name.value) {
+                            el.name.value = target.label || '';
+                        }
+                    }
+
+                    const restrictions = Array.isArray(status.recommended_restrictions) ? status.recommended_restrictions : [];
+                    if (restrictions.length) {
+                        el.assistantRestrictions.classList.remove('hidden');
+                        el.assistantRestrictions.innerHTML = `<b>Mode pembatasan admin:</b><ul class="mt-1 list-disc pl-4">${restrictions.map((item) => `<li>${item}</li>`).join('')}</ul>`;
+                    } else {
+                        el.assistantRestrictions.classList.add('hidden');
+                        el.assistantRestrictions.innerHTML = '';
+                    }
+
+                    const checklist = Array.isArray(assistant.checklist) ? assistant.checklist : [];
+                    if (!checklist.length) {
+                        el.assistantChecklist.innerHTML = '<div class="text-sm text-slate-400">Belum ada checklist.</div>';
+                        return;
+                    }
+
+                    el.assistantChecklist.innerHTML = checklist.map((step, index) => {
+                        const tone = checklistTone(step.status);
+                        return `
+                            <article class="rounded-2xl border p-4 shadow-sm ${tone.card}">
+                                <div class="flex items-start gap-3">
+                                    <div class="flex size-10 shrink-0 items-center justify-center rounded-xl ${tone.iconWrap}">
+                                        <span class="material-symbols-outlined text-[20px]">${tone.icon}</span>
+                                    </div>
+                                    <div class="min-w-0 flex-1">
+                                        <div class="flex items-start justify-between gap-3">
+                                            <div>
+                                                <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Langkah ${index + 1}</p>
+                                                <h4 class="mt-1 text-sm font-bold text-slate-900 dark:text-white">${step.title || '-'}</h4>
+                                            </div>
+                                            <span class="shrink-0 text-[10px] font-bold uppercase ${tone.labelClass}">${tone.label}</span>
+                                        </div>
+                                        <p class="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">${step.description || ''}</p>
+                                        <div class="mt-3 flex items-center justify-between gap-3 rounded-xl bg-white/70 px-3 py-2 text-xs dark:bg-slate-950/40">
+                                            <span class="font-semibold text-slate-500">${step.metric_label || 'Nilai'}</span>
+                                            <span class="font-bold text-slate-900 dark:text-white">${formatMetric(step)}</span>
+                                        </div>
+                                        ${step.action_url ? `<a class="mt-3 inline-flex items-center gap-1 text-xs font-bold text-primary" href="${step.action_url}">Buka langkah ini <span class="material-symbols-outlined text-[15px]">arrow_forward</span></a>` : ''}
+                                    </div>
+                                </div>
+                            </article>
+                        `;
+                    }).join('');
+                };
 
                 const apiMessage = async (response, fallback) => {
                     const payload = await response.json().catch(() => ({}));
@@ -312,7 +489,11 @@
                 @endif
 
                 (async () => {
-                    const periods = await loadPeriods();
+                    const [assistant, periods] = await Promise.all([
+                        loadAssistant(),
+                        loadPeriods(),
+                    ]);
+                    renderAssistant(assistant);
                     renderPeriods(periods);
                 })();
             })();

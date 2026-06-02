@@ -76,6 +76,18 @@ class LockPeriodController extends Controller
         ));
     }
 
+    public function assistant(Request $request, PeriodClosingService $service)
+    {
+        $tenantId = TenantContext::id();
+        if (! $tenantId) {
+            return response()->json([
+                'message' => 'Tenant tidak ditemukan.',
+            ], 400);
+        }
+
+        return response()->json($service->assistantStatus($tenantId));
+    }
+
     public function store(Request $request)
     {
         $tenantId = TenantContext::id();

@@ -107,6 +107,7 @@ Route::prefix('v1')
         Route::get('reports/inventory/export/pdf', [InventoryReportController::class, 'exportPdf'])->middleware(['role:warehouse,supervisor,admin,owner', 'feature_gate:reports.download_pdf']);
         Route::get('reports/inventory/stock-card/{product}/export/csv', [InventoryReportController::class, 'exportStockCardCsv'])->middleware(['role:warehouse,supervisor,admin,owner', 'feature_gate:reports.inventory_stock_card', 'feature_gate:reports.export_csv']);
         Route::get('lock-periods', [LockPeriodController::class, 'index'])->middleware('feature_gate:finance.lock_period');
+        Route::get('lock-periods/assistant', [LockPeriodController::class, 'assistant'])->middleware('feature_gate:finance.lock_period');
         Route::get('lock-periods/preview', [LockPeriodController::class, 'preview'])->middleware('feature_gate:finance.lock_period');
         Route::get('loyalty', [LoyaltyController::class, 'index'])->middleware('feature_gate:loyalty.program');
         Route::get('materials', [MaterialController::class, 'index'])->middleware(['role:admin,owner,superadmin', 'feature_gate:product.materials']);

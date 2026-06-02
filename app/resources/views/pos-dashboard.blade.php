@@ -20,6 +20,9 @@
         && app(\App\Services\SubscriptionService::class)->canAccessFeature($posDashboardTenant, 'finance.cash_transactions');
     $showsOrderOnlineShortcuts = $posDashboardTenant
         && in_array($posDashboardRole, ['supervisor', 'admin', 'owner', 'superadmin'], true);
+    $showsPeriodClosingReminder = $posDashboardTenant
+        && in_array($posDashboardRole, ['supervisor', 'admin', 'owner', 'superadmin'], true)
+        && app(\App\Services\SubscriptionService::class)->canAccessFeature($posDashboardTenant, 'finance.lock_period');
 @endphp
 
 @section('page_title', 'Dashboard POS')
@@ -166,6 +169,21 @@
                 <a href="/pos/shifts/open" class="flex-shrink-0 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-bold text-white active:opacity-80">
                     Buka Shift
                 </a>
+            </div>
+        @endif
+
+        @if ($showsPeriodClosingReminder)
+            <div id="pos-period-closing-reminder" class="hidden rounded-2xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-800/50 dark:bg-amber-950/30" role="alert">
+                <div class="flex items-start gap-3">
+                    <span class="material-symbols-outlined flex-shrink-0 text-xl text-amber-600">notification_important</span>
+                    <div class="min-w-0 flex-1">
+                        <p id="pos-period-closing-title" class="text-sm font-bold text-amber-800 dark:text-amber-200">Periode sebelumnya perlu ditutup</p>
+                        <p id="pos-period-closing-message" class="mt-0.5 text-xs leading-relaxed text-amber-700 dark:text-amber-300">Review checklist tutup buku sebelum laporan dipakai.</p>
+                    </div>
+                    <a href="/backoffice/finance/lock-periods" class="flex-shrink-0 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-bold text-white active:opacity-80">
+                        Cek
+                    </a>
+                </div>
             </div>
         @endif
 
@@ -499,6 +517,41 @@
                 }
             };
 
+            const loadPeriodClosingReminder = async () => {
+                const reminder = document.getElementById('pos-period-closing-reminder');
+                if (!reminder) {
+                    return;
+                }
+
+                try {
+                    const data = await window.PosUi.fetchJson('/api/v1/lock-periods/assistant', {
+                        headers,
+                    }, {
+                        timeoutMs: 8000,
+                        ttlMs: 30000,
+                        cacheKey: 'pos-dashboard-period-closing-assistant',
+                        unwrap: true,
+                    });
+                    const severity = data?.status?.severity || 'safe';
+                    if (severity === 'safe') {
+                        reminder.classList.add('hidden');
+                        return;
+                    }
+
+                    const title = document.getElementById('pos-period-closing-title');
+                    const message = document.getElementById('pos-period-closing-message');
+                    if (title) {
+                        title.textContent = data?.status?.title || 'Periode sebelumnya perlu ditutup';
+                    }
+                    if (message) {
+                        message.textContent = data?.status?.message || 'Review checklist tutup buku sebelum laporan dipakai.';
+                    }
+                    reminder.classList.remove('hidden');
+                } catch (_) {
+                    reminder.classList.add('hidden');
+                }
+            };
+
             const loadDashboardWidgets = async () => {
                 try {
                     const data = await window.PosUi.fetchJson('/api/v1/pos/dashboard?sections=top_products,low_stock&top_limit=3&low_stock_limit=2', {
@@ -517,7 +570,7 @@
                 }
             };
 
-            Promise.allSettled([loadShift(), loadDashboardSummary()]).then(() => {
+            Promise.allSettled([loadShift(), loadDashboardSummary(), loadPeriodClosingReminder()]).then(() => {
                 runWhenIdle(() => loadDashboardWidgets());
             });
         })();

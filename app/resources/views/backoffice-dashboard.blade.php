@@ -91,6 +91,21 @@
     </header>
 
     <div class="backoffice-page backoffice-dashboard-page space-y-5">
+        @if ($canManageDashboardSettings && $dashboardCanFeature('finance.lock_period'))
+            <section id="period-closing-reminder" class="hidden rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900 shadow-sm dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100">
+                <div class="flex items-start gap-3">
+                    <span class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white/70 text-amber-600 dark:bg-slate-950/40">
+                        <span class="material-symbols-outlined text-[20px]">notification_important</span>
+                    </span>
+                    <div class="min-w-0 flex-1">
+                        <p id="period-closing-reminder-label" class="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700 dark:text-amber-300">Tutup Buku</p>
+                        <h3 id="period-closing-reminder-title" class="mt-1 text-sm font-black">Periode sebelumnya perlu ditutup</h3>
+                        <p id="period-closing-reminder-message" class="mt-1 text-xs leading-5 text-amber-800 dark:text-amber-200">Review checklist tutup buku sebelum laporan bulan berjalan dipakai.</p>
+                    </div>
+                    <a href="/backoffice/finance/lock-periods" class="shrink-0 rounded-lg bg-amber-600 px-3 py-2 text-xs font-black text-white">Cek</a>
+                </div>
+            </section>
+        @endif
         <section class="backoffice-home-panel overflow-hidden dark:border-slate-800 dark:bg-slate-900">
             <div class="grid gap-5 p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center lg:p-5">
                 <div class="min-w-0">
@@ -250,6 +265,10 @@
                 subscriptionTitle: document.getElementById('subscription-title'),
                 subscriptionMeta: document.getElementById('subscription-meta'),
                 recentSalesBody: document.getElementById('recent-sales-body'),
+                periodClosingReminder: document.getElementById('period-closing-reminder'),
+                periodClosingReminderLabel: document.getElementById('period-closing-reminder-label'),
+                periodClosingReminderTitle: document.getElementById('period-closing-reminder-title'),
+                periodClosingReminderMessage: document.getElementById('period-closing-reminder-message'),
             };
 
             const formatCurrency = (value) => new Intl.NumberFormat('id-ID', {
@@ -456,9 +475,36 @@
                 renderRecentSales(data?.sales || []);
             };
 
+            const loadPeriodClosingReminder = async () => {
+                if (!el.periodClosingReminder) {
+                    return;
+                }
+
+                try {
+                    const data = await fetchDashboardJson('/api/v1/lock-periods/assistant', {
+                        timeoutMs: 8000,
+                        ttlMs: 30000,
+                        cacheKey: 'backoffice-dashboard-period-closing-assistant',
+                    });
+                    const severity = data?.status?.severity || 'safe';
+                    if (severity === 'safe') {
+                        el.periodClosingReminder.classList.add('hidden');
+                        return;
+                    }
+
+                    el.periodClosingReminder.classList.remove('hidden');
+                    el.periodClosingReminderLabel.textContent = data?.target_period?.label ? `Tutup Buku ${data.target_period.label}` : 'Tutup Buku';
+                    el.periodClosingReminderTitle.textContent = data?.status?.title || 'Periode sebelumnya perlu ditutup';
+                    el.periodClosingReminderMessage.textContent = data?.status?.message || 'Review checklist tutup buku sebelum laporan bulan berjalan dipakai.';
+                } catch (_) {
+                    el.periodClosingReminder.classList.add('hidden');
+                }
+            };
+
             Promise.allSettled([
                 loadAnalytics(),
                 loadShiftStatus(),
+                loadPeriodClosingReminder(),
             ]).then(() => {
                 runWhenIdle(() => {
                     loadInventorySummary().catch(() => undefined);

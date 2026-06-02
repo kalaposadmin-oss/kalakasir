@@ -10,6 +10,53 @@ use RuntimeException;
 
 class PeriodClosingService
 {
+    public function assistantStatus(string $tenantId, ?CarbonImmutable $today = null): array
+    {
+        $today = ($today ?: CarbonImmutable::now(config('app.timezone', 'Asia/Jakarta')))->startOfDay();
+        $targetStart = $today->subMonthNoOverflow()->startOfMonth();
+        $targetEnd = $today->subMonthNoOverflow()->endOfMonth();
+        $start = $targetStart->toDateString();
+        $end = $targetEnd->toDateString();
+        $period = DB::table('lock_periods')
+            ->where('tenant_id', $tenantId)
+            ->where('start_date', $start)
+            ->where('end_date', $end)
+            ->orderByDesc('locked_at')
+            ->first();
+        $isClosed = (bool) ($period?->is_locked ?? false);
+        $daysAfterPeriodEnd = max(0, (int) $targetEnd->startOfDay()->diffInDays($today, false));
+        $preview = $this->preview($tenantId, $start, $end);
+        $checklist = $this->assistantChecklist($tenantId, $start, $end, $preview);
+        $openIssueCount = collect($checklist)->where('status', 'blocked')->count();
+        $warningIssueCount = collect($checklist)->where('status', 'warning')->count();
+        $severity = 'safe';
+
+        if (! $isClosed) {
+            $severity = $daysAfterPeriodEnd >= 10 ? 'urgent' : ($daysAfterPeriodEnd >= 4 ? 'due' : 'review');
+        }
+
+        return [
+            'today' => $today->toDateString(),
+            'target_period' => [
+                'start_date' => $start,
+                'end_date' => $end,
+                'label' => $targetStart->locale('id')->isoFormat('MMMM YYYY'),
+                'is_closed' => $isClosed,
+                'period_id' => $period?->id,
+                'days_after_period_end' => $daysAfterPeriodEnd,
+            ],
+            'status' => [
+                'severity' => $severity,
+                'title' => $this->assistantTitle($isClosed, $severity, $targetStart),
+                'message' => $this->assistantMessage($isClosed, $severity, $targetStart, $openIssueCount, $warningIssueCount),
+                'restriction_mode' => $this->restrictionMode($isClosed, $daysAfterPeriodEnd),
+                'recommended_restrictions' => $this->recommendedRestrictions($isClosed, $daysAfterPeriodEnd),
+            ],
+            'checklist' => $checklist,
+            'preview' => $preview,
+        ];
+    }
+
     public function preview(string $tenantId, string $startDate, string $endDate): array
     {
         $start = CarbonImmutable::parse($startDate)->toDateString();
@@ -160,6 +207,190 @@ class PeriodClosingService
             'open_shift_count' => (int) $openShiftCount,
             'negative_stock_count' => (int) $negativeStockCount,
             'can_close' => $openShiftCount === 0,
+        ];
+    }
+
+    private function assistantChecklist(string $tenantId, string $startDate, string $endDate, array $preview): array
+    {
+        $checks = $preview['checks'] ?? [];
+        $summary = $preview['summary'] ?? [];
+        $carry = $preview['carry_forward'] ?? [];
+        $pendingPurchases = $this->pendingPurchaseCounts($tenantId, $startDate, $endDate);
+        $stockWithoutCost = $this->stockWithoutCostCount($tenantId);
+
+        return [
+            [
+                'key' => 'shift_cash',
+                'title' => 'Tutup shift dan kas harian',
+                'description' => 'Pastikan tidak ada shift terbuka sebelum tutup buku.',
+                'status' => ((int) ($checks['open_shift_count'] ?? 0)) > 0 ? 'blocked' : 'done',
+                'metric_label' => 'Shift terbuka',
+                'metric_value' => (int) ($checks['open_shift_count'] ?? 0),
+                'action_url' => '/pos/shifts/summary',
+            ],
+            [
+                'key' => 'sales_review',
+                'title' => 'Review penjualan dan retur',
+                'description' => 'Cek total penjualan, refund, dan transaksi void bulan ini.',
+                'status' => 'review',
+                'metric_label' => 'Penjualan',
+                'metric_value' => (float) ($summary['sales_total'] ?? 0),
+                'action_url' => '/backoffice/reports/sales',
+            ],
+            [
+                'key' => 'purchase_review',
+                'title' => 'Review PO dan pembelian',
+                'description' => 'Selesaikan PO yang memang sudah diterima, atau biarkan terbuka jika barang belum datang.',
+                'status' => $pendingPurchases['total'] > 0 ? 'warning' : 'done',
+                'metric_label' => 'PO aktif',
+                'metric_value' => $pendingPurchases['total'],
+                'details' => $pendingPurchases,
+                'action_url' => '/backoffice/purchases',
+            ],
+            [
+                'key' => 'cash_bank',
+                'title' => 'Cek saldo kas dan bank',
+                'description' => 'Samakan saldo fisik kas/bank dengan angka sistem.',
+                'status' => 'review',
+                'metric_label' => 'Saldo kas/bank',
+                'metric_value' => (float) ($carry['cash_balance'] ?? 0),
+                'action_url' => '/backoffice/finance/summary',
+            ],
+            [
+                'key' => 'stock_review',
+                'title' => 'Cek stok dan HPP',
+                'description' => 'Stok minus harus diperbaiki. Produk tanpa harga modal perlu dicek sebelum laporan final.',
+                'status' => ((int) ($checks['negative_stock_count'] ?? 0)) > 0 ? 'blocked' : ($stockWithoutCost > 0 ? 'warning' : 'done'),
+                'metric_label' => 'Masalah stok',
+                'metric_value' => (int) ($checks['negative_stock_count'] ?? 0) + $stockWithoutCost,
+                'details' => [
+                    'negative_stock_count' => (int) ($checks['negative_stock_count'] ?? 0),
+                    'stock_without_cost_count' => $stockWithoutCost,
+                ],
+                'action_url' => '/backoffice/reports/inventory',
+            ],
+            [
+                'key' => 'debt_receivable',
+                'title' => 'Cek hutang dan piutang',
+                'description' => 'Hutang/piutang tidak dihapus; nilainya dibawa sebagai saldo periode berikutnya.',
+                'status' => 'review',
+                'metric_label' => 'Hutang + piutang',
+                'metric_value' => (float) ($carry['supplier_debt'] ?? 0) + (float) ($carry['receivable_balance'] ?? 0),
+                'action_url' => '/backoffice/finance/summary',
+            ],
+            [
+                'key' => 'close_period',
+                'title' => 'Preview dan tutup buku',
+                'description' => 'Jika semua tahap sudah aman, tutup periode untuk mengunci laporan.',
+                'status' => (bool) ($checks['can_close'] ?? false) ? 'ready' : 'blocked',
+                'metric_label' => 'Siap tutup',
+                'metric_value' => (bool) ($checks['can_close'] ?? false) ? 1 : 0,
+                'action_url' => '/backoffice/finance/lock-periods',
+            ],
+        ];
+    }
+
+    private function pendingPurchaseCounts(string $tenantId, string $startDate, string $endDate): array
+    {
+        if (! Schema::hasTable('purchases')) {
+            return ['draft' => 0, 'submitted' => 0, 'approved' => 0, 'partially_received' => 0, 'total' => 0];
+        }
+
+        $rows = DB::table('purchases')
+            ->where('tenant_id', $tenantId)
+            ->whereIn('status', ['draft', 'submitted', 'approved', 'partially_received'])
+            ->where(function ($query) use ($startDate, $endDate): void {
+                $dateColumn = Schema::hasColumn('purchases', 'transaction_date') ? 'transaction_date' : 'created_at';
+                if ($dateColumn === 'transaction_date') {
+                    $query->whereBetween('transaction_date', [$startDate, $endDate]);
+                } else {
+                    $query->whereDate('created_at', '>=', $startDate)->whereDate('created_at', '<=', $endDate);
+                }
+            })
+            ->select('status', DB::raw('COUNT(*) as count_value'))
+            ->groupBy('status')
+            ->pluck('count_value', 'status');
+
+        $counts = [
+            'draft' => (int) ($rows['draft'] ?? 0),
+            'submitted' => (int) ($rows['submitted'] ?? 0),
+            'approved' => (int) ($rows['approved'] ?? 0),
+            'partially_received' => (int) ($rows['partially_received'] ?? 0),
+        ];
+        $counts['total'] = array_sum($counts);
+
+        return $counts;
+    }
+
+    private function stockWithoutCostCount(string $tenantId): int
+    {
+        if (! Schema::hasTable('inventory_balances') || ! Schema::hasTable('products')) {
+            return 0;
+        }
+
+        return (int) DB::table('inventory_balances as ib')
+            ->join('products as p', function ($join): void {
+                $join->on('p.id', '=', 'ib.product_id')
+                    ->on('p.tenant_id', '=', 'ib.tenant_id');
+            })
+            ->where('ib.tenant_id', $tenantId)
+            ->where('ib.qty_on_hand', '>', 0)
+            ->where(function ($query): void {
+                $query->whereNull('p.hpp_average')->orWhere('p.hpp_average', '<=', 0);
+            })
+            ->count();
+    }
+
+    private function assistantTitle(bool $isClosed, string $severity, CarbonImmutable $targetStart): string
+    {
+        if ($isClosed) {
+            return 'Tutup buku '.$targetStart->locale('id')->isoFormat('MMMM YYYY').' sudah selesai';
+        }
+
+        return match ($severity) {
+            'urgent' => 'Tutup buku '.$targetStart->locale('id')->isoFormat('MMMM YYYY').' wajib diselesaikan',
+            'due' => 'Tutup buku '.$targetStart->locale('id')->isoFormat('MMMM YYYY').' sudah jatuh tempo',
+            default => 'Saatnya review tutup buku '.$targetStart->locale('id')->isoFormat('MMMM YYYY'),
+        };
+    }
+
+    private function assistantMessage(bool $isClosed, string $severity, CarbonImmutable $targetStart, int $openIssueCount, int $warningIssueCount): string
+    {
+        if ($isClosed) {
+            return 'Periode sebelumnya sudah terkunci. Transaksi bulan berjalan bisa dilanjutkan seperti biasa.';
+        }
+
+        $issueText = $openIssueCount > 0
+            ? $openIssueCount.' tahap wajib dibereskan'
+            : ($warningIssueCount > 0 ? $warningIssueCount.' tahap perlu direview' : 'checklist siap direview');
+
+        return match ($severity) {
+            'urgent' => 'Periode '.$targetStart->locale('id')->isoFormat('MMMM YYYY').' belum ditutup. '.$issueText.'. Fitur admin sebaiknya dibatasi sampai tutup buku selesai.',
+            'due' => 'Periode '.$targetStart->locale('id')->isoFormat('MMMM YYYY').' belum ditutup. '.$issueText.'. Selesaikan sebelum laporan bulan berjalan dipakai.',
+            default => 'Sekarang sudah bulan baru. Review '.$targetStart->locale('id')->isoFormat('MMMM YYYY').' lewat checklist sebelum menutup buku.',
+        };
+    }
+
+    private function restrictionMode(bool $isClosed, int $daysAfterPeriodEnd): string
+    {
+        if ($isClosed || $daysAfterPeriodEnd <= 3) {
+            return 'none';
+        }
+
+        return $daysAfterPeriodEnd >= 10 ? 'admin_limited' : 'reminder';
+    }
+
+    private function recommendedRestrictions(bool $isClosed, int $daysAfterPeriodEnd): array
+    {
+        if ($isClosed || $daysAfterPeriodEnd < 10) {
+            return [];
+        }
+
+        return [
+            'Batasi edit transaksi periode lama.',
+            'Batasi backdate pembelian/penjualan ke periode yang belum ditutup.',
+            'Minta owner/admin menyelesaikan checklist tutup buku.',
+            'Kasir tetap boleh menjalankan penjualan bulan berjalan.',
         ];
     }
 

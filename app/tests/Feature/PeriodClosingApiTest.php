@@ -16,6 +16,34 @@ class PeriodClosingApiTest extends TestCase
     use BuildsCheckoutRequestFixture;
     use RefreshDatabase;
 
+    protected function tearDown(): void
+    {
+        CarbonImmutable::setTestNow();
+
+        parent::tearDown();
+    }
+
+    public function test_assistant_prompts_previous_month_closing_at_start_of_new_month(): void
+    {
+        [$tenant, $user] = $this->bootApiActor('admin', 'period-assistant@example.test');
+        $tenant->forceFill(['plan' => 'P'])->save();
+        $fixture = $this->seedCheckoutFixture($tenant->id, $user->id);
+        $this->closeFixtureShift($tenant->id, $fixture['shift_id']);
+        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-06-02 09:00:00', 'Asia/Jakarta'));
+
+        $this->withHeaders($this->tenantHeaders($tenant->id))
+            ->getJson('/api/v1/lock-periods/assistant')
+            ->assertOk()
+            ->assertJsonPath('target_period.start_date', '2026-05-01')
+            ->assertJsonPath('target_period.end_date', '2026-05-31')
+            ->assertJsonPath('target_period.is_closed', false)
+            ->assertJsonPath('target_period.days_after_period_end', 2)
+            ->assertJsonPath('status.severity', 'review')
+            ->assertJsonPath('status.restriction_mode', 'none')
+            ->assertJsonPath('checklist.0.key', 'shift_cash')
+            ->assertJsonPath('checklist.6.key', 'close_period');
+    }
+
     public function test_close_period_locks_period_and_snapshots_carry_forward_balances(): void
     {
         [$tenant, $user] = $this->bootApiActor('admin', 'period-close@example.test');

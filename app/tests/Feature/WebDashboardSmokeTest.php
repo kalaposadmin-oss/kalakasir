@@ -22,6 +22,8 @@ class WebDashboardSmokeTest extends TestCase
         $this->assertStringContainsString('/pos/history', $contents);
         $this->assertStringContainsString('/pos/shifts/open', $contents);
         $this->assertStringContainsString('/pos/shifts/close', $contents);
+        $this->assertStringContainsString('pos-period-closing-reminder', $contents);
+        $this->assertStringContainsString('/api/v1/lock-periods/assistant', $contents);
         $this->assertStringContainsString('$posPortalOriginPath = $menuCurrentPath !== \'/\' ? normalize_pos_home_url($menuCurrentPath) : $posHomeHref;', $menuDrawerContents);
         $this->assertStringContainsString('\'href\' => $posBackofficeHref(\'/backoffice/products\')', $menuDrawerContents);
         $this->assertStringContainsString('\'href\' => $posBackofficeHref(\'/backoffice/dashboard\')', $menuDrawerContents);
