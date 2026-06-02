@@ -35,14 +35,16 @@ class PurchaseService
 
     public function createDraftPurchase(array $payload, ?string $userId): array
     {
-        $purchaseMode = $this->flowResolver()->resolveMode($payload['purchase_mode'] ?? null, TenantContext::get()?->purchase_mode);
-        $purchase = $this->persistPurchase($payload, PurchaseStatus::DRAFT, $purchaseMode);
+        return app(DatabaseTransactionService::class)->run(function () use ($payload): array {
+            $purchaseMode = $this->flowResolver()->resolveMode($payload['purchase_mode'] ?? null, TenantContext::get()?->purchase_mode);
+            $purchase = $this->persistPurchase($payload, PurchaseStatus::DRAFT, $purchaseMode);
 
-        return [
-            'purchase_id' => $purchase->id,
-            'status' => $purchase->status,
-            'purchase_mode' => $purchase->purchase_mode,
-        ];
+            return [
+                'purchase_id' => $purchase->id,
+                'status' => $purchase->status,
+                'purchase_mode' => $purchase->purchase_mode,
+            ];
+        });
     }
 
     public function createDirectPurchase(array $payload, ?string $userId): array
@@ -67,24 +69,28 @@ class PurchaseService
 
     public function createShortPO(array $payload, ?string $userId): array
     {
-        $purchase = $this->persistPurchase($payload, PurchaseStatus::SUBMITTED, PurchaseMode::PO_SHORT);
+        return app(DatabaseTransactionService::class)->run(function () use ($payload): array {
+            $purchase = $this->persistPurchase($payload, PurchaseStatus::SUBMITTED, PurchaseMode::PO_SHORT);
 
-        return [
-            'purchase_id' => $purchase->id,
-            'status' => $purchase->status,
-            'purchase_mode' => $purchase->purchase_mode,
-        ];
+            return [
+                'purchase_id' => $purchase->id,
+                'status' => $purchase->status,
+                'purchase_mode' => $purchase->purchase_mode,
+            ];
+        });
     }
 
     public function createControlledPO(array $payload, ?string $userId): array
     {
-        $purchase = $this->persistPurchase($payload, PurchaseStatus::SUBMITTED, PurchaseMode::CONTROLLED);
+        return app(DatabaseTransactionService::class)->run(function () use ($payload): array {
+            $purchase = $this->persistPurchase($payload, PurchaseStatus::SUBMITTED, PurchaseMode::CONTROLLED);
 
-        return [
-            'purchase_id' => $purchase->id,
-            'status' => $purchase->status,
-            'purchase_mode' => $purchase->purchase_mode,
-        ];
+            return [
+                'purchase_id' => $purchase->id,
+                'status' => $purchase->status,
+                'purchase_mode' => $purchase->purchase_mode,
+            ];
+        });
     }
 
     public function approve(string $purchaseId, ?string $userId): void

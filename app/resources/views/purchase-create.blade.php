@@ -626,7 +626,10 @@
                             }
 
                             alert(purchaseMode === purchaseModeSimple ? 'Pembelian langsung berhasil diproses.' : 'PO berhasil disimpan.');
-                            window.location.href = `${@json($purchaseDetailUrl)}/${encodeURIComponent(responseData.purchase_id)}`;
+                            const purchaseId = responseData?.purchase_id || responseData?.purchase?.id || null;
+                            window.location.href = purchaseId
+                                ? `${@json($purchaseDetailUrl)}/${encodeURIComponent(purchaseId)}`
+                                : @json($purchaseListUrl);
                         } catch (error) {
                             if (error?.name === 'AbortError') {
                                 alert('Permintaan timeout. Cek daftar PO sebelum mengulang simpan.');

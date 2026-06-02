@@ -34,6 +34,44 @@ class PurchasePaymentUpdateTest extends TestCase
         ]);
     }
 
+    public function test_failed_purchase_item_validation_does_not_leave_partial_purchase_header(): void
+    {
+        [$tenant, $user] = $this->bootApiActor('admin', 'purchase-partial-create@example.test');
+        $fixture = $this->seedCheckoutFixture($tenant->id, $user->id);
+        $supplierId = $this->insertSupplier($tenant->id, 'Supplier Partial Guard');
+        DB::table('products')
+            ->where('tenant_id', $tenant->id)
+            ->where('id', $fixture['product_id'])
+            ->update(['unit' => 'pcs']);
+
+        $beforeCount = DB::table('purchases')
+            ->where('tenant_id', $tenant->id)
+            ->count();
+
+        $this->withHeaders($this->tenantHeaders($tenant->id))
+            ->postJson('/api/v1/purchases', [
+                'supplier_id' => $supplierId,
+                'location_id' => $fixture['location_id'],
+                'purchase_mode' => PurchaseMode::PO_SHORT,
+                'status' => PurchaseStatus::SUBMITTED,
+                'payment_method' => 'tempo',
+                'items' => [
+                    [
+                        'product_id' => $fixture['product_id'],
+                        'qty' => 1,
+                        'purchase_unit' => 'kg',
+                        'price' => 10000,
+                    ],
+                ],
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'VALIDATION_ERROR');
+
+        $this->assertSame($beforeCount, DB::table('purchases')
+            ->where('tenant_id', $tenant->id)
+            ->count());
+    }
+
     public function test_update_purchase_payment_from_tempo_to_tunai_updates_cash_account_and_clears_due_date(): void
     {
         [$tenant, $user] = $this->bootApiActor('admin', 'purchase-payment-edit-tempo@example.test');
