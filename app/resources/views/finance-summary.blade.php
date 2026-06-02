@@ -67,6 +67,17 @@
     <div class="px-4 pb-2">
         <x-period-filter id="finance-period" defaultPreset="thisMonth" />
     </div>
+    <div class="px-4 pb-2">
+        <div id="report-finality-banner" class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100">
+            <div class="flex items-start gap-3">
+                <span id="report-finality-icon" class="material-symbols-outlined mt-0.5 text-lg text-amber-600">pending_actions</span>
+                <div class="min-w-0">
+                    <p id="report-finality-label" class="text-xs font-bold uppercase tracking-[0.18em]">Belum Final</p>
+                    <p id="report-finality-message" class="mt-1 text-xs leading-relaxed">Laporan masih bisa berubah karena periode belum ditutup.</p>
+                </div>
+            </div>
+        </div>
+    </div>
     <div class="px-4 py-4" id="profit-section">
         <div class="flex items-center justify-between mb-4">
             <p class="text-xs font-bold text-slate-500 uppercase tracking-widest" id="period-label">Periode: -</p>
@@ -243,6 +254,10 @@
                     accountDetailInventoryList: document.getElementById('account-detail-inventory-list'),
                     accountDetailEntryCount: document.getElementById('account-detail-entry-count'),
                     accountDetailRows: document.getElementById('account-detail-rows'),
+                    finalityBanner: document.getElementById('report-finality-banner'),
+                    finalityIcon: document.getElementById('report-finality-icon'),
+                    finalityLabel: document.getElementById('report-finality-label'),
+                    finalityMessage: document.getElementById('report-finality-message'),
                 };
 
                 const state = {
@@ -580,6 +595,21 @@
                     });
                 };
 
+                const renderFinalityStatus = (period) => {
+                    const status = period?.closing_status || {};
+                    const isFinal = Boolean(status.is_final);
+
+                    el.finalityBanner.className = isFinal
+                        ? 'rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-100'
+                        : 'rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100';
+                    el.finalityIcon.textContent = isFinal ? 'verified_user' : 'pending_actions';
+                    el.finalityIcon.className = `material-symbols-outlined mt-0.5 text-lg ${isFinal ? 'text-emerald-600' : 'text-amber-600'}`;
+                    el.finalityLabel.textContent = status.label || (isFinal ? 'Final' : 'Belum Final');
+                    el.finalityMessage.textContent = status.message || (isFinal
+                        ? 'Periode ini sudah ditutup dan laporan terkunci.'
+                        : 'Laporan masih bisa berubah karena periode belum ditutup.');
+                };
+
                 const setTab = (tab) => {
                     const isProfit = tab === 'pl';
                     el.profitSection.classList.toggle('hidden', !isProfit);
@@ -613,6 +643,7 @@
                 const renderFinance = (data) => {
                     const hasBalanceSheet = Boolean(data.balance_sheet) && canViewBalanceSheet;
                     el.period.textContent = `Periode: ${data.period?.label || '-'}${data.period?.start_date ? ` (${data.period.start_date} - ${data.period.end_date})` : ''}`;
+                    renderFinalityStatus(data.period || {});
                     el.netProfit.textContent = formatCurrency(data.summary?.net_profit || 0);
                     el.revenueTotal.textContent = `+ ${formatCurrency(data.summary?.revenue || 0)}`;
                     el.expenseTotal.textContent = `- ${formatCurrency(data.summary?.expenses || 0)}`;

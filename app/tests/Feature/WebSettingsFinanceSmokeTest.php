@@ -91,6 +91,9 @@ class WebSettingsFinanceSmokeTest extends TestCase
         $this->assertStringContainsString('Neraca', $contents);
         $this->assertStringContainsString('net-profit', $contents);
         $this->assertStringContainsString('balance-section', $contents);
+        $this->assertStringContainsString('report-finality-banner', $contents);
+        $this->assertStringContainsString('Belum Final', $contents);
+        $this->assertStringContainsString('closing_status', $contents);
         $this->assertStringContainsString("canAccessFeature(\$financeSummaryTenant, 'reports.download_pdf')", $contents);
         $this->assertStringContainsString('finance-summary-download-upgrade-profit', $contents);
     }

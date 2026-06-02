@@ -59,7 +59,9 @@ class FinanceReportController extends Controller
                 $canViewBalanceSheet
             );
 
-            $payload['period'] = $rangeMeta;
+            $payload['period'] = array_merge($rangeMeta, [
+                'closing_status' => $this->periodClosingStatus($tenantId, $startDateLocal, $endDateLocal),
+            ]);
 
             $response = response()->json($payload);
         } catch (MissingSalesCostAggregateException $exception) {
@@ -814,6 +816,52 @@ class FinanceReportController extends Controller
                 'limited' => $limited,
                 'limit_days' => 90,
             ],
+        ];
+    }
+
+    private function periodClosingStatus(string $tenantId, string $startDate, string $endDate): array
+    {
+        if (! Schema::hasTable('lock_periods')) {
+            return [
+                'status' => 'draft',
+                'is_final' => false,
+                'label' => 'Belum Final',
+                'message' => 'Laporan masih bisa berubah karena periode belum ditutup.',
+                'period_id' => null,
+                'closed_at' => null,
+            ];
+        }
+
+        $period = DB::table('lock_periods')
+            ->where('tenant_id', $tenantId)
+            ->where('start_date', $startDate)
+            ->where('end_date', $endDate)
+            ->where('is_locked', true)
+            ->orderByDesc('locked_at')
+            ->first(array_values(array_filter([
+                'id',
+                'locked_at',
+                Schema::hasColumn('lock_periods', 'closed_at') ? 'closed_at' : null,
+            ])));
+
+        if ($period) {
+            return [
+                'status' => 'final',
+                'is_final' => true,
+                'label' => 'Final',
+                'message' => 'Periode ini sudah ditutup dan laporan terkunci.',
+                'period_id' => (string) $period->id,
+                'closed_at' => $period->closed_at ?? $period->locked_at ?? null,
+            ];
+        }
+
+        return [
+            'status' => 'draft',
+            'is_final' => false,
+            'label' => 'Belum Final',
+            'message' => 'Laporan masih bisa berubah karena periode belum ditutup.',
+            'period_id' => null,
+            'closed_at' => null,
         ];
     }
 

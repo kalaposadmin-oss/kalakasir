@@ -40,6 +40,9 @@ class FinanceReportAccountingSyncTest extends TestCase
             ->getJson('/api/v1/finance-summary?preset=custom&start_date=2026-04-18&end_date=2026-04-18');
 
         $response->assertOk()
+            ->assertJsonPath('period.closing_status.status', 'draft')
+            ->assertJsonPath('period.closing_status.is_final', false)
+            ->assertJsonPath('period.closing_status.label', 'Belum Final')
             ->assertJsonPath('summary.revenue', 0)
             ->assertJsonPath('summary.expenses', 0)
             ->assertJsonPath('summary.net_profit', 0)
@@ -49,6 +52,24 @@ class FinanceReportAccountingSyncTest extends TestCase
 
         $assetsTotal = collect($response->json('balance_sheet.assets', []))->sum('amount');
         $this->assertEqualsWithDelta(250000.0, (float) $assetsTotal, 0.01);
+
+        DB::table('lock_periods')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $tenant->id,
+            'start_date' => '2026-04-18',
+            'end_date' => '2026-04-18',
+            'is_locked' => true,
+            'locked_by' => $user->id,
+            'locked_at' => now('UTC'),
+            'reason' => 'Finalisasi laporan harian test',
+        ]);
+
+        $this->withHeaders($this->tenantHeaders($tenant->id))
+            ->getJson('/api/v1/finance-summary?preset=custom&start_date=2026-04-18&end_date=2026-04-18')
+            ->assertOk()
+            ->assertJsonPath('period.closing_status.status', 'final')
+            ->assertJsonPath('period.closing_status.is_final', true)
+            ->assertJsonPath('period.closing_status.label', 'Final');
     }
 
     public function test_cash_in_other_income_updates_balance_sheet_and_profit_loss(): void
