@@ -26,8 +26,8 @@
 
 @section('page_title', 'Tutup Buku Bulanan')
 @section('body_class', 'bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display')
-@section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-background-light dark:bg-background-dark shadow-2xl')
-@section('main_class', 'flex-1 overflow-hidden p-0')
+@section('ui_mode', 'backoffice')
+@section('main_class', 'flex-1 overflow-y-auto pb-32')
 
 @push('head')
         <style>
@@ -51,7 +51,7 @@
 @endsection
 
 @section('content')
-        <div class="flex-1 overflow-y-auto pb-32">
+        <div class="mx-auto w-full max-w-6xl">
             <div class="p-4">
                 <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-xl p-4 flex gap-3">
                     <span class="material-symbols-outlined text-primary">verified_user</span>
