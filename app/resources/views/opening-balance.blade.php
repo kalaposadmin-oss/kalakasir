@@ -430,6 +430,22 @@
                     </div>
                 </article>
             </section>
+
+            <section class="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <div class="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+                    <div>
+                        <p class="text-xs font-bold uppercase tracking-[0.24em] text-slate-400">Histori</p>
+                        <h3 class="mt-1 text-base font-bold text-slate-900 dark:text-white">Posting saldo awal yang sudah masuk buku</h3>
+                        <p class="mt-2 max-w-3xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+                            Di sini terlihat setiap posting saldo awal, termasuk kas/bank tujuan. Kalau ingin menambah modal setelah toko berjalan, pakai Kas Masuk agar histori transaksi berjalan tetap terpisah dari saldo pembuka.
+                        </p>
+                    </div>
+                    <span id="opening-history-count" class="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200">0 posting</span>
+                </div>
+                <div id="opening-history-list" class="divide-y divide-slate-100 dark:divide-slate-800">
+                    <div class="px-5 py-5 text-sm text-slate-500 dark:text-slate-400">Memuat histori saldo awal...</div>
+                </div>
+            </section>
         </div>
     </div>
 
@@ -491,6 +507,8 @@
                 fundLinesBody: document.getElementById('fund-lines-body'),
                 stockLinesCount: document.getElementById('stock-lines-count'),
                 fundLinesCount: document.getElementById('fund-lines-count'),
+                openingHistoryList: document.getElementById('opening-history-list'),
+                openingHistoryCount: document.getElementById('opening-history-count'),
             };
 
             const state = {
@@ -505,6 +523,7 @@
                 busy: false,
                 editingStockLineId: null,
                 editingFundLineId: null,
+                openingHistory: [],
             };
 
             const escapeHtml = (value) => String(value ?? '')
@@ -947,6 +966,69 @@
                 });
             };
 
+            const renderOpeningHistory = () => {
+                if (!el.openingHistoryList || !el.openingHistoryCount) {
+                    return;
+                }
+
+                const history = Array.isArray(state.openingHistory) ? state.openingHistory : [];
+                el.openingHistoryCount.textContent = `${history.length} posting`;
+
+                if (!history.length) {
+                    el.openingHistoryList.innerHTML = `
+                        <div class="px-5 py-5 text-sm text-slate-500 dark:text-slate-400">
+                            Belum ada saldo awal yang diposting.
+                        </div>
+                    `;
+                    return;
+                }
+
+                el.openingHistoryList.innerHTML = history.map((item) => {
+                    const funds = Array.isArray(item.funds) ? item.funds : [];
+                    const fundRows = funds.length
+                        ? funds.map((fund) => {
+                            const account = `${fund.account_code ? `${fund.account_code} - ` : ''}${fund.account_name || 'Akun kas/bank'}`;
+                            return `
+                                <div class="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2 text-sm dark:bg-slate-950/70">
+                                    <span class="min-w-0 truncate font-semibold text-slate-700 dark:text-slate-200">${escapeHtml(String(fund.source_type || '').toUpperCase())} - ${escapeHtml(account)}</span>
+                                    <span class="shrink-0 font-bold text-slate-900 dark:text-white">${escapeHtml(formatCurrency(fund.amount))}</span>
+                                </div>
+                            `;
+                        }).join('')
+                        : '<div class="rounded-xl bg-white px-3 py-2 text-sm text-slate-500 dark:bg-slate-950/70 dark:text-slate-400">Tidak ada dana kas/bank pada posting ini.</div>';
+                    const journalLabel = item.journal_entry_id ? String(item.journal_entry_id).slice(0, 8) : '-';
+
+                    return `
+                        <article class="px-5 py-5">
+                            <div class="flex flex-wrap items-start justify-between gap-4">
+                                <div>
+                                    <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Tanggal buka ${escapeHtml(formatDate(item.opening_date))}</p>
+                                    <h4 class="mt-1 text-base font-bold text-slate-900 dark:text-white">Diposting ${escapeHtml(formatDateTime(item.posted_at))}</h4>
+                                    <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">Jurnal: ${escapeHtml(journalLabel)}</p>
+                                </div>
+                                <div class="grid grid-cols-3 gap-2 text-right text-xs sm:min-w-[360px]">
+                                    <div class="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-800/70">
+                                        <p class="font-bold uppercase tracking-wider text-slate-400">Stok</p>
+                                        <p class="mt-1 font-bold text-slate-900 dark:text-white">${escapeHtml(formatCurrency(item.stock_total))}</p>
+                                    </div>
+                                    <div class="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-800/70">
+                                        <p class="font-bold uppercase tracking-wider text-slate-400">Kas/Bank</p>
+                                        <p class="mt-1 font-bold text-slate-900 dark:text-white">${escapeHtml(formatCurrency(item.fund_total))}</p>
+                                    </div>
+                                    <div class="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-800/70">
+                                        <p class="font-bold uppercase tracking-wider text-slate-400">Modal</p>
+                                        <p class="mt-1 font-bold text-slate-900 dark:text-white">${escapeHtml(formatCurrency(item.equity_total))}</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mt-4 space-y-2 rounded-2xl bg-slate-50 p-3 dark:bg-slate-800/50">
+                                ${fundRows}
+                            </div>
+                        </article>
+                    `;
+                }).join('');
+            };
+
             const renderSummary = () => {
                 const totals = localTotals();
                 const hasSession = Boolean(state.session);
@@ -1014,6 +1096,7 @@
                 renderProductOptions();
                 renderStockLines();
                 renderFundLines();
+                renderOpeningHistory();
                 renderSummary();
                 syncEditorButtons();
                 if (!state.productsAvailable) {
@@ -1125,6 +1208,12 @@
                 }
 
                 return false;
+            };
+
+            const loadOpeningHistory = async () => {
+                const payload = await apiRequest('/admin/opening-balance/history');
+                state.openingHistory = Array.isArray(payload?.history) ? payload.history : [];
+                renderOpeningHistory();
             };
 
             const addStockLine = async () => {
@@ -1382,6 +1471,7 @@
                     });
 
                     applySession(payload?.session || state.session);
+                    await loadOpeningHistory();
                     setMessage('Saldo awal berhasil diposting dan periode awal dikunci.', 'success');
                     el.validateBtn.disabled = true;
                     el.postBtn.disabled = true;
@@ -1451,6 +1541,14 @@
                     if ((error?.status ?? null) !== 404) {
                         setMessage(error.message || 'Gagal memulihkan draft saldo awal.', 'warning');
                     }
+                }
+
+                try {
+                    await loadOpeningHistory();
+                } catch (error) {
+                    state.openingHistory = [];
+                    renderOpeningHistory();
+                    setMessage(error.message || 'Gagal memuat histori saldo awal.', 'warning');
                 }
 
                 renderAll();

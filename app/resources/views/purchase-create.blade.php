@@ -614,7 +614,7 @@
                             const responseData = await response.json().catch(() => ({}));
 
                             if (!response.ok) {
-                                const mapped = await window.PosUi.mapApiError(response, 'Gagal membuat PO.');
+                                const mapped = window.PosUi.mapApiPayloadError(responseData, 'Gagal membuat PO.');
                                 if (mapped.code === 'INSUFFICIENT_CASH_BALANCE') {
                                     const available = mapped.details?.available_cash || 0;
                                     const required = mapped.details?.required_amount || 0;

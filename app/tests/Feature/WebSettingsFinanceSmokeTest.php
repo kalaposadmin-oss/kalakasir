@@ -133,8 +133,10 @@ class WebSettingsFinanceSmokeTest extends TestCase
     {
         $route = Route::getRoutes()->match(Request::create('/admin/opening-balance', 'GET'));
         $draftRoute = Route::getRoutes()->match(Request::create('/admin/opening-balance', 'POST'));
+        $historyRoute = Route::getRoutes()->match(Request::create('/admin/opening-balance/history', 'GET'));
         $middleware = $route->gatherMiddleware();
         $draftMiddleware = $draftRoute->gatherMiddleware();
+        $historyMiddleware = $historyRoute->gatherMiddleware();
         $contents = file_get_contents(resource_path('views/opening-balance.blade.php'));
         $menuContents = file_get_contents(resource_path('views/partials/menu-drawer.blade.php'));
 
@@ -142,11 +144,14 @@ class WebSettingsFinanceSmokeTest extends TestCase
         $this->assertContains('web_access:backoffice,admin|owner|superadmin,finance.bank_accounts', $middleware);
         $this->assertContains('canonical_portal_host:backoffice', $draftMiddleware);
         $this->assertContains('web_access:backoffice,admin|owner|superadmin,finance.bank_accounts', $draftMiddleware);
+        $this->assertContains('canonical_portal_host:backoffice', $historyMiddleware);
+        $this->assertContains('web_access:backoffice,admin|owner|superadmin,finance.bank_accounts', $historyMiddleware);
         $this->assertTrue(view()->exists('opening-balance'));
         $this->assertStringContainsString('Saldo Awal', $contents);
         $this->assertStringContainsString('Kas Masuk untuk transaksi setelah aplikasi aktif', $contents);
         $this->assertStringContainsString('/admin/opening-balance', $contents);
         $this->assertStringContainsString('/admin/opening-balance/current', $contents);
+        $this->assertStringContainsString('/admin/opening-balance/history', $contents);
         $this->assertStringContainsString('/admin/opening-balance/validate', $contents);
         $this->assertStringContainsString('/admin/opening-balance/post', $contents);
         $this->assertStringContainsString('/admin/opening-balance/${encodeURIComponent(state.session.id)}/stock/${encodeURIComponent(state.editingStockLineId)}', $contents);

@@ -70,23 +70,33 @@
             return {};
         };
 
-        const mapApiError = async (response, fallbackMessage = 'Permintaan gagal.') => {
-            const payload = await parseJsonSafe(response);
+        const mapApiPayloadError = (payload, fallbackMessage = 'Permintaan gagal.') => {
             const code = payload?.code || null;
             const mapped = code && errorMap[code] ? errorMap[code] : null;
-            const details = payload?.details && typeof payload.details === 'object'
-                ? Object.values(payload.details).flat().filter(Boolean)
+            const detailSource = payload?.details && typeof payload.details === 'object'
+                ? payload.details
+                : (payload?.errors && typeof payload.errors === 'object' ? payload.errors : {});
+            const detailMessages = Object.keys(detailSource).length
+                ? Object.entries(detailSource).flatMap(([field, messages]) => {
+                    const list = Array.isArray(messages) ? messages : [messages];
+                    return list.filter(Boolean).map((message) => `${field}: ${message}`);
+                })
                 : [];
 
             return {
                 code,
                 payload,
-                details,
+                details: payload?.details || payload?.errors || {},
+                detailMessages,
                 message: [
                     mapped || payload?.message || fallbackMessage,
-                    ...details,
+                    ...detailMessages,
                 ].filter(Boolean).join('\n'),
             };
+        };
+
+        const mapApiError = async (response, fallbackMessage = 'Permintaan gagal.') => {
+            return mapApiPayloadError(await parseJsonSafe(response), fallbackMessage);
         };
 
         const confirmRiskAction = ({ title = 'Konfirmasi', message = 'Lanjutkan aksi ini?' } = {}) => {
@@ -862,6 +872,7 @@
             isProductionBatchEligibleProduct,
             isProductionBatchDisplayCandidateProduct,
             mapApiError,
+            mapApiPayloadError,
             confirmRiskAction,
             confirmRiskActionAsync,
             fetchWithTimeout,

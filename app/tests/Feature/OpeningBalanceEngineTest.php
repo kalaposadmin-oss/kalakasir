@@ -200,6 +200,20 @@ class OpeningBalanceEngineTest extends TestCase
             'status' => 'posted',
         ]);
 
+        $this->withHeaders($this->tenantHeaders($tenant->id))
+            ->getJson('/admin/opening-balance/history')
+            ->assertOk()
+            ->assertJsonPath('history.0.id', $sessionId)
+            ->assertJsonPath('history.0.status', 'posted')
+            ->assertJsonPath('history.0.stock_count', 1)
+            ->assertJsonPath('history.0.stock_total', 70000)
+            ->assertJsonPath('history.0.fund_count', 1)
+            ->assertJsonPath('history.0.fund_total', 70000)
+            ->assertJsonPath('history.0.equity_total', 140000)
+            ->assertJsonPath('history.0.funds.0.account_id', $fixture['cash_account_id'])
+            ->assertJsonPath('history.0.funds.0.source_type', 'cash')
+            ->assertJsonPath('history.0.funds.0.amount', 70000);
+
         $this->assertDatabaseHas('stock_ledger', [
             'tenant_id' => $tenant->id,
             'product_id' => $fixture['product_id'],

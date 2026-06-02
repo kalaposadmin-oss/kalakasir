@@ -47,6 +47,7 @@ Route::post('/register/complete', [OnboardingController::class, 'completeReview'
 
 Route::middleware(['auth', 'canonical_portal_host:backoffice', 'web_access:backoffice,admin|owner|superadmin,finance.bank_accounts'])->group(function () {
     Route::get('/admin/opening-balance/current', [OpeningBalanceController::class, 'currentDraft']);
+    Route::get('/admin/opening-balance/history', [OpeningBalanceController::class, 'history']);
     Route::post('/admin/opening-balance', [OpeningBalanceController::class, 'createDraft']);
     Route::post('/admin/opening-balance/{session}/stock', [OpeningBalanceController::class, 'addStock']);
     Route::patch('/admin/opening-balance/{session}/stock/{line}', [OpeningBalanceController::class, 'updateStock']);

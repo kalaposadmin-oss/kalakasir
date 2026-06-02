@@ -9,6 +9,7 @@ use App\Services\OpeningBalancePostingService;
 use App\Services\OpeningBalanceValidationService;
 use App\Support\TenantContext;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 class OpeningBalanceController extends Controller
@@ -62,6 +63,103 @@ class OpeningBalanceController extends Controller
 
         return response()->json([
             'session' => $this->serializeSession($session),
+        ]);
+    }
+
+    public function history(Request $request)
+    {
+        $tenantId = TenantContext::id() ?: (string) $request->user()?->tenant_id;
+
+        if ($tenantId === '') {
+            return response()->json([
+                'history' => [],
+            ]);
+        }
+
+        $sessions = OpeningSession::query()
+            ->where('tenant_id', $tenantId)
+            ->where('status', 'posted')
+            ->orderByDesc('posted_at')
+            ->orderByDesc('updated_at')
+            ->limit(20)
+            ->get();
+
+        if ($sessions->isEmpty()) {
+            return response()->json([
+                'history' => [],
+            ]);
+        }
+
+        $sessionIds = $sessions->pluck('id')->map(fn ($id) => (string) $id)->all();
+
+        $logs = DB::table('opening_posting_logs')
+            ->where('tenant_id', $tenantId)
+            ->whereIn('opening_session_id', $sessionIds)
+            ->orderByDesc('posted_at')
+            ->get()
+            ->keyBy(fn ($log) => (string) $log->opening_session_id);
+
+        $fundLines = DB::table('opening_fund_lines as lines')
+            ->leftJoin('chart_of_accounts as accounts', 'accounts.id', '=', 'lines.account_id')
+            ->where('lines.tenant_id', $tenantId)
+            ->whereIn('lines.opening_session_id', $sessionIds)
+            ->orderBy('accounts.code')
+            ->orderBy('lines.created_at')
+            ->select([
+                'lines.opening_session_id',
+                'lines.account_id',
+                'lines.source_type',
+                'lines.amount',
+                'lines.reference_note',
+                'accounts.code as account_code',
+                'accounts.name as account_name',
+            ])
+            ->get()
+            ->groupBy(fn ($line) => (string) $line->opening_session_id);
+
+        $stockTotals = DB::table('opening_stock_lines')
+            ->where('tenant_id', $tenantId)
+            ->whereIn('opening_session_id', $sessionIds)
+            ->groupBy('opening_session_id')
+            ->select([
+                'opening_session_id',
+                DB::raw('COUNT(*) as line_count'),
+                DB::raw('SUM(qty) as qty_total'),
+                DB::raw('SUM(line_value) as value_total'),
+            ])
+            ->get()
+            ->keyBy(fn ($row) => (string) $row->opening_session_id);
+
+        return response()->json([
+            'history' => $sessions->map(function (OpeningSession $session) use ($logs, $fundLines, $stockTotals): array {
+                $sessionId = (string) $session->id;
+                $funds = ($fundLines->get($sessionId) ?? collect())->map(fn ($line) => [
+                    'account_id' => (string) $line->account_id,
+                    'account_code' => $line->account_code,
+                    'account_name' => $line->account_name,
+                    'source_type' => $line->source_type,
+                    'amount' => (float) $line->amount,
+                    'reference_note' => $line->reference_note,
+                ])->values();
+                $stock = $stockTotals->get($sessionId);
+                $log = $logs->get($sessionId);
+
+                return [
+                    'id' => $sessionId,
+                    'opening_date' => $session->opening_date?->toDateString(),
+                    'status' => $session->status,
+                    'posted_at' => $session->posted_at?->toJSON(),
+                    'posted_by' => $session->posted_by,
+                    'journal_entry_id' => $log?->journal_entry_id,
+                    'stock_count' => (int) ($stock?->line_count ?? 0),
+                    'stock_qty_total' => (float) ($stock?->qty_total ?? 0),
+                    'stock_total' => (float) ($stock?->value_total ?? 0),
+                    'fund_count' => $funds->count(),
+                    'fund_total' => (float) $funds->sum('amount'),
+                    'equity_total' => (float) ($session->equity_amount ?? ($funds->sum('amount') + (float) ($stock?->value_total ?? 0))),
+                    'funds' => $funds,
+                ];
+            })->values(),
         ]);
     }
 
