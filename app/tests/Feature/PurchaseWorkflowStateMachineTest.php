@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Support\PurchaseStatus;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -15,6 +16,13 @@ class PurchaseWorkflowStateMachineTest extends TestCase
     use BootsApiTenantUser;
     use BuildsCheckoutRequestFixture;
     use RefreshDatabase;
+
+    protected function tearDown(): void
+    {
+        CarbonImmutable::setTestNow();
+
+        parent::tearDown();
+    }
 
     public function test_create_purchase_draft_persists_draft_status(): void
     {
@@ -97,6 +105,98 @@ class PurchaseWorkflowStateMachineTest extends TestCase
             ->assertJsonPath('purchases.0.item_count', 1)
             ->assertJsonPath('purchases.0.total_item_qty', 3)
             ->assertJsonPath('purchases.0.total', 36000);
+    }
+
+    public function test_draft_purchase_can_update_date_and_replace_items(): void
+    {
+        [$tenant, $user] = $this->bootApiActor('admin', 'purchase-draft-update@example.test');
+        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-06-02 10:00:00', 'UTC'));
+        $fixture = $this->seedCheckoutFixture($tenant->id, $user->id);
+        $supplierId = $this->insertSupplier($tenant->id, 'Supplier Draft Update');
+        $secondProductId = $this->insertProduct($tenant->id, $user->id, 'SKU-002', 'Produk B');
+        $purchaseId = $this->createPurchase($tenant->id, $supplierId, $fixture['location_id'], $fixture['product_id'], PurchaseStatus::DRAFT, 2, 10000);
+
+        $response = $this->withHeaders($this->tenantHeaders($tenant->id))
+            ->patchJson('/api/v1/purchases/'.$purchaseId.'/draft', [
+                'supplier_id' => $supplierId,
+                'location_id' => $fixture['location_id'],
+                'transaction_date' => '2026-06-01',
+                'payment_method' => 'tempo',
+                'due_date' => '2026-06-15',
+                'tax_enabled' => true,
+                'tax_rate' => 10,
+                'items' => [
+                    [
+                        'product_id' => $fixture['product_id'],
+                        'qty' => 3,
+                        'price' => 12000,
+                    ],
+                    [
+                        'product_id' => $secondProductId,
+                        'qty' => 1,
+                        'price' => 5000,
+                    ],
+                ],
+            ]);
+
+        $response->assertOk()
+            ->assertJsonPath('transaction_date', '2026-06-01')
+            ->assertJsonPath('subtotal', 41000)
+            ->assertJsonPath('tax', 4100)
+            ->assertJsonPath('total', 45100);
+
+        $this->assertDatabaseHas('purchases', [
+            'id' => $purchaseId,
+            'tenant_id' => $tenant->id,
+            'status' => PurchaseStatus::DRAFT,
+            'transaction_date' => '2026-06-01',
+            'subtotal' => 41000,
+            'tax' => 4100,
+            'total' => 45100,
+        ]);
+
+        $this->assertSame(2, DB::table('purchase_items')
+            ->where('tenant_id', $tenant->id)
+            ->where('purchase_id', $purchaseId)
+            ->count());
+
+        $this->withHeaders($this->tenantHeaders($tenant->id))
+            ->getJson('/api/v1/purchases/'.$purchaseId)
+            ->assertOk()
+            ->assertJsonPath('purchase.transaction_date', '2026-06-01')
+            ->assertJsonPath('items.0.purchase_qty', 3);
+    }
+
+    public function test_non_draft_purchase_cannot_be_replaced_through_draft_editor(): void
+    {
+        [$tenant, $user] = $this->bootApiActor('admin', 'purchase-draft-update-blocked@example.test');
+        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-06-02 10:00:00', 'UTC'));
+        $fixture = $this->seedCheckoutFixture($tenant->id, $user->id);
+        $supplierId = $this->insertSupplier($tenant->id, 'Supplier Draft Blocked');
+        $purchaseId = $this->createPurchase($tenant->id, $supplierId, $fixture['location_id'], $fixture['product_id'], PurchaseStatus::SUBMITTED, 2, 10000);
+
+        $response = $this->withHeaders($this->tenantHeaders($tenant->id))
+            ->patchJson('/api/v1/purchases/'.$purchaseId.'/draft', [
+                'supplier_id' => $supplierId,
+                'location_id' => $fixture['location_id'],
+                'transaction_date' => '2026-06-01',
+                'items' => [
+                    [
+                        'product_id' => $fixture['product_id'],
+                        'qty' => 3,
+                        'price' => 12000,
+                    ],
+                ],
+            ]);
+
+        $response->assertStatus(422)
+            ->assertJsonPath('code', 'PURCHASE_DRAFT_UPDATE_FAILED');
+
+        $this->assertDatabaseHas('purchases', [
+            'id' => $purchaseId,
+            'status' => PurchaseStatus::SUBMITTED,
+            'total' => 20000,
+        ]);
     }
 
     public function test_approve_purchase_from_submitted_status_succeeds(): void
@@ -459,5 +559,29 @@ class PurchaseWorkflowStateMachineTest extends TestCase
         ]);
 
         return $supplierId;
+    }
+
+    private function insertProduct(string $tenantId, string $userId, string $sku, string $name): string
+    {
+        $productId = (string) Str::uuid();
+
+        DB::table('products')->insert([
+            'id' => $productId,
+            'tenant_id' => $tenantId,
+            'sku' => $sku,
+            'name' => $name,
+            'price' => 10000,
+            'hpp_average' => 5000,
+            'image_url' => null,
+            'is_active' => true,
+            'track_stock' => true,
+            'created_by' => $userId,
+            'updated_by' => $userId,
+            'created_at' => now('UTC'),
+            'updated_at' => now('UTC'),
+            'deleted_at' => null,
+        ]);
+
+        return $productId;
     }
 }

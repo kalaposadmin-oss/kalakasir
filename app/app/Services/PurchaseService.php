@@ -47,6 +47,101 @@ class PurchaseService
         });
     }
 
+    public function updateDraftPurchase(string $purchaseId, array $payload, ?string $userId): array
+    {
+        $tenantId = TenantContext::id();
+        if (! $tenantId) {
+            throw new RuntimeException('Tenant tidak ditemukan.');
+        }
+
+        $transactionDate = (new TransactionDateService())->resolve(Arr::get($payload, 'transaction_date'));
+        (new LockPeriodService())->ensureNotLocked($transactionDate, $tenantId);
+
+        return DB::transaction(function () use ($tenantId, $purchaseId, $payload, $transactionDate): array {
+            $purchase = Purchase::query()
+                ->where('tenant_id', $tenantId)
+                ->where('id', $purchaseId)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if (PurchaseStatus::normalize((string) $purchase->status) !== PurchaseStatus::DRAFT) {
+                throw new RuntimeException('Hanya draft PO yang bisa diubah. PO yang sudah diajukan atau diterima harus dikoreksi lewat proses pembelian.');
+            }
+
+            $hasReceipt = StockLedger::query()
+                ->where('tenant_id', $tenantId)
+                ->where('reference_type', 'purchase')
+                ->where('reference_id', $purchase->id)
+                ->exists();
+
+            if ($hasReceipt) {
+                throw new RuntimeException('Draft PO ini sudah punya riwayat penerimaan sehingga tidak bisa dirombak.');
+            }
+
+            $items = $payload['items'] ?? [];
+            if (empty($items)) {
+                throw ValidationException::withMessages([
+                    'items' => ['Tambahkan minimal satu produk.'],
+                ]);
+            }
+
+            $subtotal = collect($items)->sum(fn ($item) => (float) ($item['qty'] ?? 0) * (float) ($item['price'] ?? 0));
+            $taxRate = (float) ($payload['tax_rate'] ?? 0);
+            $tax = (float) ($payload['tax'] ?? round($subtotal * ($taxRate / 100), 2));
+            if ($taxRate <= 0 && empty($payload['tax_enabled'])) {
+                $tax = 0.0;
+            }
+            $tax = max(0.0, round($tax, 2));
+            $total = round($subtotal + $tax, 2);
+
+            $paymentMethod = $payload['payment_method'] ?? (string) ($purchase->payment_method ?? 'tempo');
+            $paymentMethod = in_array($paymentMethod, ['tunai', 'tempo'], true) ? $paymentMethod : 'tempo';
+            $dueDate = $paymentMethod === 'tempo'
+                ? ($payload['due_date'] ?? $purchase->due_date ?? CarbonImmutable::now('UTC')->addDays(14)->toDateString())
+                : null;
+            $cashAccountId = $paymentMethod === 'tunai'
+                ? ($payload['cash_account_id'] ?? $purchase->cash_account_id ?? $this->resolveDefaultCashAccountId($tenantId))
+                : null;
+
+            if ($paymentMethod === 'tunai' && ! $cashAccountId) {
+                throw new RuntimeException('Akun kas belum diatur. Lengkapi mapping akun kas terlebih dahulu.');
+            }
+
+            $purchase->update([
+                'supplier_id' => $payload['supplier_id'] ?? $purchase->supplier_id,
+                'location_id' => $payload['location_id'] ?? $purchase->location_id,
+                'subtotal' => $subtotal,
+                'tax_rate' => $taxRate,
+                'tax' => $tax,
+                'total' => $total,
+                'payment_method' => $paymentMethod,
+                'due_date' => $dueDate,
+                'cash_account_id' => Schema::hasColumn('purchases', 'cash_account_id') ? $cashAccountId : null,
+                'notes' => $payload['notes'] ?? null,
+                'transaction_date' => $transactionDate->toDateString(),
+            ]);
+
+            PurchaseItem::query()
+                ->where('tenant_id', $tenantId)
+                ->where('purchase_id', $purchase->id)
+                ->delete();
+
+            PurchaseItem::query()->insert(
+                $this->buildPurchaseItemRows($tenantId, (string) $purchase->id, $items)
+            );
+
+            return [
+                'purchase_id' => (string) $purchase->id,
+                'status' => (string) $purchase->status,
+                'subtotal' => $subtotal,
+                'tax_rate' => $taxRate,
+                'tax' => $tax,
+                'total' => $total,
+                'transaction_date' => $transactionDate->toDateString(),
+            ];
+        });
+    }
+
     public function createDirectPurchase(array $payload, ?string $userId): array
     {
         $tenantId = TenantContext::id();
@@ -386,15 +481,24 @@ class PurchaseService
             + (Schema::hasColumn('purchases', 'tax') ? ['tax' => $payload['tax'] ?? 0] : [])
             + (Schema::hasColumn('purchases', 'purchase_mode') ? ['purchase_mode' => $purchaseMode] : []));
 
+        PurchaseItem::query()->insert(
+            $this->buildPurchaseItemRows($tenantId, $purchaseId, $payload['items'] ?? [])
+        );
+
+        return Purchase::query()->where('tenant_id', $tenantId)->where('id', $purchaseId)->firstOrFail();
+    }
+
+    private function buildPurchaseItemRows(string $tenantId, string $purchaseId, array $payloadItems): array
+    {
         $conversion = app(UnitConversionService::class);
-        $productIds = collect($payload['items'] ?? [])->pluck('product_id')->filter()->unique()->values()->all();
+        $productIds = collect($payloadItems)->pluck('product_id')->filter()->unique()->values()->all();
         $products = Product::query()
             ->where('tenant_id', $tenantId)
             ->whereIn('id', $productIds)
             ->get(['id', 'unit'])
             ->keyBy('id');
 
-        $items = collect($payload['items'] ?? [])->map(function ($item, int $index) use ($tenantId, $purchaseId, $products, $conversion) {
+        return collect($payloadItems)->map(function ($item, int $index) use ($tenantId, $purchaseId, $products, $conversion) {
             $product = $products->get($item['product_id']);
             if (! $product) {
                 throw ValidationException::withMessages([
@@ -425,12 +529,8 @@ class PurchaseService
                 'purchase_unit' => $purchaseUnit,
                 'purchase_unit_multiplier' => Decimal::float($multiplier, Decimal::QTY_SCALE),
                 'purchase_price' => Decimal::float($purchasePrice, Decimal::MONEY_SCALE),
-            ];
+            ] + (Schema::hasColumn('purchase_items', 'product_variant_id') ? ['product_variant_id' => $item['product_variant_id'] ?? null] : []);
         })->all();
-
-        PurchaseItem::query()->insert($items);
-
-        return Purchase::query()->where('tenant_id', $tenantId)->where('id', $purchaseId)->firstOrFail();
     }
 
     private function performReceive(

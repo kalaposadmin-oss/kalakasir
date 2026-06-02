@@ -177,6 +177,7 @@ Route::prefix('v1')
         Route::delete('pos/saved-orders/{savedOrder}', [PosSavedOrderController::class, 'destroy'])->middleware('role:cashier,supervisor,admin,owner');
         Route::post('fee-products', [FeeProductController::class, 'store'])->middleware('role:cashier,supervisor,admin,owner');
         Route::post('purchases', [PurchaseController::class, 'store'])->middleware(['role:admin,owner,superadmin', 'feature_gate:purchase.order']);
+        Route::patch('purchases/{purchase}/draft', [PurchaseController::class, 'updateDraft'])->middleware(['role:admin,owner,superadmin', 'feature_gate:purchase.order']);
         Route::patch('purchases/{purchase}/payment', [PurchaseController::class, 'updatePayment'])->middleware(['role:admin,owner,superadmin', 'feature_gate:purchase.order']);
         Route::patch('purchases/{purchase}/tax', [PurchaseController::class, 'updateTax'])->middleware(['role:admin,owner,superadmin', 'feature_gate:purchase.order']);
         Route::patch('purchases/{purchase}/items/{item}/price', [PurchaseController::class, 'updateItemPrice'])->middleware(['role:admin,owner', 'feature_gate:purchase.receive']);

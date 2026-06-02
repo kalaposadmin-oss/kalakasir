@@ -68,24 +68,30 @@ class ProductionEligibilityService
             'Aktifkan track stock agar batch bisa dihitung dan diposting.'
         );
 
-        $addCheck(
-            'bom_items',
-            'Recipe / BOM terisi',
-            $bomItems !== [],
-            'Tambahkan minimal satu bahan baku di recipe / BOM.'
-        );
+        $usesRecipe = $productMode === 'bom'
+            || $bomItems !== []
+            || Decimal::compare($recipeOutputQty, '0') > 0;
 
-        $addCheck(
-            'recipe_output_qty',
-            'Hasil standar per resep',
-            $productionMode !== Product::PRODUCTION_MODE_BATCH || Decimal::compare($recipeOutputQty, '0') > 0,
-            'Isi hasil standar per 1 resep agar jumlah resep dan output harapan bisa dihitung otomatis.',
-            [
-                'recipe_output_qty' => Decimal::float($recipeOutputQty, Decimal::QTY_SCALE),
-            ]
-        );
+        if ($usesRecipe) {
+            $addCheck(
+                'bom_items',
+                'Recipe / BOM terisi',
+                $bomItems !== [],
+                'Tambahkan minimal satu bahan baku di recipe / BOM.'
+            );
 
-        if ($bomItems !== []) {
+            $addCheck(
+                'recipe_output_qty',
+                'Hasil standar per resep',
+                $productionMode !== Product::PRODUCTION_MODE_BATCH || Decimal::compare($recipeOutputQty, '0') > 0,
+                'Isi hasil standar per 1 resep agar jumlah resep dan output harapan bisa dihitung otomatis.',
+                [
+                    'recipe_output_qty' => Decimal::float($recipeOutputQty, Decimal::QTY_SCALE),
+                ]
+            );
+        }
+
+        if ($usesRecipe && $bomItems !== []) {
             $recipeChecks = $this->inspectRecipeEligibility($tenantId, $bomItems);
             $checks = array_merge($checks, $recipeChecks['checks']);
             $reasons = array_merge($reasons, $recipeChecks['reasons']);

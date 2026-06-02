@@ -686,6 +686,12 @@ class ProductItemTypeCatalogApiTest extends TestCase
 
         $productId = (string) $createResponse->json('product.id');
 
+        $this->getJson('/api/v1/products/'.$productId, $this->tenantHeaders($tenant->id))
+            ->assertOk()
+            ->assertJsonPath('product.product_mode', 'default')
+            ->assertJsonPath('product.production_mode', 'batch_production')
+            ->assertJsonPath('product.production_batch_eligible', true);
+
         $updateResponse = $this->putJson('/api/v1/products/'.$productId, [
             'name' => 'Roti Instan',
             'sku' => 'BATCH-001',

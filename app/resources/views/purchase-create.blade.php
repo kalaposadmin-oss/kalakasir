@@ -68,8 +68,8 @@
                         <span class="material-symbols-outlined text-slate-500 text-lg">event_note</span>
                     </div>
                     <div class="flex-1">
-                        <span class="text-xs text-slate-400 block">Tanggal Pesanan</span>
-                        <span class="text-sm font-medium" id="order-date">-</span>
+                        <label class="text-xs text-slate-400 block" for="order-date">Tanggal Pesanan</label>
+                        <input id="order-date" class="mt-1 h-9 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-800" type="date" />
                     </div>
                 </div>
             </div>
@@ -237,12 +237,15 @@
                     maximumFractionDigits: 0,
                 }).format(value || 0);
 
-                const setDateLabel = () => {
-                    el.orderDate.textContent = new Intl.DateTimeFormat('id-ID', {
-                        day: '2-digit',
-                        month: 'long',
-                        year: 'numeric',
-                    }).format(new Date());
+                const localDateInputValue = (date = new Date()) => {
+                    const yyyy = date.getFullYear();
+                    const mm = String(date.getMonth() + 1).padStart(2, '0');
+                    const dd = String(date.getDate()).padStart(2, '0');
+                    return `${yyyy}-${mm}-${dd}`;
+                };
+
+                const setDefaultOrderDate = () => {
+                    el.orderDate.value = localDateInputValue();
                 };
 
                 const setDefaultDueDate = () => {
@@ -560,6 +563,12 @@
                     const paymentMethod = el.paymentMethod.value || 'tempo';
                     const dueDate = paymentMethod === 'tempo' ? (el.dueDate.value || null) : null;
                     const cashAccountId = paymentMethod === 'tunai' ? (state.selectedCashAccountId || state.cashAccounts[0]?.id || null) : null;
+                    const transactionDate = el.orderDate.value || null;
+
+                    if (!transactionDate) {
+                        alert('Tanggal pesanan wajib diisi.');
+                        return;
+                    }
 
                     if (paymentMethod === 'tempo' && !dueDate) {
                         alert('Tanggal jatuh tempo wajib diisi untuk pembelian tempo.');
@@ -603,6 +612,7 @@
                                     payment_method: paymentMethod,
                                     due_date: dueDate,
                                     cash_account_id: cashAccountId,
+                                    transaction_date: transactionDate,
                                     tax_enabled: taxEnabled,
                                     tax_rate: taxRate,
                                     tax: taxValue,
@@ -668,7 +678,7 @@
                 el.taxRate?.addEventListener('input', recalcTotals);
 
                 (async () => {
-                    setDateLabel();
+                    setDefaultOrderDate();
                     setDefaultDueDate();
                     syncPaymentFields();
                     const [supplierData, products, cashAccountsResponse] = await Promise.all([loadSuppliers(), loadProducts(), loadCashAccounts()]);

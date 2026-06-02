@@ -190,6 +190,7 @@ class PurchaseController extends Controller
                 'location_id' => $purchaseRow->location_id,
                 'location_name' => $location?->name,
                 'notes' => $purchaseRow->notes,
+                'transaction_date' => $purchaseRow->transaction_date,
                 'created_at' => $purchaseRow->created_at,
             ],
             'supplier' => $supplier ? [
@@ -477,6 +478,97 @@ class PurchaseController extends Controller
         } catch (RuntimeException $exception) {
             return response()->json([
                 'code' => 'PURCHASE_CREATE_FAILED',
+                'message' => $exception->getMessage(),
+                'details' => [],
+            ], 422);
+        }
+    }
+
+    public function updateDraft(Request $request, string $purchase)
+    {
+        $tenantId = TenantContext::id();
+
+        $validated = $request->validate([
+            'supplier_id' => ['required', 'uuid', $tenantId
+                ? Rule::exists('suppliers', 'id')->where('tenant_id', $tenantId)
+                : 'exists:suppliers,id'],
+            'location_id' => ['nullable', 'uuid', $tenantId
+                ? Rule::exists('locations', 'id')->where('tenant_id', $tenantId)
+                : 'exists:locations,id'],
+            'transaction_date' => ['required', 'date'],
+            'payment_method' => ['nullable', 'in:tunai,tempo'],
+            'cash_account_id' => ['nullable', 'uuid', $tenantId
+                ? Rule::exists('chart_of_accounts', 'id')->where('tenant_id', $tenantId)
+                : 'exists:chart_of_accounts,id'],
+            'due_date' => ['nullable', 'date'],
+            'notes' => ['nullable', 'string', 'max:500'],
+            'items' => ['required', 'array', 'min:1'],
+            'items.*.product_id' => ['required', 'uuid', $tenantId
+                ? Rule::exists('products', 'id')->where('tenant_id', $tenantId)
+                : 'exists:products,id'],
+            'items.*.product_variant_id' => ['nullable', 'uuid', $tenantId
+                ? Rule::exists('product_variants', 'id')->where('tenant_id', $tenantId)
+                : 'exists:product_variants,id'],
+            'items.*.qty' => ['required', 'numeric', 'min:0.01'],
+            'items.*.purchase_unit' => ['nullable', 'string', 'max:30'],
+            'items.*.price' => ['required', 'numeric', 'min:0'],
+            'tax_enabled' => ['nullable', 'boolean'],
+            'tax_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'tax' => ['nullable', 'numeric', 'min:0'],
+        ]);
+
+        $subtotal = collect($validated['items'])->sum(fn ($item) => (float) $item['qty'] * (float) $item['price']);
+        $taxEnabled = (bool) ($validated['tax_enabled'] ?? false);
+        $taxRate = $taxEnabled ? (float) ($validated['tax_rate'] ?? 0) : 0.0;
+        $tax = $taxEnabled ? (float) ($validated['tax'] ?? round($subtotal * ($taxRate / 100), 2)) : 0.0;
+
+        $payload = $validated + [
+            'tax_enabled' => $taxEnabled,
+            'tax_rate' => $taxRate,
+            'tax' => $tax,
+        ];
+
+        try {
+            $result = $this->purchaseService()->updateDraftPurchase($purchase, $payload, $request->user()?->id);
+
+            return response()->json($result);
+        } catch (LockPeriodException $exception) {
+            return response()->json([
+                'code' => $exception->errorCode(),
+                'message' => $exception->getMessage(),
+                'details' => [],
+            ], $exception->status());
+        } catch (InvalidArgumentException $exception) {
+            if ($tenantId) {
+                app(AnomalyService::class)->raise(
+                    tenantId: $tenantId,
+                    severity: 'low',
+                    type: 'invalid_transaction_date_attempt',
+                    payload: [
+                        'source' => 'purchase_draft_update',
+                        'message' => $exception->getMessage(),
+                    ]
+                );
+            }
+
+            return response()->json([
+                'code' => 'INVALID_TRANSACTION_DATE',
+                'message' => $exception->getMessage(),
+                'details' => [],
+            ], 422);
+        } catch (ValidationException $exception) {
+            return response()->json([
+                'code' => 'VALIDATION_ERROR',
+                'message' => 'Data tidak valid.',
+                'details' => $exception->errors(),
+            ], 422);
+        } catch (RuntimeException $exception) {
+            $code = $exception->getMessage() === 'Akun kas belum diatur. Lengkapi mapping akun kas terlebih dahulu.'
+                ? 'CASH_ACCOUNT_NOT_CONFIGURED'
+                : 'PURCHASE_DRAFT_UPDATE_FAILED';
+
+            return response()->json([
+                'code' => $code,
                 'message' => $exception->getMessage(),
                 'details' => [],
             ], 422);

@@ -807,7 +807,13 @@
             const batchProductOptions = () => {
                 const products = state.bootstrap.products || [];
                 return products
-                    .filter((product) => window.PosUi.isProductionBatchEligibleProduct(product))
+                    .filter((product) => {
+                        const bomItems = Array.isArray(product.bom_items) ? product.bom_items : [];
+                        return window.PosUi.isProductionBatchEligibleProduct(product)
+                            && String(product.product_mode || '') === 'bom'
+                            && bomItems.length > 0
+                            && Number(product.recipe_output_qty || 0) > 0;
+                    })
                     .map((product) => ({
                         ...product,
                         __disabled: false,
@@ -821,7 +827,8 @@
                         const itemType = String(product.item_type || '').trim();
                         return itemType === 'finished_good'
                             && product.is_active !== false
-                            && product.track_stock !== false;
+                            && product.track_stock !== false
+                            && String(product.production_mode || '').trim() === 'batch_production';
                     })
                     .map((product) => ({
                         ...product,

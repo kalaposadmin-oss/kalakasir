@@ -91,7 +91,12 @@
     <section class="mt-3 px-4">
         <div class="flex items-center justify-between mb-3 px-1">
             <h3 class="text-sm font-bold text-slate-500 uppercase tracking-widest">Daftar Barang</h3>
-            <span class="text-xs font-medium text-slate-400" id="item-count">0 Produk</span>
+            <div class="flex items-center gap-2">
+                @if ($canManagePurchaseDetail)
+                    <button id="edit-draft" class="hidden rounded-full bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary" type="button">Edit Draft</button>
+                @endif
+                <span class="text-xs font-medium text-slate-400" id="item-count">0 Produk</span>
+            </div>
         </div>
         <div class="space-y-2" id="item-list"></div>
         <div class="mt-3 rounded-xl border border-primary/20 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -240,6 +245,56 @@
                 </form>
             </div>
         </div>
+
+        <div id="draft-modal" class="fixed inset-0 z-50 hidden items-end justify-center bg-slate-950/40 px-4 py-6 sm:items-center">
+            <div class="w-full max-w-[560px] max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain rounded-3xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+                <div class="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white px-5 py-4 dark:border-slate-800 dark:bg-slate-900">
+                    <div>
+                        <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Draft PO</p>
+                        <h4 class="text-base font-bold text-slate-900 dark:text-slate-100">Edit Tanggal dan Item</h4>
+                    </div>
+                    <button id="close-draft-modal" class="size-9 rounded-full bg-slate-100 text-slate-500 dark:bg-slate-800" type="button">
+                        <span class="material-symbols-outlined text-lg">close</span>
+                    </button>
+                </div>
+                <form id="draft-form" class="space-y-4 px-5 pt-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)]">
+                    <div class="grid gap-3 sm:grid-cols-2">
+                        <div>
+                            <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-500">Tanggal Pesanan</label>
+                            <input id="draft-transaction-date" class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold dark:border-slate-700 dark:bg-slate-800" type="date" />
+                        </div>
+                        <div>
+                            <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-500">Pemasok</label>
+                            <select id="draft-supplier" class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold dark:border-slate-700 dark:bg-slate-800"></select>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-500">Catatan</label>
+                        <textarea id="draft-notes" class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-800" rows="2" placeholder="Opsional"></textarea>
+                    </div>
+                    <div>
+                        <div class="mb-2 flex items-center justify-between">
+                            <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Item Produk</p>
+                            <button id="draft-add-item" class="inline-flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary" type="button">
+                                <span class="material-symbols-outlined text-sm">add</span>
+                                Tambah
+                            </button>
+                        </div>
+                        <div id="draft-items" class="space-y-3"></div>
+                    </div>
+                    <div class="rounded-2xl bg-slate-50 px-4 py-3 text-sm dark:bg-slate-800/70">
+                        <div class="flex justify-between text-slate-500"><span>Subtotal Baru</span><span id="draft-preview-subtotal">Rp 0</span></div>
+                        <div class="mt-1 flex justify-between text-slate-500"><span>Pajak</span><span id="draft-preview-tax">Rp 0</span></div>
+                        <div class="mt-2 flex justify-between border-t border-slate-200 pt-2 font-bold text-slate-900 dark:border-slate-700 dark:text-slate-100"><span>Total Baru</span><span id="draft-preview-total">Rp 0</span></div>
+                    </div>
+                    <p id="draft-feedback" class="hidden rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600"></p>
+                    <div class="flex gap-3 pt-1">
+                        <button id="cancel-draft-edit" class="flex-1 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-600 dark:border-slate-700 dark:text-slate-300" type="button">Batal</button>
+                        <button id="save-draft-edit" class="flex-[2] rounded-2xl bg-primary px-4 py-3 text-sm font-bold text-white shadow-lg shadow-primary/20" type="button">Simpan Draft</button>
+                    </div>
+                </form>
+            </div>
+        </div>
     @endif
 
     @include('partials.ui-helpers')
@@ -251,6 +306,7 @@
                 const headers = tenantId ? { 'X-Tenant-Id': tenantId } : {};
                 const purchaseStatusLabels = @json(\App\Support\PurchaseStatus::labels());
                 const purchaseStatusAliases = @json(\App\Support\PurchaseStatus::aliases());
+                const purchaseStatusDraft = @json(\App\Support\PurchaseStatus::DRAFT);
                 const purchaseStatusSubmitted = @json(\App\Support\PurchaseStatus::SUBMITTED);
                 const purchaseModeControlled = @json(\App\Support\PurchaseMode::CONTROLLED);
                 const purchaseModePoShort = @json(\App\Support\PurchaseMode::PO_SHORT);
@@ -296,6 +352,21 @@
                     reject: document.getElementById('reject'),
                     openReceiving: document.getElementById('open-receiving'),
                     closePurchase: document.getElementById('close-purchase'),
+                    editDraft: document.getElementById('edit-draft'),
+                    draftModal: document.getElementById('draft-modal'),
+                    closeDraftModal: document.getElementById('close-draft-modal'),
+                    cancelDraftEdit: document.getElementById('cancel-draft-edit'),
+                    draftForm: document.getElementById('draft-form'),
+                    draftTransactionDate: document.getElementById('draft-transaction-date'),
+                    draftSupplier: document.getElementById('draft-supplier'),
+                    draftNotes: document.getElementById('draft-notes'),
+                    draftItems: document.getElementById('draft-items'),
+                    draftAddItem: document.getElementById('draft-add-item'),
+                    draftPreviewSubtotal: document.getElementById('draft-preview-subtotal'),
+                    draftPreviewTax: document.getElementById('draft-preview-tax'),
+                    draftPreviewTotal: document.getElementById('draft-preview-total'),
+                    draftFeedback: document.getElementById('draft-feedback'),
+                    saveDraftEdit: document.getElementById('save-draft-edit'),
                     editPayment: document.getElementById('edit-payment'),
                     paymentModal: document.getElementById('payment-modal'),
                     closePaymentModal: document.getElementById('close-payment-modal'),
@@ -335,6 +406,11 @@
                 let currentPurchaseTaxRate = 0;
                 let currentPurchaseTax = 0;
                 let currentPurchaseTotal = 0;
+                let currentPurchaseTransactionDate = null;
+                let currentPurchaseLocationId = null;
+                let currentPurchaseNotes = null;
+                let currentSupplierId = null;
+                let currentItems = [];
                 let currentPurchaseFlow = {
                     can_approve: false,
                     can_receive: false,
@@ -342,6 +418,8 @@
                     purchase_mode: purchaseFlowDefaultMode,
                 };
                 let cashAccountOptions = [];
+                let supplierOptions = [];
+                let productOptions = [];
 
                 const formatCurrency = (value) => new Intl.NumberFormat('id-ID', {
                     style: 'currency',
@@ -369,6 +447,39 @@
 
                     return String(value).slice(0, 10);
                 };
+
+                const escapeHtml = (value) => String(value ?? '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#039;');
+
+                const unitGroups = [
+                    ['mg', 'gram', 'kg'],
+                    ['ml', 'liter'],
+                    ['cm', 'meter'],
+                    ['pcs', 'unit', 'dozen', 'lusin'],
+                ];
+
+                const getProductUnit = (productId) => {
+                    const product = productOptions.find((item) => item.id === productId);
+                    return String(product?.unit || 'Pcs').trim() || 'Pcs';
+                };
+
+                const getCompatibleUnits = (unit) => {
+                    const normalized = String(unit || '').trim().toLowerCase();
+                    const group = unitGroups.find((items) => items.includes(normalized));
+                    return group || (normalized ? [normalized] : ['pcs']);
+                };
+
+                const buildProductOptions = (selectedId = '') => productOptions
+                    .map((product) => `<option value="${product.id}" ${product.id === selectedId ? 'selected' : ''}>${escapeHtml(product.name)}</option>`)
+                    .join('');
+
+                const buildSupplierOptions = (selectedId = '') => supplierOptions
+                    .map((supplier) => `<option value="${supplier.id}" ${supplier.id === selectedId ? 'selected' : ''}>${escapeHtml(supplier.name)}</option>`)
+                    .join('');
 
                 const getCashAccountLabel = (accountId) => {
                     const account = cashAccountOptions.find((item) => item.id === accountId);
@@ -493,6 +604,136 @@
                     }
                 };
 
+                const loadDraftEditOptions = async () => {
+                    if (supplierOptions.length && productOptions.length) {
+                        return;
+                    }
+
+                    const [suppliersResponse, productsResponse] = await Promise.all([
+                        fetch('/api/v1/suppliers', { headers }),
+                        fetch('/api/v1/products', { headers }),
+                    ]);
+
+                    if (suppliersResponse.ok) {
+                        const data = await suppliersResponse.json();
+                        supplierOptions = data.suppliers || [];
+                    }
+
+                    if (productsResponse.ok) {
+                        const data = await productsResponse.json();
+                        productOptions = data.products || [];
+                    }
+                };
+
+                const updateDraftRowUnit = (row, productId, preferredUnit = null) => {
+                    const unitSelect = row.querySelector('.draft-item-unit');
+                    if (!unitSelect) {
+                        return;
+                    }
+
+                    const stockUnit = getProductUnit(productId);
+                    unitSelect.innerHTML = getCompatibleUnits(stockUnit)
+                        .map((unit) => `<option value="${escapeHtml(unit)}">${escapeHtml(unit)}</option>`)
+                        .join('');
+                    unitSelect.value = String(preferredUnit || stockUnit).trim().toLowerCase();
+                    if (!unitSelect.value && unitSelect.options.length) {
+                        unitSelect.selectedIndex = 0;
+                    }
+                };
+
+                const syncDraftTotals = () => {
+                    let subtotal = 0;
+                    el.draftItems?.querySelectorAll('.draft-item-row').forEach((row) => {
+                        const qty = Number(row.querySelector('.draft-item-qty')?.value || 0);
+                        const price = Number(row.querySelector('.draft-item-price')?.value || 0);
+                        subtotal += qty * price;
+                    });
+
+                    const taxEnabled = currentPurchaseTax > 0 || currentPurchaseTaxRate > 0;
+                    const taxRate = taxEnabled ? Number(currentPurchaseTaxRate || 0) : 0;
+                    const tax = taxEnabled ? Math.round(subtotal * (taxRate / 100)) : 0;
+                    el.draftPreviewSubtotal.textContent = formatCurrency(subtotal);
+                    el.draftPreviewTax.textContent = taxRate > 0 ? `${formatCurrency(tax)} (${formatQuantity(taxRate)}%)` : formatCurrency(tax);
+                    el.draftPreviewTotal.textContent = formatCurrency(subtotal + tax);
+                };
+
+                const addDraftItemRow = (item = {}) => {
+                    const row = document.createElement('div');
+                    const productId = item.product_id || productOptions[0]?.id || '';
+                    const purchaseQty = Number(item.purchase_qty ?? item.qty ?? 1);
+                    const purchasePrice = Number(item.purchase_price ?? item.price ?? 0);
+                    row.className = 'draft-item-row rounded-2xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900';
+                    row.innerHTML = `
+                        <div class="flex items-start gap-2">
+                            <div class="min-w-0 flex-1">
+                                <label class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Produk</label>
+                                <select class="draft-item-product w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold dark:border-slate-700 dark:bg-slate-800">
+                                    ${buildProductOptions(productId)}
+                                </select>
+                            </div>
+                            <button class="draft-remove-item mt-6 size-10 rounded-xl border border-rose-100 bg-rose-50 text-rose-500" type="button">
+                                <span class="material-symbols-outlined text-lg">delete</span>
+                            </button>
+                        </div>
+                        <div class="mt-3 grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Qty</label>
+                                <div class="flex gap-2">
+                                    <input class="draft-item-qty min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-bold dark:border-slate-700 dark:bg-slate-800" type="number" min="0.0001" step="0.0001" value="${purchaseQty}" />
+                                    <select class="draft-item-unit w-24 rounded-xl border border-slate-200 bg-slate-50 px-2 py-2.5 text-xs font-bold dark:border-slate-700 dark:bg-slate-800"></select>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Harga</label>
+                                <input class="draft-item-price w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-bold dark:border-slate-700 dark:bg-slate-800" type="number" min="0" step="1" value="${purchasePrice}" />
+                            </div>
+                        </div>
+                    `;
+
+                    el.draftItems.appendChild(row);
+                    const productSelect = row.querySelector('.draft-item-product');
+                    updateDraftRowUnit(row, productId, item.purchase_unit || item.unit || null);
+                    productSelect?.addEventListener('change', () => {
+                        updateDraftRowUnit(row, productSelect.value);
+                        syncDraftTotals();
+                    });
+                    row.querySelectorAll('input, select').forEach((input) => input.addEventListener('input', syncDraftTotals));
+                    row.querySelector('.draft-remove-item')?.addEventListener('click', () => {
+                        row.remove();
+                        syncDraftTotals();
+                    });
+                    syncDraftTotals();
+                };
+
+                const openDraftModal = async () => {
+                    if (!el.draftModal) {
+                        return;
+                    }
+
+                    await loadDraftEditOptions();
+                    el.draftSupplier.innerHTML = buildSupplierOptions(currentSupplierId);
+                    el.draftTransactionDate.value = formatInputDate(currentPurchaseTransactionDate) || formatInputDate(new Date().toISOString());
+                    el.draftNotes.value = currentPurchaseNotes || '';
+                    el.draftItems.innerHTML = '';
+                    (currentItems.length ? currentItems : [{}]).forEach((item) => addDraftItemRow(item));
+                    if (el.draftFeedback) {
+                        el.draftFeedback.classList.add('hidden');
+                        el.draftFeedback.textContent = '';
+                    }
+                    syncDraftTotals();
+                    el.draftModal.classList.remove('hidden');
+                    el.draftModal.classList.add('flex');
+                };
+
+                const closeDraftModal = () => {
+                    if (!el.draftModal) {
+                        return;
+                    }
+
+                    el.draftModal.classList.add('hidden');
+                    el.draftModal.classList.remove('flex');
+                };
+
                 const openPaymentModal = () => {
                     if (!el.paymentModal) {
                         return;
@@ -578,6 +819,7 @@
                     const showFulfillment = Boolean(currentPurchaseFlow.can_receive) || Boolean(currentPurchaseFlow.can_close);
                     const showActionBar = showApproval || showFulfillment;
 
+                    el.editDraft?.classList.toggle('hidden', normalizedStatus !== purchaseStatusDraft);
                     el.actionBar?.classList.toggle('hidden', !showActionBar);
                     el.approvalActions?.classList.toggle('hidden', !showApproval);
                     el.fulfillmentActions?.classList.toggle('hidden', !showFulfillment);
@@ -675,6 +917,39 @@
                     });
                 };
 
+                const applyPurchaseData = async (data) => {
+                    const items = data.items || [];
+                    const fallbackSubtotal = items.reduce((sum, item) => sum + (Number(item.purchase_qty ?? item.qty) * Number(item.purchase_price ?? item.price)), 0);
+                    currentItems = items;
+                    currentSupplierId = data.supplier?.id || null;
+                    currentPurchaseSubtotal = Number(data.purchase.subtotal ?? fallbackSubtotal);
+                    currentPurchaseTaxRate = Number(data.purchase.tax_rate || 0);
+                    currentPurchaseTax = Number(data.purchase.tax || 0);
+                    currentPurchaseTotal = Number(data.purchase.total ?? (currentPurchaseSubtotal + currentPurchaseTax));
+                    currentPurchaseMode = normalizePurchaseMode(data.purchase.purchase_mode || purchaseFlowDefaultMode);
+                    currentPurchaseFlow = data.flow || currentPurchaseFlow;
+                    currentPurchasePaymentMethod = data.purchase.payment_method || 'tempo';
+                    currentPurchaseDueDate = data.purchase.due_date || null;
+                    currentPurchaseCashAccountId = data.purchase.cash_account_id || null;
+                    currentPurchaseTransactionDate = data.purchase.transaction_date || data.purchase.created_at || null;
+                    currentPurchaseLocationId = data.purchase.location_id || null;
+                    currentPurchaseNotes = data.purchase.notes || null;
+
+                    await loadCashAccounts();
+
+                    el.poNumber.textContent = `PO #${String(data.purchase.id).slice(0, 6).toUpperCase()}`;
+                    el.poSupplier.textContent = `${data.supplier?.name || 'Pemasok'} - Lokasi: ${data.purchase.location_name || '-'}`;
+                    el.orderDate.textContent = formatDate(currentPurchaseTransactionDate);
+                    el.arrivalDate.textContent = formatDate(currentPurchaseTransactionDate);
+                    el.createdInfo.textContent = `Sistem - ${formatDate(data.purchase.created_at)}`;
+                    el.statusInfo.textContent = 'Sistem';
+                    setPaymentSummary();
+                    renderTotals();
+                    renderItems(items);
+                    renderReceiptHistory(data.receipts || []);
+                    setStatus(data.purchase.status || purchaseStatusSubmitted, currentPurchaseMode);
+                };
+
                 const decide = async (status) => {
                     const response = await fetch(`/api/v1/purchases/${purchaseId}/decision`, {
                         method: 'POST',
@@ -746,6 +1021,121 @@
                         loadingHtml: '<span class="material-symbols-outlined animate-spin">progress_activity</span> MENUTUP',
                     });
                 });
+
+                if (el.editDraft && el.draftModal) {
+                    el.editDraft.addEventListener('click', openDraftModal);
+                    el.closeDraftModal?.addEventListener('click', closeDraftModal);
+                    el.cancelDraftEdit?.addEventListener('click', closeDraftModal);
+                    el.draftModal.addEventListener('click', (event) => {
+                        if (event.target === el.draftModal) {
+                            closeDraftModal();
+                        }
+                    });
+                    el.draftAddItem?.addEventListener('click', () => addDraftItemRow({}));
+                    el.saveDraftEdit?.addEventListener('click', (event) => {
+                        event.preventDefault();
+                        el.draftForm?.requestSubmit();
+                    });
+                    el.draftForm?.addEventListener('submit', async (event) => {
+                        event.preventDefault();
+
+                        const items = [];
+                        el.draftItems.querySelectorAll('.draft-item-row').forEach((row) => {
+                            const productId = row.querySelector('.draft-item-product')?.value || '';
+                            const qty = Number(row.querySelector('.draft-item-qty')?.value || 0);
+                            const price = Number(row.querySelector('.draft-item-price')?.value || 0);
+                            const purchaseUnit = row.querySelector('.draft-item-unit')?.value || getProductUnit(productId);
+                            if (productId && qty > 0) {
+                                items.push({
+                                    product_id: productId,
+                                    qty,
+                                    purchase_unit: purchaseUnit,
+                                    price,
+                                });
+                            }
+                        });
+
+                        if (!el.draftTransactionDate.value) {
+                            el.draftFeedback.textContent = 'Tanggal pesanan wajib diisi.';
+                            el.draftFeedback.classList.remove('hidden');
+                            return;
+                        }
+
+                        if (!el.draftSupplier.value) {
+                            el.draftFeedback.textContent = 'Pemasok wajib dipilih.';
+                            el.draftFeedback.classList.remove('hidden');
+                            return;
+                        }
+
+                        if (!items.length) {
+                            el.draftFeedback.textContent = 'Tambahkan minimal satu produk dengan qty lebih dari 0.';
+                            el.draftFeedback.classList.remove('hidden');
+                            return;
+                        }
+
+                        const subtotal = items.reduce((sum, item) => sum + (Number(item.qty || 0) * Number(item.price || 0)), 0);
+                        const taxEnabled = currentPurchaseTax > 0 || currentPurchaseTaxRate > 0;
+                        const taxRate = taxEnabled ? Number(currentPurchaseTaxRate || 0) : 0;
+                        const tax = taxEnabled ? Math.round(subtotal * (taxRate / 100)) : 0;
+                        const paymentMethod = normalizePaymentMethod(currentPurchasePaymentMethod);
+                        const payload = {
+                            supplier_id: el.draftSupplier.value,
+                            location_id: currentPurchaseLocationId,
+                            transaction_date: el.draftTransactionDate.value,
+                            payment_method: paymentMethod,
+                            due_date: paymentMethod === 'tempo' ? currentPurchaseDueDate : null,
+                            cash_account_id: paymentMethod === 'tunai' ? currentPurchaseCashAccountId : null,
+                            notes: el.draftNotes.value.trim() || null,
+                            tax_enabled: taxEnabled,
+                            tax_rate: taxRate,
+                            tax,
+                            items,
+                        };
+
+                        const allowed = await window.PosUi.confirmRiskActionAsync({
+                            title: 'Simpan Perubahan Draft',
+                            message: `Tanggal: ${formatDate(payload.transaction_date)}\nItem: ${items.length}\nTotal Baru: ${formatCurrency(subtotal + tax)}`,
+                            confirmText: 'Simpan Draft',
+                            icon: 'edit_note',
+                        });
+                        if (!allowed) {
+                            return;
+                        }
+
+                        await window.PosUi.runWithSubmitGuard(el.saveDraftEdit, async () => {
+                            if (el.draftFeedback) {
+                                el.draftFeedback.classList.add('hidden');
+                                el.draftFeedback.textContent = '';
+                            }
+
+                            const response = await fetch(`/api/v1/purchases/${purchaseId}/draft`, {
+                                method: 'PATCH',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    ...(csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}),
+                                    'X-Requested-With': 'XMLHttpRequest',
+                                    ...headers,
+                                },
+                                body: JSON.stringify(payload),
+                            });
+                            const responseData = await response.json().catch(() => ({}));
+                            if (!response.ok) {
+                                const message = responseData.message || 'Gagal menyimpan draft PO.';
+                                if (el.draftFeedback) {
+                                    el.draftFeedback.textContent = message;
+                                    el.draftFeedback.classList.remove('hidden');
+                                }
+                                throw new Error(message);
+                            }
+
+                            const refreshed = await loadPurchase();
+                            await applyPurchaseData(refreshed);
+                            closeDraftModal();
+                        }, {
+                            loadingHtml: '<span class="material-symbols-outlined animate-spin">progress_activity</span> MENYIMPAN',
+                        });
+                    });
+                }
 
                 if (el.editPayment && el.paymentModal) {
                     el.editPayment.addEventListener('click', openPaymentModal);
@@ -899,6 +1289,8 @@
                 (async () => {
                     try {
                         const data = await loadPurchase();
+                        await applyPurchaseData(data);
+                        return;
                         const items = data.items || [];
                         const fallbackSubtotal = items.reduce((sum, item) => sum + (Number(item.purchase_qty ?? item.qty) * Number(item.purchase_price ?? item.price)), 0);
                         currentPurchaseSubtotal = Number(data.purchase.subtotal ?? fallbackSubtotal);

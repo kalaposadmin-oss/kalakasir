@@ -636,13 +636,17 @@
             pushCheck('Produk aktif', state.is_active, 'Aktifkan produk terlebih dahulu.');
             pushCheck('Tipe produk jadi', state.item_type === 'finished_good', 'Ubah tipe produk menjadi finished_good.');
             pushCheck('Track stock aktif', state.track_stock, 'Aktifkan track stock.');
-            pushCheck('Mode produk BOM', state.product_mode === 'bom', 'Set mode produk ke BOM saat memakai recipe.');
             pushCheck('Mode produksi batch', state.production_mode === 'batch_production', 'Set mode produksi ke batch_production.');
-            pushCheck('Hasil standar per 1 resep', state.recipe_output_qty > 0, 'Isi hasil standar per 1 resep terlebih dahulu.');
 
-            if (!bomItems.length) {
+            const usesRecipe = state.product_mode === 'bom' || bomItems.length > 0 || state.recipe_output_qty > 0;
+            if (usesRecipe) {
+                pushCheck('Mode produk BOM', state.product_mode === 'bom', 'Set mode produk ke BOM saat memakai recipe.');
+                pushCheck('Hasil standar per 1 resep', state.recipe_output_qty > 0, 'Isi hasil standar per 1 resep terlebih dahulu.');
+            }
+
+            if (usesRecipe && !bomItems.length) {
                 pushCheck('Minimal 1 line BOM', false, 'Tambahkan minimal satu bahan baku.');
-            } else {
+            } else if (usesRecipe) {
                 let firstIngredientIssue = '';
 
                 bomItems.forEach((item, index) => {

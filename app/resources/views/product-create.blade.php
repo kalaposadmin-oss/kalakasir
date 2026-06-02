@@ -324,6 +324,17 @@
                         BOM / recipe hanya berlaku untuk barang jual. Bahan baku dan jasa tidak tampil sebagai output recipe di layar ini.
                     </div>
                     <div class="rounded-xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-4 {{ $productCreateCanManageRecipe ? '' : 'hidden' }}" id="bom-editor-card">
+                        <div class="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-3 py-3 dark:border-slate-800 dark:bg-slate-950/40">
+                            <div>
+                                <p class="text-sm font-semibold text-slate-900 dark:text-slate-100">Masuk stok dari Batch Produksi</p>
+                                <p class="text-xs text-slate-500 dark:text-slate-400">Aktifkan untuk produk hasil jadi seperti bites atau box, walaupun tidak punya BOM sendiri.</p>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input id="enable-batch-output" type="checkbox" class="sr-only peer" />
+                                <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:bg-primary"></div>
+                                <div class="absolute left-1 top-1 size-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+                            </label>
+                        </div>
                         <div class="flex items-center justify-between">
                             <div>
                                 <p class="text-sm font-semibold text-slate-900 dark:text-slate-100">Gunakan BOM / Recipe</p>
@@ -490,6 +501,7 @@
                     bomLockedNotice: document.getElementById('bom-locked-notice'),
                     bomUnavailableNotice: document.getElementById('bom-unavailable-notice'),
                     enableBom: document.getElementById('enable-bom'),
+                    enableBatchOutput: document.getElementById('enable-batch-output'),
                     bomEditor: document.getElementById('bom-editor'),
                     recipeProductionMode: document.getElementById('recipe-production-mode'),
                     recipeOutputQty: document.getElementById('recipe-output-qty'),
@@ -539,6 +551,11 @@
                         : 'auto_consume_on_sell';
                 };
                 const getSelectedRecipeProductionMode = () => normalizeRecipeProductionMode(el.recipeProductionMode?.value);
+                const batchOutputEnabled = () => Boolean(
+                    canManageRecipe
+                    && getSelectedProductType() === 'finished_good'
+                    && el.enableBatchOutput?.checked
+                );
                 const recipeAutoConsumesOnSell = () => Boolean(
                     canManageRecipe
                     && getSelectedProductType() === 'finished_good'
@@ -606,7 +623,7 @@
                 const syncRecipeStockState = () => {
                     const productType = getSelectedProductType();
                     const autoConsume = recipeAutoConsumesOnSell();
-                    const batchProduction = recipeUsesFinishedStock();
+                    const batchProduction = recipeUsesFinishedStock() || batchOutputEnabled();
 
                     if (batchProduction) {
                         el.trackStock.checked = true;
@@ -1054,10 +1071,14 @@
 
                     if (isInternalStock || isService) {
                         el.enableBom.checked = false;
+                        if (el.enableBatchOutput) {
+                            el.enableBatchOutput.checked = false;
+                        }
                         el.bomLineList.innerHTML = '';
                     }
 
                     setToggleDisabled(el.enableBom, !isFinishedGood || !canManageRecipe);
+                    setToggleDisabled(el.enableBatchOutput, !isFinishedGood || !canManageRecipe);
 
                     syncRecipeStockState();
                     updateVariantEditorVisibility();
@@ -1247,6 +1268,9 @@
                         el.bomLockedNotice?.classList.add('hidden');
                         el.bomUnavailableNotice?.classList.remove('hidden');
                         el.enableBom.checked = false;
+                        if (el.enableBatchOutput) {
+                            el.enableBatchOutput.checked = false;
+                        }
                         setBomHint(isRecipeComponentType(productType)
                             ? 'Bahan baku atau packaging dipakai sebagai komponen recipe, bukan output recipe.'
                             : 'Item ini tidak mendukung BOM atau auto-consume.');
@@ -1260,6 +1284,9 @@
                         el.bomCard?.classList.add('hidden');
                         el.bomLockedNotice?.classList.remove('hidden');
                         el.enableBom.checked = false;
+                        if (el.enableBatchOutput) {
+                            el.enableBatchOutput.checked = false;
+                        }
                         el.bomLineList.innerHTML = '';
                         setBomHint('Fitur BOM belum tersedia di paket ini.');
                         refreshProductionReadiness();
@@ -1386,12 +1413,16 @@
                 const buildProductionDraft = () => {
                     const productType = getSelectedProductType();
                     const useBom = Boolean(canManageRecipe && productType === 'finished_good' && el.enableBom.checked);
-                    const productionMode = useBom ? getSelectedRecipeProductionMode() : 'none';
+                    const productionMode = useBom
+                        ? getSelectedRecipeProductionMode()
+                        : (batchOutputEnabled() ? 'batch_production' : 'none');
                     const trackStock = productType === 'service'
                         ? false
-                        : (useBom
+                        : (productionMode === 'batch_production'
+                            ? true
+                            : (useBom
                             ? productionMode === 'batch_production'
-                            : Boolean(el.trackStock.checked));
+                            : Boolean(el.trackStock.checked)));
 
                     return {
                         is_active: Boolean(el.isActive?.checked),
@@ -1414,8 +1445,10 @@
                     return Boolean(
                         canManageRecipe
                         && getSelectedProductType() === 'finished_good'
-                        && el.enableBom?.checked
-                        && getSelectedRecipeProductionMode() === 'batch_production'
+                        && (
+                            (el.enableBom?.checked && getSelectedRecipeProductionMode() === 'batch_production')
+                            || batchOutputEnabled()
+                        )
                     );
                 };
 
@@ -1739,6 +1772,9 @@
                     el.variantStockLineList.innerHTML = '';
                     updateVariantEditorVisibility();
                     el.enableBom.checked = false;
+                    if (el.enableBatchOutput) {
+                        el.enableBatchOutput.checked = false;
+                    }
                     el.recipeProductionMode.value = 'auto_consume_on_sell';
                     el.recipeOutputQty.value = '';
                     el.bomLineList.innerHTML = '';
@@ -1866,7 +1902,13 @@
                         payload.recipe_output_qty = null;
                         payload.product_mode = 'default';
                         payload.item_type = 'finished_good';
-                        payload.production_mode = 'none';
+                        payload.production_mode = batchOutputEnabled() ? 'batch_production' : 'none';
+                        if (payload.production_mode === 'batch_production') {
+                            payload.track_stock = true;
+                            payload.initial_stock = el.enableVariants.checked ? 0 : Number(el.stock.value || 0);
+                            payload.initial_stock_lines = el.enableVariants.checked ? collectVariantStockLines(payload.variants || []) : [];
+                        }
+                        payload.bom_items = [];
                     }
 
                     if (!await confirmStockUnitBeforeSave(productType, payload.unit)) {
@@ -2007,6 +2049,11 @@
                 el.enableBom.addEventListener('change', () => {
                     syncRecipeStockState();
                     updateBomEditorVisibility();
+                    updateInitialStockMode();
+                    refreshProductionReadiness();
+                });
+                el.enableBatchOutput?.addEventListener('change', () => {
+                    syncRecipeStockState();
                     updateInitialStockMode();
                     refreshProductionReadiness();
                 });

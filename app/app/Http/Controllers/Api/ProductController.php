@@ -649,6 +649,7 @@ class ProductController extends Controller
                 'products.item_type',
                 'products.bom_items',
                 'products.recipe_output_qty',
+                'products.is_active',
                 'products.track_stock',
                 'categories.name as category_name',
                 'suppliers.name as supplier_name',
@@ -863,7 +864,7 @@ class ProductController extends Controller
                     'item_type' => $itemType,
                     'bom_items' => array_key_exists('bom_items', $payload) ? json_encode($payload['bom_items'] ?? []) : $productRow->bom_items,
                     'recipe_output_qty' => array_key_exists('recipe_output_qty', $payload)
-                        ? $this->normalizeRecipeOutputQty($payload['recipe_output_qty'])
+                        ? ($payload['recipe_output_qty'] !== null ? $this->normalizeRecipeOutputQty($payload['recipe_output_qty']) : null)
                         : $productRow->recipe_output_qty,
                     'variants' => $variantPayload !== null ? json_encode($variantPayload) : $productRow->variants,
                     'updated_by' => $request->user()?->id,
@@ -945,10 +946,7 @@ class ProductController extends Controller
     private function requiresRecipeValidation(string $productMode, string $productionMode): bool
     {
         return $productMode === 'bom'
-            || in_array($productionMode, [
-                Product::PRODUCTION_MODE_AUTO_CONSUME_ON_SELL,
-                Product::PRODUCTION_MODE_BATCH,
-            ], true);
+            || $productionMode === Product::PRODUCTION_MODE_AUTO_CONSUME_ON_SELL;
     }
 
     private function ensureRecipeManagementAccess(string $productMode, string $productionMode, array $bomItems)
