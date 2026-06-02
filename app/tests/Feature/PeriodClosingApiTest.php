@@ -41,7 +41,11 @@ class PeriodClosingApiTest extends TestCase
             ->assertJsonPath('status.severity', 'review')
             ->assertJsonPath('status.restriction_mode', 'none')
             ->assertJsonPath('checklist.0.key', 'shift_cash')
-            ->assertJsonPath('checklist.6.key', 'close_period');
+            ->assertJsonPath('checklist.0.review_scope', 'Data yang dicek: shift yang masih open sampai akhir periode.')
+            ->assertJsonPath('checklist.0.action_label', 'Buka ringkasan shift')
+            ->assertJsonPath('checklist.4.correction_action', 'Kalau stok fisik salah, lakukan stock opname atau penyesuaian stok. Kalau HPP kosong, lengkapi pembelian/stok awal/biaya produksi produk tersebut.')
+            ->assertJsonPath('checklist.6.key', 'close_period')
+            ->assertJsonPath('checklist.6.action_label', 'Review & tutup buku');
     }
 
     public function test_close_period_locks_period_and_snapshots_carry_forward_balances(): void

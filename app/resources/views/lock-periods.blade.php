@@ -346,6 +346,15 @@
 
                     el.assistantChecklist.innerHTML = checklist.map((step, index) => {
                         const tone = checklistTone(step.status);
+                        const reviewScope = step.review_scope || '';
+                        const correctionAction = step.correction_action || '';
+                        const actionLabel = step.action_label || 'Buka langkah ini';
+                        const guidanceHtml = reviewScope || correctionAction
+                            ? `<div class="mt-3 grid gap-2 text-xs leading-relaxed">
+                                ${reviewScope ? `<div class="rounded-xl bg-white/70 px-3 py-2 dark:bg-slate-950/40"><span class="font-bold text-slate-700 dark:text-slate-200">Data dicek:</span> <span class="text-slate-500 dark:text-slate-400">${reviewScope}</span></div>` : ''}
+                                ${correctionAction ? `<div class="rounded-xl bg-white/70 px-3 py-2 dark:bg-slate-950/40"><span class="font-bold text-slate-700 dark:text-slate-200">Kalau salah:</span> <span class="text-slate-500 dark:text-slate-400">${correctionAction}</span></div>` : ''}
+                            </div>`
+                            : '';
                         return `
                             <article class="rounded-2xl border p-4 shadow-sm ${tone.card}">
                                 <div class="flex items-start gap-3">
@@ -365,7 +374,8 @@
                                             <span class="font-semibold text-slate-500">${step.metric_label || 'Nilai'}</span>
                                             <span class="font-bold text-slate-900 dark:text-white">${formatMetric(step)}</span>
                                         </div>
-                                        ${step.action_url ? `<a class="mt-3 inline-flex items-center gap-1 text-xs font-bold text-primary" href="${step.action_url}">Buka langkah ini <span class="material-symbols-outlined text-[15px]">arrow_forward</span></a>` : ''}
+                                        ${guidanceHtml}
+                                        ${step.action_url ? `<a class="mt-3 inline-flex items-center gap-1 text-xs font-bold text-primary" href="${step.action_url}">${actionLabel} <span class="material-symbols-outlined text-[15px]">arrow_forward</span></a>` : ''}
                                     </div>
                                 </div>
                             </article>

@@ -202,6 +202,9 @@ class WebSettingsFinanceSmokeTest extends TestCase
         $this->assertStringContainsString('/api/v1/lock-periods/preview', $contents);
         $this->assertStringContainsString('/api/v1/lock-periods/close', $contents);
         $this->assertStringContainsString('/reopen', $contents);
+        $this->assertStringContainsString('Data dicek:', $contents);
+        $this->assertStringContainsString('Kalau salah:', $contents);
+        $this->assertStringContainsString('step.action_label', $contents);
         $this->assertStringContainsString('Daftar Periode Akuntansi', $contents);
         $this->assertStringContainsString('create-period', $contents);
         $this->assertStringContainsString('toggle-checkbox', $contents);
