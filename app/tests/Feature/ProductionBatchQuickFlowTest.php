@@ -381,6 +381,115 @@ class ProductionBatchQuickFlowTest extends TestCase
         $this->assertSame(5454.55, round((float) ($finishedGood['hpp_average'] ?? 0), 2));
     }
 
+    public function test_multi_output_batch_allocates_stock_and_cost_by_recipe_factor(): void
+    {
+        [$tenant] = $this->bootApiActor('admin', 'admin+production-multi-output@example.test');
+
+        $fixture = $this->seedFixture($tenant, rawMaterialQty: 100);
+        $boxLargeId = $this->insertProduct($tenant, [
+            'sku' => 'BR-10X30-'.Str::upper(Str::random(6)),
+            'name' => 'Brownies Box 10x30 isi 27',
+            'product_mode' => 'default',
+            'production_mode' => Product::PRODUCTION_MODE_NONE,
+            'item_type' => 'finished_good',
+            'track_stock' => true,
+            'price' => 75000,
+        ]);
+        $boxSmallId = $this->insertProduct($tenant, [
+            'sku' => 'BR-10X10-'.Str::upper(Str::random(6)),
+            'name' => 'Brownies Box 10x10 isi 9',
+            'product_mode' => 'default',
+            'production_mode' => Product::PRODUCTION_MODE_NONE,
+            'item_type' => 'finished_good',
+            'track_stock' => true,
+            'price' => 30000,
+        ]);
+
+        $create = $this->postJson('/api/v1/production-batches', [
+            'branch_id' => $fixture['branch_id'],
+            'location_id' => $fixture['location_id'],
+            'product_id' => $fixture['finished_good_id'],
+            'transaction_date' => '2026-02-27',
+            'recipe_count' => 3,
+            'outputs' => [
+                [
+                    'product_id' => $boxLargeId,
+                    'planned_qty' => 1,
+                    'recipe_factor' => 1.5,
+                ],
+                [
+                    'product_id' => $boxSmallId,
+                    'planned_qty' => 3,
+                    'recipe_factor' => 0.5,
+                ],
+            ],
+        ], $this->tenantHeaders($tenant->id));
+
+        $create->assertCreated()
+            ->assertJsonPath('expected_output_qty', 4)
+            ->assertJsonPath('recipe_count', 3);
+
+        $batchId = (string) $create->json('batch_id');
+
+        $this->postJson('/api/v1/production-batches/'.$batchId.'/post', [
+            'inputs' => [
+                [
+                    'product_id' => $fixture['raw_material_id'],
+                    'actual_qty' => 6,
+                ],
+            ],
+            'outputs' => [
+                [
+                    'product_id' => $boxLargeId,
+                    'actual_qty' => 1,
+                ],
+                [
+                    'product_id' => $boxSmallId,
+                    'actual_qty' => 3,
+                ],
+            ],
+        ], $this->tenantHeadersWithIdempotency($tenant->id, 'prod-post-multi-output'))
+            ->assertOk()
+            ->assertJsonPath('status', 'posted')
+            ->assertJsonPath('actual_output_qty', 4)
+            ->assertJsonPath('yield_variance_qty', 0);
+
+        $this->assertDatabaseHas('inventory_balances', [
+            'tenant_id' => $tenant->id,
+            'location_id' => $fixture['location_id'],
+            'product_id' => $fixture['raw_material_id'],
+            'qty_on_hand' => 94.00,
+        ]);
+        $this->assertDatabaseHas('inventory_balances', [
+            'tenant_id' => $tenant->id,
+            'location_id' => $fixture['location_id'],
+            'product_id' => $boxLargeId,
+            'qty_on_hand' => 1.00,
+        ]);
+        $this->assertDatabaseHas('inventory_balances', [
+            'tenant_id' => $tenant->id,
+            'location_id' => $fixture['location_id'],
+            'product_id' => $boxSmallId,
+            'qty_on_hand' => 3.00,
+        ]);
+
+        $this->assertSame(3, DB::table('stock_ledger')
+            ->where('tenant_id', $tenant->id)
+            ->where('reference_type', 'production_batch')
+            ->where('reference_id', $batchId)
+            ->count());
+        $this->assertDatabaseHas('products', [
+            'id' => $boxLargeId,
+            'tenant_id' => $tenant->id,
+            'hpp_average' => 9000.00,
+        ]);
+        $this->assertDatabaseHas('products', [
+            'id' => $boxSmallId,
+            'tenant_id' => $tenant->id,
+            'hpp_average' => 3000.00,
+        ]);
+    }
+
     public function test_post_batch_is_idempotent_for_same_key(): void
     {
         [$tenant] = $this->bootApiActor('admin', 'admin+production-idempotent@example.test');

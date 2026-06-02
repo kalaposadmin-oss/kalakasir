@@ -10,6 +10,7 @@ class ProductionBatchItem extends TenantModel
 		'qty' => 'float',
 		'planned_qty' => 'float',
 		'actual_qty' => 'float',
+		'recipe_factor' => 'float',
 		'unit_cost_snapshot' => 'float',
 		'created_at' => 'datetime',
 		'updated_at' => 'datetime',

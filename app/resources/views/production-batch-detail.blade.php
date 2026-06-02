@@ -295,6 +295,10 @@
                         <input id="batch-post-variance-reason" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium dark:border-slate-700 dark:bg-slate-900" maxlength="2000" type="text" />
                     </label>
                 </div>
+                <div>
+                    <p class="mb-2 text-[11px] font-bold uppercase tracking-widest text-slate-400">Actual Output Jadi</p>
+                    <div id="batch-post-outputs" class="space-y-3"></div>
+                </div>
                 <div id="batch-post-variance-hint" class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
                     Variance reason wajib diisi bila selisih actual yield menyentuh threshold monitoring: qty {{ $productionBatchVarianceQtyThreshold }} atau {{ $productionBatchVariancePctThreshold }}%.
                 </div>
@@ -416,6 +420,7 @@
                 editSubmit: document.getElementById('batch-edit-submit'),
                 postForm: document.getElementById('batch-post-form'),
                 postOutput: document.getElementById('batch-post-output'),
+                postOutputs: document.getElementById('batch-post-outputs'),
                 postVarianceReason: document.getElementById('batch-post-variance-reason'),
                 postVarianceHint: document.getElementById('batch-post-variance-hint'),
                 postInputs: document.getElementById('batch-post-inputs'),
@@ -513,6 +518,29 @@
                 const variancePct = expectedQty > 0 ? Math.abs(((actualQty - expectedQty) * 100) / expectedQty) : 0;
 
                 return varianceQty >= varianceThresholds.qty || variancePct >= varianceThresholds.pct;
+            };
+            const collectPostOutputs = () => {
+                if (!el.postOutputs) {
+                    return [];
+                }
+
+                return Array.from(el.postOutputs.querySelectorAll('input[data-output-product-id]')).map((input) => ({
+                    product_id: input.dataset.outputProductId,
+                    ...(input.dataset.outputProductVariantId ? { product_variant_id: input.dataset.outputProductVariantId } : {}),
+                    actual_qty: Number(input.value || 0),
+                }));
+            };
+            const syncPostOutputTotal = () => {
+                const outputs = collectPostOutputs();
+                if (!outputs.length) {
+                    return Number(el.postOutput.value || 0);
+                }
+
+                const total = outputs.reduce((sum, row) => sum + Number(row.actual_qty || 0), 0);
+                el.postOutput.value = normalizeQtyValue(total);
+                refreshVarianceHint();
+
+                return total;
             };
             const refreshVarianceHint = () => {
                 const required = requiresVarianceReason();
@@ -813,6 +841,22 @@
                 el.postOutput.value = batch.expected_output_qty || '';
                 el.postVarianceReason.value = batch.variance_reason || '';
                 el.cancelReasonInput.value = batch.cancel_reason || '';
+                el.postOutputs.innerHTML = '';
+                outputs.forEach((line) => {
+                    const row = document.createElement('label');
+                    row.className = 'block rounded-2xl border border-slate-200 px-4 py-3 dark:border-slate-800';
+                    row.innerHTML = `
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <p class="text-sm font-bold text-slate-900 dark:text-slate-100">${line.product_name || productName(line.product_id)}</p>
+                                <p class="text-xs text-slate-500">Planned ${formatNumber(line.planned_qty)}${line.recipe_factor ? ` • faktor ${formatNumber(line.recipe_factor)} resep` : ''}</p>
+                            </div>
+                            <input class="mt-1 w-32 rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium dark:border-slate-700 dark:bg-slate-900" data-output-product-id="${line.product_id}" data-output-product-variant-id="${line.product_variant_id || ''}" min="0" step="0.0001" type="number" value="${line.planned_qty || 0}" />
+                        </div>
+                    `;
+                    el.postOutputs.appendChild(row);
+                });
+                syncPostOutputTotal();
                 el.postInputs.innerHTML = '';
                 inputs.forEach((line) => {
                     const row = document.createElement('label');
@@ -869,6 +913,7 @@
             document.querySelectorAll('[data-close="resolve"]').forEach((node) => node.addEventListener('click', () => toggleModal('resolve', false)));
             el.editRecipeVersion?.addEventListener('input', syncEditExpectedOutput);
             el.postOutput?.addEventListener('input', refreshVarianceHint);
+            el.postOutputs?.addEventListener('input', syncPostOutputTotal);
             el.tabNav?.addEventListener('click', (event) => {
                 const button = event.target.closest('[data-batch-tab]');
                 if (!button) {
@@ -936,6 +981,8 @@
                 el.postSubmit.textContent = 'Posting...';
 
                 try {
+                    const outputs = collectPostOutputs();
+                    syncPostOutputTotal();
                     const inputs = Array.from(el.postInputs.querySelectorAll('input[data-product-id]')).map((input) => ({
                         product_id: input.dataset.productId,
                         ...(input.dataset.productVariantId ? { product_variant_id: input.dataset.productVariantId } : {}),
@@ -952,6 +999,7 @@
                             actual_output_qty: Number(el.postOutput.value || 0),
                             variance_reason: (el.postVarianceReason.value || '').trim() || null,
                             inputs,
+                            ...(outputs.length > 1 || outputs.some((row) => row.product_id !== state.detail?.batch?.product_id) ? { outputs } : {}),
                         }),
                     });
 

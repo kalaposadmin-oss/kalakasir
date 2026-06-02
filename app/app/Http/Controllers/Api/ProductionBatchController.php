@@ -206,6 +206,12 @@ class ProductionBatchController extends Controller
             'expected_output_qty' => ['nullable', 'numeric', 'min:0.0001'],
             'recipe_version' => ['nullable', 'integer', 'min:1'],
             'recipe_count' => ['nullable', 'integer', 'min:1'],
+            'outputs' => ['nullable', 'array', 'min:1'],
+            'outputs.*.product_id' => ['required_with:outputs', 'uuid'],
+            'outputs.*.product_variant_id' => ['nullable', 'uuid'],
+            'outputs.*.planned_qty' => ['nullable', 'numeric', 'min:0.0001'],
+            'outputs.*.qty' => ['nullable', 'numeric', 'min:0.0001'],
+            'outputs.*.recipe_factor' => ['required_with:outputs', 'numeric', 'min:0.0001'],
         ]);
 
         if (! array_key_exists('recipe_count', $payload) && ! array_key_exists('recipe_version', $payload)) {
@@ -278,6 +284,7 @@ class ProductionBatchController extends Controller
                 'production_batch_items.planned_qty',
                 'production_batch_items.actual_qty',
                 'production_batch_items.uom',
+                'production_batch_items.recipe_factor',
                 'production_batch_items.unit_cost_snapshot',
                 'production_batch_items.product_id',
                 'production_batch_items.product_variant_id',
@@ -525,6 +532,12 @@ class ProductionBatchController extends Controller
             'inputs.*.product_id' => ['required_with:inputs', 'uuid'],
             'inputs.*.product_variant_id' => ['nullable', 'uuid'],
             'inputs.*.planned_qty' => ['required_with:inputs', 'numeric', 'min:0.0001'],
+            'outputs' => ['nullable', 'array', 'min:1'],
+            'outputs.*.product_id' => ['required_with:outputs', 'uuid'],
+            'outputs.*.product_variant_id' => ['nullable', 'uuid'],
+            'outputs.*.planned_qty' => ['nullable', 'numeric', 'min:0.0001'],
+            'outputs.*.qty' => ['nullable', 'numeric', 'min:0.0001'],
+            'outputs.*.recipe_factor' => ['required_with:outputs', 'numeric', 'min:0.0001'],
         ]);
 
         try {
@@ -556,12 +569,17 @@ class ProductionBatchController extends Controller
     {
         $payload = $request->validate([
             'transaction_date' => ['nullable', 'date'],
-            'actual_output_qty' => ['required', 'numeric', 'min:0.0001'],
+            'actual_output_qty' => ['required_without:outputs', 'numeric', 'min:0.0001'],
             'variance_reason' => ['nullable', 'string', 'max:2000'],
             'inputs' => ['required', 'array', 'min:1'],
             'inputs.*.product_id' => ['required', 'uuid'],
             'inputs.*.product_variant_id' => ['nullable', 'uuid'],
             'inputs.*.actual_qty' => ['required', 'numeric', 'min:0'],
+            'outputs' => ['nullable', 'array', 'min:1'],
+            'outputs.*.product_id' => ['required_with:outputs', 'uuid'],
+            'outputs.*.product_variant_id' => ['nullable', 'uuid'],
+            'outputs.*.actual_qty' => ['nullable', 'numeric', 'min:0'],
+            'outputs.*.qty' => ['nullable', 'numeric', 'min:0'],
         ]);
 
         $idempotencyKey = $request->header('Idempotency-Key') ?? $request->header('X-Idempotency-Key');

@@ -379,6 +379,21 @@
                         <p class="mt-1 font-medium leading-relaxed">Pilih produk untuk melihat bahan baku resep. Bahan baku tidak dipilih manual di sini.</p>
                     </div>
                 </div>
+                <section class="rounded-3xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+                    <div class="flex items-start justify-between gap-3">
+                        <div>
+                            <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Hasil Jadi</p>
+                            <h4 class="mt-1 text-sm font-bold text-slate-900">Pecah hasil dari resep yang sama</h4>
+                        </div>
+                        <button id="production-output-add" class="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-orange-50 text-primary ring-1 ring-orange-100" type="button" title="Tambah hasil jadi">
+                            <span class="material-symbols-outlined text-[18px]">add</span>
+                        </button>
+                    </div>
+                    <div id="production-output-summary" class="mt-3 rounded-2xl bg-slate-50 px-3 py-3 text-xs font-semibold text-slate-600">
+                        Total hasil mengikuti output harapan produk yang dipilih.
+                    </div>
+                    <div id="production-output-rows" class="mt-3 space-y-3"></div>
+                </section>
                 <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <label class="block">
                         <span class="mb-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400 sm:text-[11px]">Tanggal Transaksi</span>
@@ -466,6 +481,9 @@
                 createEligibilitySummary: document.getElementById('production-create-eligibility-summary'),
                 createEligibilityCount: document.getElementById('production-create-eligibility-count'),
                 createEligibilityList: document.getElementById('production-create-eligibility-list'),
+                outputAdd: document.getElementById('production-output-add'),
+                outputRows: document.getElementById('production-output-rows'),
+                outputSummary: document.getElementById('production-output-summary'),
                 createSubmit: document.getElementById('production-create-submit'),
                 exportProblematic: document.getElementById('production-batch-export-problematic'),
             };
@@ -489,6 +507,7 @@
                     warning_message: '',
                     message: 'Pilih produk yang diproduksi untuk melihat resep.',
                 },
+                outputRows: [],
                 filters: {
                     product_id: params.get('product_id') || '',
                     status: params.get('status') || '',
@@ -796,6 +815,143 @@
                     }));
             };
 
+            const finishedOutputProductOptions = () => {
+                return (state.bootstrap.products || [])
+                    .filter((product) => {
+                        const itemType = String(product.item_type || '').trim();
+                        return itemType === 'finished_good'
+                            && product.is_active !== false
+                            && product.track_stock !== false;
+                    })
+                    .map((product) => ({
+                        ...product,
+                        __label: product.name,
+                    }));
+            };
+
+            const outputRowId = () => `output-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+            const ensureDefaultOutputRows = () => {
+                if (state.outputRows.length) {
+                    return;
+                }
+
+                const recipePlan = syncCreateExpectedOutput();
+                const defaultFactor = recipePlan.expected_output_qty > 0 && recipePlan.recipe_count > 0
+                    ? normalizeQtyValue(recipePlan.recipe_count / recipePlan.expected_output_qty)
+                    : 1;
+                const productId = el.createProduct.value || '';
+                state.outputRows = [{
+                    id: outputRowId(),
+                    product_id: productId,
+                    planned_qty: recipePlan.expected_output_qty || 1,
+                    recipe_factor: defaultFactor,
+                }];
+            };
+
+            const outputPlanSummary = () => {
+                const recipeCount = Number(el.createRecipeVersion?.value || 0);
+                const usage = state.outputRows.reduce((sum, row) => {
+                    return sum + (Number(row.planned_qty || 0) * Number(row.recipe_factor || 0));
+                }, 0);
+                const remaining = recipeCount - usage;
+
+                return { recipeCount, usage, remaining };
+            };
+
+            const updateOutputSummary = () => {
+                if (!el.outputSummary) {
+                    return;
+                }
+
+                const summary = outputPlanSummary();
+                const over = summary.remaining < -0.0001;
+                el.outputSummary.className = `mt-3 rounded-2xl px-3 py-3 text-xs font-semibold ${over ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200' : 'bg-slate-50 text-slate-600'}`;
+                el.outputSummary.textContent = `Resep dibuat ${formatNumber(summary.recipeCount)} • terpakai ${formatNumber(summary.usage)} • sisa ${formatNumber(Math.max(0, summary.remaining))}`;
+            };
+
+            const renderOutputRows = () => {
+                if (!el.outputRows) {
+                    return;
+                }
+
+                ensureDefaultOutputRows();
+                const options = finishedOutputProductOptions();
+                const optionHtml = (selectedId) => options.map((product) => {
+                    const selected = String(product.id) === String(selectedId) ? 'selected' : '';
+                    return `<option value="${product.id}" ${selected}>${product.__label || product.name}</option>`;
+                }).join('');
+
+                el.outputRows.innerHTML = state.outputRows.map((row, index) => `
+                    <div class="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3" data-output-row="${row.id}">
+                        <div class="flex items-center justify-between gap-3">
+                            <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Hasil ${index + 1}</p>
+                            <button class="inline-flex size-8 items-center justify-center rounded-full bg-white text-slate-500 ring-1 ring-slate-200" type="button" data-output-remove="${row.id}" title="Hapus hasil" ${state.outputRows.length <= 1 ? 'disabled' : ''}>
+                                <span class="material-symbols-outlined text-[16px]">close</span>
+                            </button>
+                        </div>
+                        <label class="mt-2 block">
+                            <span class="mb-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Produk Jadi</span>
+                            <select class="production-filter-block w-full rounded-2xl px-3 py-2.5 text-sm font-medium text-slate-800" data-output-field="product_id">
+                                ${optionHtml(row.product_id)}
+                            </select>
+                        </label>
+                        <div class="mt-2 grid grid-cols-2 gap-2">
+                            <label class="block">
+                                <span class="mb-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Qty</span>
+                                <input class="production-filter-block w-full rounded-2xl px-3 py-2.5 text-sm font-medium text-slate-800" min="0.0001" step="0.0001" type="number" value="${row.planned_qty || ''}" data-output-field="planned_qty" />
+                            </label>
+                            <label class="block">
+                                <span class="mb-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Faktor Resep/Pcs</span>
+                                <input class="production-filter-block w-full rounded-2xl px-3 py-2.5 text-sm font-medium text-slate-800" min="0.0001" step="0.0001" type="number" value="${row.recipe_factor || ''}" data-output-field="recipe_factor" />
+                            </label>
+                        </div>
+                    </div>
+                `).join('');
+
+                updateOutputSummary();
+                updateSubmitState();
+            };
+
+            const collectOutputRows = () => {
+                if (!el.outputRows) {
+                    return [];
+                }
+
+                const rows = [];
+                el.outputRows.querySelectorAll('[data-output-row]').forEach((node) => {
+                    const id = node.dataset.outputRow;
+                    const productId = node.querySelector('[data-output-field="product_id"]')?.value || '';
+                    const plannedQty = Number(node.querySelector('[data-output-field="planned_qty"]')?.value || 0);
+                    const recipeFactor = Number(node.querySelector('[data-output-field="recipe_factor"]')?.value || 0);
+                    rows.push({ id, product_id: productId, planned_qty: plannedQty, recipe_factor: recipeFactor });
+                });
+
+                state.outputRows = rows;
+                updateOutputSummary();
+
+                return rows;
+            };
+
+            const outputRowsAreValid = () => {
+                const rows = collectOutputRows();
+                const summary = outputPlanSummary();
+                const seen = new Set();
+
+                if (!rows.length || summary.recipeCount <= 0 || summary.remaining < -0.0001) {
+                    return false;
+                }
+
+                return rows.every((row) => {
+                    if (!row.product_id || !(row.planned_qty > 0) || !(row.recipe_factor > 0) || seen.has(row.product_id)) {
+                        return false;
+                    }
+
+                    seen.add(row.product_id);
+                    return true;
+                });
+            };
+
             const batchEligibilityDisplayCandidates = () => {
                 const products = state.bootstrap.products || [];
 
@@ -870,7 +1026,9 @@
             };
 
             const updateSubmitState = () => {
-                const canPost = state.recipePreview?.status === 'preview_valid' && state.recipePreview?.can_post === true;
+                const canPost = state.recipePreview?.status === 'preview_valid'
+                    && state.recipePreview?.can_post === true
+                    && outputRowsAreValid();
                 el.createSubmit.disabled = !canPost;
                 el.createSubmit.classList.toggle('opacity-60', !canPost);
                 el.createSubmit.classList.toggle('cursor-not-allowed', !canPost);
@@ -1263,6 +1421,7 @@
 
                 el.createDate.value = new Date().toISOString().slice(0, 10);
                 el.createRecipeVersion.value = el.createRecipeVersion.value || '1';
+                state.outputRows = [];
                 el.createBranch.dataset.selected = state.filters.branch_id || '';
                 el.createLocation.dataset.selected = state.filters.location_id || '';
                 if (el.createBranch.dataset.selected) {
@@ -1270,6 +1429,7 @@
                 }
                 syncCreateLocations();
                 syncCreateExpectedOutput();
+                renderOutputRows();
 
                 if (!branches.length || !locations.length) {
                     setCreateFeedback('', false);
@@ -1639,6 +1799,8 @@
 
             el.createProduct?.addEventListener('change', () => {
                 syncCreateExpectedOutput();
+                state.outputRows = [];
+                renderOutputRows();
                 if (!el.createProduct.value) {
                     setPreviewState({
                         status: 'no_product_selected',
@@ -1656,6 +1818,8 @@
 
             el.createRecipeVersion?.addEventListener('input', () => {
                 syncCreateExpectedOutput();
+                collectOutputRows();
+                updateSubmitState();
                 if (el.createProduct.value && el.createLocation.value) {
                     loadCreateRecipePreview();
                 }
@@ -1681,6 +1845,38 @@
                 node?.addEventListener('click', () => toggleCreateModal(node === el.createOpen));
             });
 
+            el.outputAdd?.addEventListener('click', () => {
+                collectOutputRows();
+                state.outputRows.push({
+                    id: outputRowId(),
+                    product_id: finishedOutputProductOptions()[0]?.id || '',
+                    planned_qty: 1,
+                    recipe_factor: 1,
+                });
+                renderOutputRows();
+            });
+
+            el.outputRows?.addEventListener('input', () => {
+                collectOutputRows();
+                updateSubmitState();
+            });
+
+            el.outputRows?.addEventListener('change', () => {
+                collectOutputRows();
+                updateSubmitState();
+            });
+
+            el.outputRows?.addEventListener('click', (event) => {
+                const trigger = event.target.closest('[data-output-remove]');
+                if (!trigger) {
+                    return;
+                }
+
+                collectOutputRows();
+                state.outputRows = state.outputRows.filter((row) => row.id !== trigger.dataset.outputRemove);
+                renderOutputRows();
+            });
+
             window.addEventListener('pageshow', (event) => {
                 if (!event.persisted) {
                     return;
@@ -1694,22 +1890,32 @@
             el.createForm?.addEventListener('submit', async (event) => {
                 event.preventDefault();
                 const canSubmit = state.recipePreview?.status === 'preview_valid' && state.recipePreview?.can_post === true;
-                if (!canSubmit) {
-                    setCreateFeedback(getPreviewMessage() || 'Lengkapi produk dan lokasi terlebih dahulu.', true);
+                const outputsValid = outputRowsAreValid();
+                if (!canSubmit || !outputsValid) {
+                    const summary = outputPlanSummary();
+                    const outputMessage = summary.remaining < -0.0001
+                        ? 'Total hasil jadi melebihi jumlah resep yang dibuat.'
+                        : 'Lengkapi produk, qty, dan faktor resep pada hasil jadi.';
+                    setCreateFeedback(outputsValid ? (getPreviewMessage() || 'Lengkapi produk dan lokasi terlebih dahulu.') : outputMessage, true);
                     return;
                 }
                 setCreateFeedback('');
                 el.createSubmit.disabled = true;
                 el.createSubmit.textContent = 'Menyimpan...';
                 const recipePlan = syncCreateExpectedOutput();
+                const outputRows = collectOutputRows();
 
                 const payload = {
                     branch_id: el.createBranch.value || null,
                     location_id: el.createLocation.value || null,
                     product_id: el.createProduct.value || null,
                     transaction_date: el.createDate.value || null,
-                    expected_output_qty: Number(recipePlan.expected_output_qty || 0),
                     recipe_count: Number(el.createRecipeVersion.value || 0),
+                    outputs: outputRows.map((row) => ({
+                        product_id: row.product_id,
+                        planned_qty: Number(row.planned_qty || 0),
+                        recipe_factor: Number(row.recipe_factor || 0),
+                    })),
                     reference_no: (el.createReference.value || '').trim() || null,
                     notes: (el.createNotes.value || '').trim() || null,
                 };
