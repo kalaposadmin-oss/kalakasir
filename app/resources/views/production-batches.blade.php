@@ -810,7 +810,6 @@
                     .filter((product) => {
                         const bomItems = Array.isArray(product.bom_items) ? product.bom_items : [];
                         return window.PosUi.isProductionBatchEligibleProduct(product)
-                            && String(product.product_mode || '') === 'bom'
                             && bomItems.length > 0
                             && Number(product.recipe_output_qty || 0) > 0;
                     })
@@ -822,18 +821,21 @@
             };
 
             const finishedOutputProductOptions = () => {
+                const recipeProductId = String(el.createProduct?.value || '');
+
                 return (state.bootstrap.products || [])
                     .filter((product) => {
                         const itemType = String(product.item_type || '').trim();
                         return itemType === 'finished_good'
                             && product.is_active !== false
-                            && product.track_stock !== false
-                            && String(product.production_mode || '').trim() === 'batch_production';
+                            && product.track_stock !== false;
                     })
                     .map((product) => ({
                         ...product,
+                        __is_recipe_product: recipeProductId !== '' && String(product.id || '') === recipeProductId,
                         __label: product.name,
-                    }));
+                    }))
+                    .sort((a, b) => Number(a.__is_recipe_product) - Number(b.__is_recipe_product));
             };
 
             const outputRowId = () => `output-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -847,10 +849,9 @@
                 const defaultFactor = recipePlan.expected_output_qty > 0 && recipePlan.recipe_count > 0
                     ? normalizeQtyValue(recipePlan.recipe_count / recipePlan.expected_output_qty)
                     : 1;
-                const productId = el.createProduct.value || '';
                 state.outputRows = [{
                     id: outputRowId(),
-                    product_id: productId,
+                    product_id: '',
                     planned_qty: recipePlan.expected_output_qty || 1,
                     recipe_factor: defaultFactor,
                 }];
@@ -900,6 +901,7 @@
                         <label class="mt-2 block">
                             <span class="mb-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Produk Jadi</span>
                             <select class="production-filter-block w-full rounded-2xl px-3 py-2.5 text-sm font-medium text-slate-800" data-output-field="product_id">
+                                <option value="">Pilih produk jadi</option>
                                 ${optionHtml(row.product_id)}
                             </select>
                         </label>
@@ -1856,7 +1858,7 @@
                 collectOutputRows();
                 state.outputRows.push({
                     id: outputRowId(),
-                    product_id: finishedOutputProductOptions()[0]?.id || '',
+                    product_id: '',
                     planned_qty: 1,
                     recipe_factor: 1,
                 });

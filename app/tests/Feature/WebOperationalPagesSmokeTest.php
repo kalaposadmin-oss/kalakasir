@@ -257,6 +257,10 @@ class WebOperationalPagesSmokeTest extends TestCase
         $this->assertStringContainsString('data-stat="variance_qty_total"', $contents);
         $this->assertStringContainsString('production-batch-export-problematic', $contents);
         $this->assertStringContainsString('Observability', $contents);
+        $this->assertStringContainsString('const batchProductOptions = () => {', $contents);
+        $this->assertStringContainsString('const finishedOutputProductOptions = () => {', $contents);
+        $this->assertStringNotContainsString("&& String(product.product_mode || '') === 'bom'", $contents);
+        $this->assertStringNotContainsString("&& String(product.production_mode || '').trim() === 'batch_production'", $contents);
     }
 
     public function test_production_batch_detail_route_and_view_expose_batch_snapshot_sections(): void
