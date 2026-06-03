@@ -731,6 +731,21 @@ class PurchaseController extends Controller
         }
     }
 
+    public function submitDraft(Request $request, string $purchase, PurchaseService $service)
+    {
+        try {
+            $result = $service->submitDraft($purchase, $request->user()?->id);
+
+            return response()->json($result);
+        } catch (RuntimeException $exception) {
+            return response()->json([
+                'code' => 'PURCHASE_DRAFT_SUBMIT_FAILED',
+                'message' => $exception->getMessage(),
+                'details' => [],
+            ], 422);
+        }
+    }
+
     public function cancel(Request $request, string $purchase, PurchaseService $service)
     {
         try {

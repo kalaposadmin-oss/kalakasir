@@ -93,6 +93,7 @@
             <h3 class="text-sm font-bold text-slate-500 uppercase tracking-widest">Daftar Barang</h3>
             <div class="flex items-center gap-2">
                 @if ($canManagePurchaseDetail)
+                    <span id="draft-next-hint" class="hidden rounded-full bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">Draft belum diproses</span>
                     <button id="edit-draft" class="hidden rounded-full bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary" type="button">Edit Draft</button>
                     <button id="delete-draft" class="hidden rounded-full bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-600 dark:bg-rose-900/20 dark:text-rose-300" type="button">Hapus Draft</button>
                 @endif
@@ -154,6 +155,13 @@
     </section>
     @if ($canManagePurchaseDetail)
         <div id="purchase-action-bar" class="fixed bottom-0 left-1/2 z-30 hidden w-full max-w-[430px] -translate-x-1/2 bg-white/95 px-4 pt-4 backdrop-blur-xl dark:bg-slate-900/95 app-bottom-safe-footer">
+            <div id="draft-actions" class="hidden flex flex-col gap-3">
+                <button id="submit-draft" class="flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-4 font-bold text-white shadow-lg shadow-primary/30" type="button">
+                    <span class="material-symbols-outlined text-base">send</span>
+                    <span id="submit-draft-label">Proses PO</span>
+                </button>
+                <p id="submit-draft-helper" class="text-center text-xs font-medium text-slate-500 dark:text-slate-400">Setelah diproses, PO bisa dilanjutkan ke penerimaan barang.</p>
+            </div>
             <div id="approval-actions" class="flex gap-3">
                 <button id="reject" class="flex-1 py-4 px-6 rounded-xl border-2 border-slate-200 dark:border-slate-700 font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50" type="button">Tolak</button>
                 <button id="approve" class="flex-[2] py-4 px-6 rounded-xl bg-primary text-white font-bold shadow-lg shadow-primary/30 flex items-center justify-center gap-2" type="button">
@@ -375,6 +383,10 @@
                     actionBar: document.getElementById('purchase-action-bar'),
                     approvalActions: document.getElementById('approval-actions'),
                     fulfillmentActions: document.getElementById('fulfillment-actions'),
+                    draftActions: document.getElementById('draft-actions'),
+                    submitDraft: document.getElementById('submit-draft'),
+                    submitDraftLabel: document.getElementById('submit-draft-label'),
+                    submitDraftHelper: document.getElementById('submit-draft-helper'),
                     approve: document.getElementById('approve'),
                     approveLabel: document.getElementById('approve-label'),
                     reject: document.getElementById('reject'),
@@ -382,6 +394,7 @@
                     closePurchase: document.getElementById('close-purchase'),
                     editDraft: document.getElementById('edit-draft'),
                     deleteDraft: document.getElementById('delete-draft'),
+                    draftNextHint: document.getElementById('draft-next-hint'),
                     draftModal: document.getElementById('draft-modal'),
                     closeDraftModal: document.getElementById('close-draft-modal'),
                     cancelDraftEdit: document.getElementById('cancel-draft-edit'),
@@ -953,18 +966,35 @@
                         el.statusTitle.textContent = 'Diterima Sebagian - Menunggu Susulan';
                     } else if (normalizedStatus === 'closed') {
                         el.statusTitle.textContent = 'Selesai - Sisa Tidak Disusulkan';
+                    } else if (normalizedStatus === purchaseStatusDraft) {
+                        el.statusTitle.textContent = 'Draft - Perlu Diproses';
                     } else {
                         el.statusTitle.textContent = label;
                     }
+                    const showDraftAction = normalizedStatus === purchaseStatusDraft;
                     const showApproval = Boolean(currentPurchaseFlow.can_approve) && normalizedStatus === purchaseStatusSubmitted;
                     const showFulfillment = Boolean(currentPurchaseFlow.can_receive) || Boolean(currentPurchaseFlow.can_close);
-                    const showActionBar = showApproval || showFulfillment;
+                    const showActionBar = showDraftAction || showApproval || showFulfillment;
 
                     el.editDraft?.classList.toggle('hidden', normalizedStatus !== purchaseStatusDraft);
                     el.deleteDraft?.classList.toggle('hidden', normalizedStatus !== purchaseStatusDraft);
+                    el.draftNextHint?.classList.toggle('hidden', normalizedStatus !== purchaseStatusDraft);
                     el.actionBar?.classList.toggle('hidden', !showActionBar);
+                    el.draftActions?.classList.toggle('hidden', !showDraftAction);
                     el.approvalActions?.classList.toggle('hidden', !showApproval);
                     el.fulfillmentActions?.classList.toggle('hidden', !showFulfillment);
+
+                    if (el.submitDraft) {
+                        el.submitDraft.disabled = !showDraftAction;
+                    }
+                    if (el.submitDraftLabel) {
+                        el.submitDraftLabel.textContent = normalizedMode === purchaseModeControlled ? 'Ajukan Persetujuan PO' : 'Proses PO';
+                    }
+                    if (el.submitDraftHelper) {
+                        el.submitDraftHelper.textContent = normalizedMode === purchaseModeControlled
+                            ? 'Draft akan masuk tahap persetujuan sebelum barang bisa diterima.'
+                            : 'Draft akan menjadi siap diproses, lalu bisa lanjut ke penerimaan barang.';
+                    }
 
                     if (el.approve) {
                         el.approve.disabled = !showApproval;
@@ -1119,6 +1149,43 @@
                     el.approve.addEventListener('click', () => decide('approved'));
                     el.reject.addEventListener('click', () => decide('cancelled'));
                 }
+
+                el.submitDraft?.addEventListener('click', async () => {
+                    const isControlled = normalizePurchaseMode(currentPurchaseMode) === purchaseModeControlled;
+                    const allowed = await window.PosUi.confirmRiskActionAsync({
+                        title: isControlled ? 'Ajukan Persetujuan PO' : 'Proses Draft PO',
+                        message: isControlled
+                            ? 'Draft PO akan diajukan untuk persetujuan. Setelah disetujui, barang bisa diterima.'
+                            : 'Draft PO akan diproses menjadi siap diterima. Lanjutkan?',
+                        confirmText: isControlled ? 'Ajukan' : 'Proses PO',
+                        icon: 'send',
+                    });
+                    if (!allowed) {
+                        return;
+                    }
+
+                    await window.PosUi.runWithSubmitGuard(el.submitDraft, async () => {
+                        const response = await fetch(`/api/v1/purchases/${purchaseId}/submit`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                ...(csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}),
+                                'X-Requested-With': 'XMLHttpRequest',
+                                ...headers,
+                            },
+                        });
+                        const responseData = await response.json().catch(() => ({}));
+                        if (!response.ok) {
+                            throw new Error(responseData.message || 'Gagal memproses draft PO.');
+                        }
+
+                        const refreshed = await loadPurchase();
+                        currentPurchaseFlow = refreshed.flow || currentPurchaseFlow;
+                        await applyPurchaseData(refreshed);
+                    }, {
+                        loadingHtml: '<span class="material-symbols-outlined animate-spin">progress_activity</span> MEMPROSES',
+                    });
+                });
 
                 const buildReceivingActionUrl = () => {
                     return `${@json($purchasePortalPrefix)}/receiving/${encodeURIComponent(purchaseId)}/action?from=${encodeURIComponent(@json($purchaseCurrentPath))}`;

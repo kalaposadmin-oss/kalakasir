@@ -182,6 +182,7 @@ Route::prefix('v1')
         Route::patch('purchases/{purchase}/payment', [PurchaseController::class, 'updatePayment'])->middleware(['role:admin,owner,superadmin', 'feature_gate:purchase.order']);
         Route::patch('purchases/{purchase}/tax', [PurchaseController::class, 'updateTax'])->middleware(['role:admin,owner,superadmin', 'feature_gate:purchase.order']);
         Route::patch('purchases/{purchase}/items/{item}/price', [PurchaseController::class, 'updateItemPrice'])->middleware(['role:admin,owner', 'feature_gate:purchase.receive']);
+        Route::post('purchases/{purchase}/submit', [PurchaseController::class, 'submitDraft'])->middleware(['role:admin,owner,superadmin', 'feature_gate:purchase.order']);
         Route::post('purchases/{purchase}/approve', [PurchaseController::class, 'approve'])->middleware(['role:admin,owner', 'feature_gate:purchase.receive']);
         Route::post('purchases/{purchase}/cancel', [PurchaseController::class, 'cancel'])->middleware(['role:admin,owner', 'feature_gate:purchase.receive']);
         Route::post('purchases/{purchase}/decision', [PurchaseController::class, 'decide'])->middleware(['role:admin,owner', 'feature_gate:purchase.receive']);

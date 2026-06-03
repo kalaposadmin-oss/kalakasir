@@ -224,6 +224,44 @@ class PurchaseService
         ]);
     }
 
+    public function submitDraft(string $purchaseId, ?string $userId): array
+    {
+        $tenantId = TenantContext::id();
+        if (! $tenantId) {
+            throw new RuntimeException('Tenant tidak ditemukan.');
+        }
+
+        return DB::transaction(function () use ($tenantId, $purchaseId): array {
+            $purchase = Purchase::query()
+                ->where('tenant_id', $tenantId)
+                ->where('id', $purchaseId)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if (PurchaseStatus::normalize((string) $purchase->status) !== PurchaseStatus::DRAFT) {
+                throw new RuntimeException('Hanya draft PO yang bisa diajukan.');
+            }
+
+            $itemCount = PurchaseItem::query()
+                ->where('tenant_id', $tenantId)
+                ->where('purchase_id', $purchase->id)
+                ->count();
+
+            if ($itemCount < 1) {
+                throw new RuntimeException('Tambahkan minimal satu produk sebelum memproses PO.');
+            }
+
+            $purchase->update([
+                'status' => PurchaseStatus::SUBMITTED,
+            ]);
+
+            return [
+                'status' => PurchaseStatus::SUBMITTED,
+                'purchase_mode' => (string) ($purchase->purchase_mode ?? ''),
+            ];
+        });
+    }
+
     public function cancel(string $purchaseId, ?string $userId): void
     {
         $tenantId = TenantContext::id();
