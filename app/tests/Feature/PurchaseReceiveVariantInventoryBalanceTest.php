@@ -146,4 +146,177 @@ class PurchaseReceiveVariantInventoryBalanceTest extends TestCase
             'qty_out' => 0,
         ]);
     }
+
+    public function test_purchase_receive_matches_duplicate_product_rows_by_variant_bucket(): void
+    {
+        [$tenant, $user] = $this->bootApiActor('admin', 'admin-variant-duplicate-receive@example.test', 'Admin Variant Duplicate Receive');
+        $fixture = $this->seedCheckoutFixture($tenant->id, $user->id);
+        $supplierId = $this->insertSupplier($tenant->id, 'Supplier Multi Variant');
+        $productId = $this->insertVariantProduct($tenant->id, $user->id, 'VAR-MULTI', 'Produk Multi Varian');
+        $variantA = $this->insertVariant($tenant->id, $productId, 'VAR-MULTI-A', 'Varian A');
+        $variantB = $this->insertVariant($tenant->id, $productId, 'VAR-MULTI-B', 'Varian B');
+
+        $createResponse = $this->withHeaders($this->tenantHeaders($tenant->id))
+            ->postJson('/api/v1/purchases', [
+                'supplier_id' => $supplierId,
+                'location_id' => $fixture['location_id'],
+                'payment_method' => 'tempo',
+                'purchase_mode' => 'po_short',
+                'status' => 'submitted',
+                'items' => [
+                    [
+                        'product_id' => $productId,
+                        'product_variant_id' => $variantA,
+                        'qty' => 2,
+                        'price' => 10000,
+                    ],
+                    [
+                        'product_id' => $productId,
+                        'product_variant_id' => $variantB,
+                        'qty' => 3,
+                        'price' => 12000,
+                    ],
+                ],
+            ]);
+
+        $createResponse->assertCreated();
+        $purchaseId = (string) $createResponse->json('purchase_id');
+
+        $receiveResponse = $this->withHeaders($this->tenantHeaders($tenant->id))
+            ->postJson('/api/v1/purchases/'.$purchaseId.'/receive', [
+                'transaction_date' => CarbonImmutable::now('UTC')->toDateString(),
+                'items' => [
+                    [
+                        'product_id' => $productId,
+                        'product_variant_id' => $variantA,
+                        'qty' => 2,
+                    ],
+                    [
+                        'product_id' => $productId,
+                        'product_variant_id' => $variantB,
+                        'qty' => 3,
+                    ],
+                ],
+            ]);
+
+        $receiveResponse->assertOk()
+            ->assertJsonPath('status', 'received')
+            ->assertJsonPath('received_total', 56000);
+
+        $this->assertSame(2.0, (float) DB::table('inventory_balances')
+            ->where('tenant_id', $tenant->id)
+            ->where('location_id', $fixture['location_id'])
+            ->where('product_id', $productId)
+            ->where('product_variant_id', $variantA)
+            ->value('qty_on_hand'));
+
+        $this->assertSame(3.0, (float) DB::table('inventory_balances')
+            ->where('tenant_id', $tenant->id)
+            ->where('location_id', $fixture['location_id'])
+            ->where('product_id', $productId)
+            ->where('product_variant_id', $variantB)
+            ->value('qty_on_hand'));
+
+        $this->assertSame(0, DB::table('inventory_balances')
+            ->where('tenant_id', $tenant->id)
+            ->where('location_id', $fixture['location_id'])
+            ->where('product_id', $productId)
+            ->whereNull('product_variant_id')
+            ->count());
+    }
+
+    public function test_purchase_create_rejects_variant_that_belongs_to_another_product(): void
+    {
+        [$tenant, $user] = $this->bootApiActor('admin', 'admin-variant-mismatch-create@example.test', 'Admin Variant Mismatch Create');
+        $fixture = $this->seedCheckoutFixture($tenant->id, $user->id);
+        $supplierId = $this->insertSupplier($tenant->id, 'Supplier Variant Mismatch');
+        $productA = $this->insertVariantProduct($tenant->id, $user->id, 'VAR-A', 'Produk Varian A');
+        $productB = $this->insertVariantProduct($tenant->id, $user->id, 'VAR-B', 'Produk Varian B');
+        $variantB = $this->insertVariant($tenant->id, $productB, 'VAR-B-1', 'Varian B1');
+
+        $response = $this->withHeaders($this->tenantHeaders($tenant->id))
+            ->postJson('/api/v1/purchases', [
+                'supplier_id' => $supplierId,
+                'location_id' => $fixture['location_id'],
+                'payment_method' => 'tempo',
+                'purchase_mode' => 'po_short',
+                'status' => 'submitted',
+                'items' => [
+                    [
+                        'product_id' => $productA,
+                        'product_variant_id' => $variantB,
+                        'qty' => 1,
+                        'price' => 10000,
+                    ],
+                ],
+            ]);
+
+        $response->assertStatus(422)
+            ->assertJsonPath('code', 'VALIDATION_ERROR');
+
+        $this->assertSame(
+            ['Varian produk tidak cocok dengan produk yang dipilih.'],
+            $response->json('details')['items.0.product_variant_id'] ?? null
+        );
+    }
+
+    private function insertSupplier(string $tenantId, string $name): string
+    {
+        $supplierId = (string) Str::uuid();
+
+        DB::table('suppliers')->insert([
+            'id' => $supplierId,
+            'tenant_id' => $tenantId,
+            'name' => $name,
+            'balance' => 0,
+            'created_at' => CarbonImmutable::now('UTC'),
+        ]);
+
+        return $supplierId;
+    }
+
+    private function insertVariantProduct(string $tenantId, string $userId, string $sku, string $name): string
+    {
+        $productId = (string) Str::uuid();
+
+        DB::table('products')->insert([
+            'id' => $productId,
+            'tenant_id' => $tenantId,
+            'sku' => $sku,
+            'name' => $name,
+            'price' => 25000,
+            'hpp_average' => 12000,
+            'image_url' => null,
+            'is_active' => true,
+            'track_stock' => true,
+            'created_by' => $userId,
+            'updated_by' => $userId,
+            'created_at' => CarbonImmutable::now('UTC'),
+            'updated_at' => CarbonImmutable::now('UTC'),
+            'deleted_at' => null,
+        ]);
+
+        return $productId;
+    }
+
+    private function insertVariant(string $tenantId, string $productId, string $sku, string $name): string
+    {
+        $variantId = (string) Str::uuid();
+
+        DB::table('product_variants')->insert([
+            'id' => $variantId,
+            'tenant_id' => $tenantId,
+            'product_id' => $productId,
+            'sku' => $sku,
+            'barcode' => null,
+            'name' => $name,
+            'attributes' => json_encode(['name' => $name]),
+            'price_override' => null,
+            'is_active' => true,
+            'created_at' => CarbonImmutable::now('UTC'),
+            'updated_at' => CarbonImmutable::now('UTC'),
+        ]);
+
+        return $variantId;
+    }
 }

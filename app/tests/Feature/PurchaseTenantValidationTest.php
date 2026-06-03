@@ -177,6 +177,14 @@ class PurchaseTenantValidationTest extends TestCase
         $this->assertValidationErrorKey($response, 'items.0.product_id');
     }
 
+    public function test_purchase_detail_query_joins_item_products_by_tenant(): void
+    {
+        $contents = file_get_contents(app_path('Http/Controllers/Api/PurchaseController.php'));
+
+        $this->assertStringContainsString("products.tenant_id', '=', 'purchase_items.tenant_id", $contents);
+        $this->assertStringContainsString("product_variants.tenant_id', '=', 'purchase_items.tenant_id", $contents);
+    }
+
     private function createOtherTenant(string $name): Tenant
     {
         return Tenant::query()->create([

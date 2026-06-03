@@ -138,8 +138,14 @@ class PurchaseController extends Controller
             ->first();
 
         $items = PurchaseItem::query()
-            ->join('products', 'products.id', '=', 'purchase_items.product_id')
-            ->leftJoin('product_variants', 'product_variants.id', '=', 'purchase_items.product_variant_id')
+            ->join('products', function ($join): void {
+                $join->on('products.id', '=', 'purchase_items.product_id')
+                    ->on('products.tenant_id', '=', 'purchase_items.tenant_id');
+            })
+            ->leftJoin('product_variants', function ($join): void {
+                $join->on('product_variants.id', '=', 'purchase_items.product_variant_id')
+                    ->on('product_variants.tenant_id', '=', 'purchase_items.tenant_id');
+            })
             ->select([
                 'purchase_items.id',
                 'purchase_items.qty',
@@ -321,6 +327,9 @@ class PurchaseController extends Controller
             'items.*.product_id' => ['required', 'uuid', $tenantId
                 ? Rule::exists('products', 'id')->where('tenant_id', $tenantId)
                 : 'exists:products,id'],
+            'items.*.product_variant_id' => ['nullable', 'uuid', $tenantId
+                ? Rule::exists('product_variants', 'id')->where('tenant_id', $tenantId)
+                : 'exists:product_variants,id'],
             'items.*.qty' => ['required', 'numeric', 'min:0.01'],
             'items.*.purchase_unit' => ['nullable', 'string', 'max:30'],
             'items.*.price' => ['required', 'numeric', 'min:0'],
@@ -776,6 +785,9 @@ class PurchaseController extends Controller
             'items.*.product_id' => ['required', 'uuid', $tenantId
                 ? Rule::exists('products', 'id')->where('tenant_id', $tenantId)
                 : 'exists:products,id'],
+            'items.*.product_variant_id' => ['nullable', 'uuid', $tenantId
+                ? Rule::exists('product_variants', 'id')->where('tenant_id', $tenantId)
+                : 'exists:product_variants,id'],
             'items.*.qty' => ['required', 'numeric', 'min:0.01'],
             'items.*.purchase_unit' => ['nullable', 'string', 'max:30'],
         ]);

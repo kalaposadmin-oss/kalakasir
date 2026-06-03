@@ -497,12 +497,23 @@ class PurchaseService
             ->whereIn('id', $productIds)
             ->get(['id', 'unit'])
             ->keyBy('id');
+        $variantProducts = DB::table('product_variants')
+            ->where('tenant_id', $tenantId)
+            ->whereIn('id', collect($payloadItems)->pluck('product_variant_id')->filter()->unique()->values()->all())
+            ->pluck('product_id', 'id');
 
-        return collect($payloadItems)->map(function ($item, int $index) use ($tenantId, $purchaseId, $products, $conversion) {
+        return collect($payloadItems)->map(function ($item, int $index) use ($tenantId, $purchaseId, $products, $conversion, $variantProducts) {
             $product = $products->get($item['product_id']);
             if (! $product) {
                 throw ValidationException::withMessages([
                     "items.$index.product_id" => 'Produk tidak ditemukan untuk tenant aktif.',
+                ]);
+            }
+
+            $productVariantId = $item['product_variant_id'] ?? null;
+            if ($productVariantId && (string) ($variantProducts->get($productVariantId) ?? '') !== (string) $item['product_id']) {
+                throw ValidationException::withMessages([
+                    "items.$index.product_variant_id" => 'Varian produk tidak cocok dengan produk yang dipilih.',
                 ]);
             }
 
@@ -529,7 +540,7 @@ class PurchaseService
                 'purchase_unit' => $purchaseUnit,
                 'purchase_unit_multiplier' => Decimal::float($multiplier, Decimal::QTY_SCALE),
                 'purchase_price' => Decimal::float($purchasePrice, Decimal::MONEY_SCALE),
-            ] + (Schema::hasColumn('purchase_items', 'product_variant_id') ? ['product_variant_id' => $item['product_variant_id'] ?? null] : []);
+            ] + (Schema::hasColumn('purchase_items', 'product_variant_id') ? ['product_variant_id' => $productVariantId] : []);
         })->all();
     }
 
@@ -572,9 +583,29 @@ class PurchaseService
             throw new RuntimeException('Item purchase tidak ditemukan.');
         }
 
-        $requested = collect(Arr::get($payload, 'items', []))
+        $requestedRows = collect(Arr::get($payload, 'items', []))
             ->filter(fn ($item) => filled($item['product_id'] ?? null))
-            ->keyBy('product_id');
+            ->values();
+        $requestedVariantProducts = DB::table('product_variants')
+            ->where('tenant_id', $tenantId)
+            ->whereIn('id', $requestedRows->pluck('product_variant_id')->filter()->unique()->values()->all())
+            ->pluck('product_id', 'id');
+
+        $requestedRows->each(function ($item, int $index) use ($requestedVariantProducts): void {
+            $productVariantId = $item['product_variant_id'] ?? null;
+            if ($productVariantId && (string) ($requestedVariantProducts->get($productVariantId) ?? '') !== (string) $item['product_id']) {
+                throw ValidationException::withMessages([
+                    "items.$index.product_variant_id" => 'Varian produk tidak cocok dengan produk yang diterima.',
+                ]);
+            }
+        });
+
+        $requested = $requestedRows->keyBy(fn ($item) => $this->itemBucketKey(
+            (string) $item['product_id'],
+            $item['product_variant_id'] ?? null
+        ));
+        $requestedByProduct = $requestedRows->groupBy(fn ($item) => (string) $item['product_id']);
+        $itemProductCounts = $items->countBy(fn ($item) => (string) $item->product_id);
 
         if ($requested->count() !== $items->count()) {
             throw new RuntimeException('Semua item purchase harus dikirim saat penerimaan.');
@@ -596,7 +627,14 @@ class PurchaseService
                 continue;
             }
 
-            $requestItem = $requested->get($item->product_id) ?? [];
+            $requestItem = $requested->get($this->itemBucketKey((string) $item->product_id, $item->product_variant_id));
+            if (! $requestItem && (int) ($itemProductCounts->get((string) $item->product_id) ?? 0) === 1) {
+                $fallbackRows = $requestedByProduct->get((string) $item->product_id, collect());
+                if ($fallbackRows->count() === 1 && blank($fallbackRows->first()['product_variant_id'] ?? null)) {
+                    $requestItem = $fallbackRows->first();
+                }
+            }
+            $requestItem ??= [];
             $productUnit = $productUnits->get($item->product_id);
             $receiveUnit = $requestItem['purchase_unit']
                 ?? $item->purchase_unit
@@ -727,6 +765,11 @@ class PurchaseService
             'status' => $purchase->status,
             'received_total' => Decimal::float($totalReceivedValue, Decimal::MONEY_SCALE),
         ];
+    }
+
+    private function itemBucketKey(string $productId, mixed $productVariantId): string
+    {
+        return $productId.'|'.($productVariantId ? (string) $productVariantId : 'null');
     }
 
     private function resolveDefaultCashAccountId(string $tenantId): ?string

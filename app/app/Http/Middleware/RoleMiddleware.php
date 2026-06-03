@@ -23,9 +23,10 @@ class RoleMiddleware
         }
 
         $tenantId = TenantContext::id();
+        $fallbackTenantId = $user->current_tenant_id ?? $user->tenant_id;
 
         $resolver = app(UserRoleResolverService::class);
-        $normalizedRole = $resolver->resolveNormalizedRole((string) ($tenantId ?: $user->tenant_id), (string) $user->id);
+        $normalizedRole = $resolver->resolveNormalizedRole((string) ($tenantId ?: $fallbackTenantId), (string) $user->id);
 
         if (! $normalizedRole && filled($user->role ?? null)) {
             $normalizedRole = $resolver->normalize((string) $user->role);
