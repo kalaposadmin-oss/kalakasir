@@ -47,7 +47,9 @@ class WebAccessMiddleware
 
         if ($rolesArg !== '*' && $rolesArg !== '' && ! $this->isImpersonatingSuperadmin($request)) {
             $allowedRoles = array_values(array_filter(array_map('trim', explode('|', $rolesArg))));
-            $tenantId = TenantContext::id() ?? Auth::user()?->tenant_id;
+            $tenantId = TenantContext::id()
+                ?? Auth::user()?->current_tenant_id
+                ?? Auth::user()?->tenant_id;
             $resolver = app(UserRoleResolverService::class);
             $role = $resolver->resolveNormalizedRole((string) $tenantId, (string) Auth::id());
             if (! $role) {
@@ -65,7 +67,8 @@ class WebAccessMiddleware
         if ($featureKey !== '*' && $featureKey !== '') {
             $tenant = TenantContext::get();
             if (! $tenant) {
-                $fallbackTenantId = Auth::user()?->tenant_id;
+                $fallbackTenantId = Auth::user()?->current_tenant_id
+                    ?? Auth::user()?->tenant_id;
                 if ($fallbackTenantId) {
                     $tenant = Tenant::query()->find($fallbackTenantId);
                 }
