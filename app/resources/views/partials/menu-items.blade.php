@@ -4,13 +4,31 @@
 @endphp
 
 <div class="{{ $isDesktopMenu ? 'space-y-5' : 'space-y-6' }}">
-    @foreach ($menuSections as $section)
+    @foreach ($menuSections as $sectionIndex => $section)
         @if (!empty($section['items']))
-            <section>
-                <p class="{{ $isDesktopMenu ? 'mb-2 px-3 text-[10px]' : 'mb-2 px-2 text-[11px]' }} font-bold uppercase tracking-[0.22em] text-slate-400">
-                    {{ $section['title'] }}
-                </p>
-                <ul class="{{ $isDesktopMenu ? 'space-y-1' : 'space-y-2' }}">
+            @php
+                $sectionHasActive = collect($section['items'])->contains(fn ($item) => $isMenuItemActive($item));
+                $sectionKey = \Illuminate\Support\Str::slug(($activePortal ?? 'menu').'-'.$section['title']);
+                $openByDefault = $sectionHasActive || $sectionIndex === 0 || in_array($section['title'], ['Utama', 'Transaksi', 'Area'], true);
+                $itemCount = count($section['items']);
+            @endphp
+            <section class="menu-section rounded-xl border border-transparent" data-menu-section="{{ $sectionKey }}">
+                <button
+                    class="menu-section-toggle flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition hover:bg-slate-50 dark:hover:bg-slate-900"
+                    type="button"
+                    data-menu-section-toggle
+                    aria-expanded="{{ $openByDefault ? 'true' : 'false' }}"
+                    aria-controls="menu-section-{{ $menuRenderVariant }}-{{ $sectionKey }}"
+                >
+                    <span class="min-w-0 flex-1 truncate text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400">{{ $section['title'] }}</span>
+                    <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500 dark:bg-slate-800 dark:text-slate-400">{{ $itemCount }}</span>
+                    <span class="material-symbols-outlined menu-section-chevron text-[18px] text-slate-400 transition-transform">expand_more</span>
+                </button>
+                <ul
+                    id="menu-section-{{ $menuRenderVariant }}-{{ $sectionKey }}"
+                    class="menu-section-items {{ $openByDefault ? '' : 'hidden' }} {{ $isDesktopMenu ? 'mt-1 space-y-1' : 'mt-1 space-y-2' }}"
+                    data-menu-section-items
+                >
                     @foreach ($section['items'] as $item)
                         @php($isActive = $isMenuItemActive($item))
                         <li>

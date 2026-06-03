@@ -334,10 +334,86 @@
             const triggers = document.querySelectorAll('[data-menu-trigger]');
             const storeNameTargets = document.querySelectorAll('[data-menu-store-name]');
             const branchNameTargets = document.querySelectorAll('[data-menu-branch-name]');
+            const menuScrollers = document.querySelectorAll('.app-menu-scroll');
+            const portalKey = @json($activePortal);
+            const scrollStorageKey = `kalakasir:menu:${portalKey}:scroll`;
+            const sectionStorageKey = `kalakasir:menu:${portalKey}:sections`;
 
             if (!overlay || !drawer) {
                 return;
             }
+
+            const readOpenSections = () => {
+                try {
+                    const raw = window.localStorage.getItem(sectionStorageKey);
+                    if (raw === null) {
+                        return null;
+                    }
+
+                    const parsed = JSON.parse(raw || '[]');
+                    return Array.isArray(parsed) ? new Set(parsed) : null;
+                } catch (error) {
+                    return null;
+                }
+            };
+
+            const writeOpenSections = () => {
+                const openKeys = [...document.querySelectorAll('[data-menu-section]')]
+                    .filter((section) => section.querySelector('[data-menu-section-toggle]')?.getAttribute('aria-expanded') === 'true')
+                    .map((section) => section.dataset.menuSection)
+                    .filter(Boolean);
+                window.localStorage.setItem(sectionStorageKey, JSON.stringify([...new Set(openKeys)]));
+            };
+
+            const setSectionOpen = (section, open) => {
+                const toggle = section.querySelector('[data-menu-section-toggle]');
+                const items = section.querySelector('[data-menu-section-items]');
+                if (!toggle || !items) {
+                    return;
+                }
+
+                toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+                items.classList.toggle('hidden', !open);
+            };
+
+            const restoreMenuState = () => {
+                const openSections = readOpenSections();
+                if (openSections !== null) {
+                    document.querySelectorAll('[data-menu-section]').forEach((section) => {
+                        setSectionOpen(section, openSections.has(section.dataset.menuSection));
+                    });
+                } else {
+                    document.querySelectorAll('[data-menu-section]').forEach((section) => {
+                        if (section.querySelector('[data-menu-section-toggle]')?.getAttribute('aria-expanded') === 'true') {
+                            setSectionOpen(section, true);
+                        }
+                    });
+                }
+
+                const activeLink = document.querySelector('.app-menu-scroll a.bg-primary');
+                const activeSection = activeLink?.closest('[data-menu-section]');
+                if (activeSection) {
+                    setSectionOpen(activeSection, true);
+                }
+
+                const savedScroll = Number(window.sessionStorage.getItem(scrollStorageKey) || 0);
+                menuScrollers.forEach((scroller) => {
+                    if (savedScroll > 0) {
+                        scroller.scrollTop = savedScroll;
+                    }
+                });
+
+                window.requestAnimationFrame(() => {
+                    const currentActiveLink = document.querySelector('.app-menu-scroll a.bg-primary');
+                    if (currentActiveLink) {
+                        currentActiveLink.scrollIntoView({ block: 'nearest' });
+                    }
+                });
+            };
+
+            const persistMenuScroll = (scroller) => {
+                window.sessionStorage.setItem(scrollStorageKey, String(scroller.scrollTop || 0));
+            };
 
             const setTriggerState = (isOpen) => {
                 triggers.forEach((trigger) => {
@@ -369,6 +445,28 @@
                     openMenu();
                 });
             });
+
+            document.querySelectorAll('[data-menu-section-toggle]').forEach((toggle) => {
+                toggle.addEventListener('click', () => {
+                    const section = toggle.closest('[data-menu-section]');
+                    if (!section) {
+                        return;
+                    }
+
+                    const isOpen = toggle.getAttribute('aria-expanded') === 'true';
+                    setSectionOpen(section, !isOpen);
+                    writeOpenSections();
+                });
+            });
+
+            menuScrollers.forEach((scroller) => {
+                scroller.addEventListener('scroll', () => persistMenuScroll(scroller), { passive: true });
+                scroller.querySelectorAll('a[href]').forEach((link) => {
+                    link.addEventListener('click', () => persistMenuScroll(scroller));
+                });
+            });
+
+            restoreMenuState();
 
             document.addEventListener('click', (event) => {
                 const closeButton = event.target.closest('[data-menu-close]');

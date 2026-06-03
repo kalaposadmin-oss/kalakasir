@@ -46,6 +46,9 @@
                 overscroll-behavior: contain;
                 -webkit-overflow-scrolling: touch;
             }
+            [data-menu-section-toggle][aria-expanded="true"] .menu-section-chevron {
+                transform: rotate(180deg);
+            }
             .app-bottom-safe-space {
                 padding-bottom: var(--app-bottom-safe-space);
                 scroll-padding-bottom: var(--app-bottom-safe-space);
