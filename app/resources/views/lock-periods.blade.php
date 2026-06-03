@@ -81,6 +81,10 @@
                     <h3 class="text-sm font-bold text-slate-500 uppercase tracking-widest">Langkah Tutup Buku</h3>
                     <span class="text-[10px] font-bold text-slate-400" id="assistant-period-label">-</span>
                 </div>
+                <div class="mb-3 rounded-2xl border border-orange-100 bg-orange-50 p-4 text-xs leading-relaxed text-orange-900 dark:border-orange-900/40 dark:bg-orange-950/20 dark:text-orange-100">
+                    <p class="font-bold">Cara pakai checklist</p>
+                    <p class="mt-1">Buka langkah yang perlu dicek, koreksi data di halaman asal kalau angkanya salah, lalu centang <b>Sudah saya cek</b>. Tombol tutup buku dipakai setelah semua langkah beres.</p>
+                </div>
                 <div id="assistant-checklist" class="space-y-3">
                     <div class="text-sm text-slate-400">Memuat checklist tutup buku...</div>
                 </div>
@@ -113,7 +117,7 @@
                     @if ($canManageLockPeriods)
                         <button id="create-period" class="w-full bg-primary text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform">
                             <span class="material-symbols-outlined text-lg">verified_user</span>
-                            Review & Tutup Buku
+                            <span data-close-label>Review & Tutup Buku</span>
                         </button>
                     @endif
                 </div>
@@ -130,7 +134,20 @@
         <script>
             (() => {
                 const tenantId = document.querySelector('meta[name="tenant-id"]').content;
+                const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
                 const headers = tenantId ? { 'X-Tenant-Id': tenantId } : {};
+                const writeHeaders = {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    ...(csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}),
+                    ...headers,
+                };
+                const reviewState = {
+                    requiredKeys: [],
+                    checkedKeys: new Set(),
+                    blocked: false,
+                };
 
                 const el = {
                     start: document.getElementById('start-date'),
@@ -148,6 +165,23 @@
                     assistantRestrictions: document.getElementById('assistant-restrictions'),
                     assistantPeriodLabel: document.getElementById('assistant-period-label'),
                     assistantChecklist: document.getElementById('assistant-checklist'),
+                };
+
+                const syncCloseButtonState = () => {
+                    if (!el.create) {
+                        return;
+                    }
+
+                    const allChecked = reviewState.requiredKeys.every((key) => reviewState.checkedKeys.has(key));
+                    const disabled = reviewState.blocked || !allChecked;
+                    el.create.disabled = disabled;
+                    el.create.classList.toggle('opacity-50', disabled);
+                    el.create.classList.toggle('cursor-not-allowed', disabled);
+                    el.create.querySelector('[data-close-label]')?.replaceChildren(
+                        document.createTextNode(reviewState.blocked
+                            ? 'Perbaiki Data Dulu'
+                            : (allChecked ? 'Review & Tutup Buku' : 'Centang Checklist Dulu'))
+                    );
                 };
 
                 const formatDate = (value) => new Intl.DateTimeFormat('id-ID', {
@@ -341,14 +375,29 @@
                     const checklist = Array.isArray(assistant.checklist) ? assistant.checklist : [];
                     if (!checklist.length) {
                         el.assistantChecklist.innerHTML = '<div class="text-sm text-slate-400">Belum ada checklist.</div>';
+                        reviewState.requiredKeys = [];
+                        reviewState.checkedKeys.clear();
+                        reviewState.blocked = false;
+                        syncCloseButtonState();
                         return;
                     }
 
+                    reviewState.requiredKeys = checklist.map((step, index) => step.key || `step-${index}`);
+                    reviewState.checkedKeys.clear();
+                    reviewState.blocked = checklist.some((step) => step.status === 'blocked');
+
                     el.assistantChecklist.innerHTML = checklist.map((step, index) => {
                         const tone = checklistTone(step.status);
+                        const stepKey = step.key || `step-${index}`;
                         const reviewScope = step.review_scope || '';
                         const correctionAction = step.correction_action || '';
                         const actionLabel = step.action_label || 'Buka langkah ini';
+                        const mustFix = step.status === 'blocked';
+                        const userTask = mustFix
+                            ? 'Perbaiki masalah ini dulu. Setelah datanya benar, muat ulang halaman dan cek lagi.'
+                            : (step.status === 'review' || step.status === 'warning'
+                                ? 'Cek data ini. Kalau angkanya salah, buka halaman koreksi lalu kembali ke sini.'
+                                : 'Pastikan ringkasan ini sudah sesuai kondisi usaha.');
                         const guidanceHtml = reviewScope || correctionAction
                             ? `<div class="mt-3 grid gap-2 text-xs leading-relaxed">
                                 ${reviewScope ? `<div class="rounded-xl bg-white/70 px-3 py-2 dark:bg-slate-950/40"><span class="font-bold text-slate-700 dark:text-slate-200">Data dicek:</span> <span class="text-slate-500 dark:text-slate-400">${reviewScope}</span></div>` : ''}
@@ -370,17 +419,28 @@
                                             <span class="shrink-0 text-[10px] font-bold uppercase ${tone.labelClass}">${tone.label}</span>
                                         </div>
                                         <p class="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">${step.description || ''}</p>
+                                        <div class="mt-3 rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-xs leading-relaxed text-slate-600 dark:border-slate-800 dark:bg-slate-950/50 dark:text-slate-300">
+                                            <span class="font-bold text-slate-800 dark:text-slate-100">Yang harus dilakukan:</span> ${userTask}
+                                        </div>
                                         <div class="mt-3 flex items-center justify-between gap-3 rounded-xl bg-white/70 px-3 py-2 text-xs dark:bg-slate-950/40">
                                             <span class="font-semibold text-slate-500">${step.metric_label || 'Nilai'}</span>
                                             <span class="font-bold text-slate-900 dark:text-white">${formatMetric(step)}</span>
                                         </div>
                                         ${guidanceHtml}
-                                        ${step.action_url ? `<a class="mt-3 inline-flex items-center gap-1 text-xs font-bold text-primary" href="${step.action_url}">${actionLabel} <span class="material-symbols-outlined text-[15px]">arrow_forward</span></a>` : ''}
+                                        <div class="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                            ${step.action_url ? `<a class="inline-flex items-center gap-1 text-xs font-bold text-primary" href="${step.action_url}">${actionLabel} <span class="material-symbols-outlined text-[15px]">arrow_forward</span></a>` : '<span class="text-xs font-semibold text-slate-400">Tidak ada halaman koreksi khusus</span>'}
+                                            <label class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 ${mustFix ? 'opacity-50' : ''}">
+                                                <input class="review-checkbox size-4 rounded border-slate-300 text-primary focus:ring-primary" type="checkbox" data-step-key="${stepKey}" ${mustFix ? 'disabled' : ''}>
+                                                <span>Sudah saya cek</span>
+                                            </label>
+                                        </div>
                                     </div>
                                 </div>
                             </article>
                         `;
                     }).join('');
+
+                    syncCloseButtonState();
                 };
 
                 const apiMessage = async (response, fallback) => {
@@ -393,7 +453,30 @@
                 };
 
                 @if ($canManageLockPeriods)
+                el.assistantChecklist.addEventListener('change', (event) => {
+                    const checkbox = event.target.closest('.review-checkbox');
+                    if (!checkbox) {
+                        return;
+                    }
+
+                    if (checkbox.checked) {
+                        reviewState.checkedKeys.add(checkbox.dataset.stepKey);
+                    } else {
+                        reviewState.checkedKeys.delete(checkbox.dataset.stepKey);
+                    }
+
+                    syncCloseButtonState();
+                });
+
                 el.create.addEventListener('click', async () => {
+                    if (reviewState.blocked) {
+                        alert('Masih ada data yang wajib dibereskan. Buka langkah yang bermasalah, koreksi datanya, lalu muat ulang halaman.');
+                        return;
+                    }
+                    if (!reviewState.requiredKeys.every((key) => reviewState.checkedKeys.has(key))) {
+                        alert('Centang semua langkah "Sudah saya cek" sebelum tutup buku.');
+                        return;
+                    }
                     if (!el.start.value || !el.end.value) {
                         alert('Lengkapi tanggal periode.');
                         return;
@@ -435,10 +518,7 @@
 
                     const response = await fetch('/api/v1/lock-periods/close', {
                         method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            ...headers,
-                        },
+                        headers: writeHeaders,
                         body: JSON.stringify({
                             start_date: el.start.value,
                             end_date: el.end.value,
@@ -471,19 +551,13 @@
 
                         response = await fetch(`/api/v1/lock-periods/${periodId}/reopen`, {
                             method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                ...headers,
-                            },
+                            headers: writeHeaders,
                             body: JSON.stringify({ reason: reason.trim() }),
                         });
                     } else {
                         response = await fetch(`/api/v1/lock-periods/${periodId}`, {
                         method: 'PATCH',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            ...headers,
-                        },
+                        headers: writeHeaders,
                         body: JSON.stringify({ is_locked: checkbox.checked }),
                         });
                     }

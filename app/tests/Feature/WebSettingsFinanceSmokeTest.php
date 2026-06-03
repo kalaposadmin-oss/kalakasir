@@ -197,10 +197,18 @@ class WebSettingsFinanceSmokeTest extends TestCase
         $this->assertStringContainsString('/backoffice/finance/summary', $contents);
         $this->assertStringContainsString('Langkah Tutup Buku', $contents);
         $this->assertStringContainsString('closing-assistant-banner', $contents);
+        $this->assertStringContainsString('Cara pakai checklist', $contents);
+        $this->assertStringContainsString('Yang harus dilakukan:', $contents);
+        $this->assertStringContainsString('Sudah saya cek', $contents);
+        $this->assertStringContainsString('Centang semua langkah', $contents);
         $this->assertStringContainsString('/api/v1/lock-periods/assistant', $contents);
         $this->assertStringContainsString('Tutup Periode', $contents);
         $this->assertStringContainsString('/api/v1/lock-periods/preview', $contents);
         $this->assertStringContainsString('/api/v1/lock-periods/close', $contents);
+        $this->assertStringContainsString("document.querySelector('meta[name=\"csrf-token\"]')", $contents);
+        $this->assertStringContainsString("'X-CSRF-TOKEN': csrfToken", $contents);
+        $this->assertStringContainsString("'X-Requested-With': 'XMLHttpRequest'", $contents);
+        $this->assertStringContainsString('headers: writeHeaders', $contents);
         $this->assertStringContainsString('/reopen', $contents);
         $this->assertStringContainsString('Data dicek:', $contents);
         $this->assertStringContainsString('Kalau salah:', $contents);
