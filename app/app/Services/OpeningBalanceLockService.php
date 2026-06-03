@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Models\LockPeriod;
 use App\Models\OpeningSession;
 use Carbon\CarbonImmutable;
 use RuntimeException;
@@ -20,24 +19,9 @@ class OpeningBalanceLockService
         }
     }
 
-    public function lockInitialPeriod(OpeningSession $session, ?string $actorId, ?string $reason = null): void
+    public function lockInitialPeriod(OpeningSession $session): void
     {
-        $openingDate = CarbonImmutable::parse((string) $session->opening_date, 'UTC')->toDateString();
         $now = CarbonImmutable::now('UTC');
-
-        LockPeriod::query()->updateOrCreate(
-            [
-                'tenant_id' => $session->tenant_id,
-                'start_date' => $openingDate,
-                'end_date' => $openingDate,
-            ],
-            [
-                'is_locked' => true,
-                'locked_by' => $actorId,
-                'locked_at' => $now,
-                'reason' => $reason ?: 'Locked by opening balance posting',
-            ]
-        );
 
         $session->update([
             'locked_at' => $now,

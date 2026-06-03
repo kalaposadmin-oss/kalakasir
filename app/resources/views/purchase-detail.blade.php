@@ -94,6 +94,7 @@
             <div class="flex items-center gap-2">
                 @if ($canManagePurchaseDetail)
                     <button id="edit-draft" class="hidden rounded-full bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary" type="button">Edit Draft</button>
+                    <button id="delete-draft" class="hidden rounded-full bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-600 dark:bg-rose-900/20 dark:text-rose-300" type="button">Hapus Draft</button>
                 @endif
                 <span class="text-xs font-medium text-slate-400" id="item-count">0 Produk</span>
             </div>
@@ -335,6 +336,7 @@
                 const purchaseModeControlled = @json(\App\Support\PurchaseMode::CONTROLLED);
                 const purchaseModePoShort = @json(\App\Support\PurchaseMode::PO_SHORT);
                 const purchaseFlowDefaultMode = @json($purchaseFlowDefaultMode);
+                const purchaseBackUrl = @json($purchaseBackUrl);
                 const purchasePaymentMethodLabels = {
                     tempo: 'Tempo',
                     tunai: 'Tunai',
@@ -379,6 +381,7 @@
                     openReceiving: document.getElementById('open-receiving'),
                     closePurchase: document.getElementById('close-purchase'),
                     editDraft: document.getElementById('edit-draft'),
+                    deleteDraft: document.getElementById('delete-draft'),
                     draftModal: document.getElementById('draft-modal'),
                     closeDraftModal: document.getElementById('close-draft-modal'),
                     cancelDraftEdit: document.getElementById('cancel-draft-edit'),
@@ -504,9 +507,10 @@
                     return group || (normalized ? [normalized] : ['pcs']);
                 };
 
-                const buildProductOptions = (selectedId = '') => productOptions
-                    .map((product) => `<option value="${product.id}" ${product.id === selectedId ? 'selected' : ''}>${escapeHtml(product.name)}</option>`)
-                    .join('');
+                const buildProductOptions = (selectedId = '') => [
+                    `<option value="" ${selectedId ? '' : 'selected'} disabled>Pilih produk</option>`,
+                    ...productOptions.map((product) => `<option value="${product.id}" ${product.id === selectedId ? 'selected' : ''}>${escapeHtml(product.name)}</option>`),
+                ].join('');
 
                 const buildSupplierOptions = (selectedId = '') => supplierOptions
                     .map((supplier) => `<option value="${supplier.id}" ${supplier.id === selectedId ? 'selected' : ''}>${escapeHtml(supplier.name)}</option>`)
@@ -718,7 +722,12 @@
                     el.draftItems?.querySelectorAll('.draft-item-row').forEach((row) => {
                         const qty = Number(row.querySelector('.draft-item-qty')?.value || 0);
                         const price = Number(row.querySelector('.draft-item-price')?.value || 0);
-                        subtotal += qty * price;
+                        const lineTotal = qty * price;
+                        subtotal += lineTotal;
+                        const lineSubtotal = row.querySelector('.draft-item-subtotal');
+                        if (lineSubtotal) {
+                            lineSubtotal.textContent = formatCurrency(lineTotal);
+                        }
                     });
 
                     const taxEnabled = currentPurchaseTax > 0 || currentPurchaseTaxRate > 0;
@@ -733,8 +742,8 @@
 
                 const addDraftItemRow = (item = {}) => {
                     const row = document.createElement('div');
-                    const productId = item.product_id || productOptions[0]?.id || '';
-                    const purchaseQty = Number(item.purchase_qty ?? item.qty ?? 1);
+                    const productId = item.product_id || '';
+                    const purchaseQty = Number(item.purchase_qty ?? item.qty ?? (productId ? 1 : 0));
                     const purchasePrice = Number(item.purchase_price ?? item.price ?? 0);
                     row.className = 'draft-item-row rounded-2xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900';
                     row.innerHTML = `
@@ -762,9 +771,17 @@
                                 <input class="draft-item-price w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-bold dark:border-slate-700 dark:bg-slate-800" type="number" min="0" step="1" value="${purchasePrice}" />
                             </div>
                         </div>
+                        <div class="mt-3 flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800/70">
+                            <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Subtotal Item</span>
+                            <span class="draft-item-subtotal font-bold text-primary">${formatCurrency(purchaseQty * purchasePrice)}</span>
+                        </div>
                     `;
 
-                    el.draftItems.appendChild(row);
+                    if (item.product_id) {
+                        el.draftItems.appendChild(row);
+                    } else {
+                        el.draftItems.prepend(row);
+                    }
                     const productSelect = row.querySelector('.draft-item-product');
                     updateDraftRowUnit(row, productId, item.purchase_unit || item.unit || null);
                     productSelect?.addEventListener('change', () => {
@@ -808,7 +825,11 @@
                             </div>
                         </div>
                     `;
-                    el.draftAdditionalCosts?.appendChild(row);
+                    if (cost.name || cost.amount) {
+                        el.draftAdditionalCosts?.appendChild(row);
+                    } else {
+                        el.draftAdditionalCosts?.prepend(row);
+                    }
                     row.querySelector('.draft-additional-cost-category').value = cost.category || 'packaging';
                     row.querySelectorAll('input, select').forEach((input) => {
                         input.addEventListener('input', syncDraftTotals);
@@ -940,6 +961,7 @@
                     const showActionBar = showApproval || showFulfillment;
 
                     el.editDraft?.classList.toggle('hidden', normalizedStatus !== purchaseStatusDraft);
+                    el.deleteDraft?.classList.toggle('hidden', normalizedStatus !== purchaseStatusDraft);
                     el.actionBar?.classList.toggle('hidden', !showActionBar);
                     el.approvalActions?.classList.toggle('hidden', !showApproval);
                     el.fulfillmentActions?.classList.toggle('hidden', !showFulfillment);
@@ -1263,6 +1285,39 @@
                         });
                     });
                 }
+
+                el.deleteDraft?.addEventListener('click', async () => {
+                    const allowed = await window.PosUi.confirmRiskActionAsync({
+                        title: 'Hapus Draft PO',
+                        message: 'Draft PO ini akan dihapus permanen dari daftar pembelian. Lanjutkan?',
+                        confirmText: 'Hapus Draft',
+                        icon: 'delete',
+                        destructive: true,
+                    });
+                    if (!allowed) {
+                        return;
+                    }
+
+                    await window.PosUi.runWithSubmitGuard(el.deleteDraft, async () => {
+                        const response = await fetch(`/api/v1/purchases/${purchaseId}`, {
+                            method: 'DELETE',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                ...(csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}),
+                                'X-Requested-With': 'XMLHttpRequest',
+                                ...headers,
+                            },
+                        });
+                        const responseData = await response.json().catch(() => ({}));
+                        if (!response.ok) {
+                            throw new Error(responseData.message || 'Gagal menghapus draft PO.');
+                        }
+
+                        window.location.href = purchaseBackUrl;
+                    }, {
+                        loadingHtml: '<span class="material-symbols-outlined animate-spin">progress_activity</span> MENGHAPUS',
+                    });
+                });
 
                 if (el.editPayment && el.paymentModal) {
                     el.editPayment.addEventListener('click', openPaymentModal);

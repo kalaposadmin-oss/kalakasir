@@ -748,6 +748,23 @@ class PurchaseController extends Controller
         }
     }
 
+    public function destroyDraft(string $purchase, PurchaseService $service)
+    {
+        try {
+            $service->deleteDraft($purchase);
+
+            return response()->json([
+                'status' => 'deleted',
+            ]);
+        } catch (RuntimeException $exception) {
+            return response()->json([
+                'code' => 'PURCHASE_DRAFT_DELETE_FAILED',
+                'message' => $exception->getMessage(),
+                'details' => [],
+            ], 422);
+        }
+    }
+
     public function decide(Request $request, string $purchase)
     {
         $tenantId = TenantContext::id();

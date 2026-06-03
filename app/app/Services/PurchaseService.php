@@ -247,6 +247,50 @@ class PurchaseService
         ]);
     }
 
+    public function deleteDraft(string $purchaseId): void
+    {
+        $tenantId = TenantContext::id();
+        if (! $tenantId) {
+            throw new RuntimeException('Tenant tidak ditemukan.');
+        }
+
+        DB::transaction(function () use ($tenantId, $purchaseId): void {
+            $purchase = Purchase::query()
+                ->where('tenant_id', $tenantId)
+                ->where('id', $purchaseId)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if (PurchaseStatus::normalize((string) $purchase->status) !== PurchaseStatus::DRAFT) {
+                throw new RuntimeException('Hanya draft PO yang bisa dihapus.');
+            }
+
+            $hasReceipt = StockLedger::query()
+                ->where('tenant_id', $tenantId)
+                ->where('reference_type', 'purchase')
+                ->where('reference_id', $purchase->id)
+                ->exists();
+
+            if ($hasReceipt) {
+                throw new RuntimeException('Draft PO ini sudah punya riwayat penerimaan sehingga tidak bisa dihapus.');
+            }
+
+            PurchaseItem::query()
+                ->where('tenant_id', $tenantId)
+                ->where('purchase_id', $purchase->id)
+                ->delete();
+
+            if (Schema::hasTable('purchase_additional_costs')) {
+                DB::table('purchase_additional_costs')
+                    ->where('tenant_id', $tenantId)
+                    ->where('purchase_id', $purchase->id)
+                    ->delete();
+            }
+
+            $purchase->delete();
+        });
+    }
+
     public function close(string $purchaseId, ?string $userId): void
     {
         $tenantId = TenantContext::id();

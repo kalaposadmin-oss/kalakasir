@@ -15,6 +15,10 @@ class LockPeriodService
             ->where('is_locked', true)
             ->where('start_date', '<=', $date->toDateString())
             ->where('end_date', '>=', $date->toDateString())
+            ->where(function ($query) {
+                $query->whereNull('reason')
+                    ->orWhereRaw('LOWER(reason) NOT LIKE ?', ['%opening balance%']);
+            })
             ->exists();
 
         if ($locked) {

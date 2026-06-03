@@ -216,7 +216,7 @@ class OpeningBalancePostingService
                 'updated_at' => $now,
             ]);
 
-            $this->lockService->lockInitialPeriod($session->fresh(), $actorId, 'Opening balance posted');
+            $this->lockService->lockInitialPeriod($session->fresh());
 
             $this->auditLogger->log(
                 event: 'opening_balance.posted',

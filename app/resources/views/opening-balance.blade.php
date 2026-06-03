@@ -17,6 +17,19 @@
         .stat-pill {
             box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
         }
+
+        .ob-step-card {
+            transition: border-color 160ms ease, box-shadow 160ms ease, opacity 160ms ease;
+        }
+
+        .ob-step-card.is-active {
+            border-color: rgba(19, 91, 236, 0.45);
+            box-shadow: 0 14px 40px rgba(19, 91, 236, 0.10);
+        }
+
+        .ob-step-card.is-waiting {
+            opacity: 0.64;
+        }
     </style>
 @endpush
 
@@ -117,21 +130,62 @@
                         </button>
 
                         <p class="mt-4 text-sm leading-relaxed text-slate-300">
-                            Posting akan membuat jurnal saldo awal, kartu stok, inventory layer, dan kunci periode awal secara otomatis.
+                            Posting akan membuat jurnal saldo awal, kartu stok, dan inventory layer. Draft saldo awal akan dikunci setelah diposting.
                         </p>
+                        <div class="mt-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                            <p class="text-[11px] font-bold uppercase tracking-[0.22em] text-slate-400">Langkah Berikutnya</p>
+                            <p id="next-action-label" class="mt-2 text-sm font-bold leading-relaxed text-white">Mulai dari Langkah 1: isi tanggal mulai lalu buat draft.</p>
+                        </div>
                         <p id="session-message" class="mt-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200 hidden"></p>
                     </aside>
                 </div>
             </section>
 
+            <section class="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <p class="text-xs font-bold uppercase tracking-[0.24em] text-slate-400">Urutan Pengisian</p>
+                        <h3 class="mt-1 text-base font-bold text-slate-900 dark:text-white">Ikuti dari kiri ke kanan</h3>
+                    </div>
+                    <p class="max-w-xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">Stok dan kas/bank boleh salah satu saja. Yang penting buat draft dulu, isi data yang memang ada, validasi, lalu posting.</p>
+                </div>
+                <div class="mt-4 grid gap-3 md:grid-cols-5">
+                    <div id="step-guide-create" class="ob-step-card rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-800/60">
+                        <p class="text-[11px] font-bold uppercase tracking-wider text-primary">1. Draft</p>
+                        <p class="mt-1 text-sm font-bold text-slate-900 dark:text-white">Tanggal mulai</p>
+                        <p id="step-status-create" class="mt-2 text-xs text-slate-500 dark:text-slate-400">Belum dibuat</p>
+                    </div>
+                    <div id="step-guide-stock" class="ob-step-card rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-800/60">
+                        <p class="text-[11px] font-bold uppercase tracking-wider text-emerald-600">2. Stok</p>
+                        <p class="mt-1 text-sm font-bold text-slate-900 dark:text-white">Barang yang sudah ada</p>
+                        <p id="step-status-stock" class="mt-2 text-xs text-slate-500 dark:text-slate-400">Menunggu draft</p>
+                    </div>
+                    <div id="step-guide-fund" class="ob-step-card rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-800/60">
+                        <p class="text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">3. Kas/Bank</p>
+                        <p class="mt-1 text-sm font-bold text-slate-900 dark:text-white">Uang awal toko</p>
+                        <p id="step-status-fund" class="mt-2 text-xs text-slate-500 dark:text-slate-400">Menunggu draft</p>
+                    </div>
+                    <div id="step-guide-validate" class="ob-step-card rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-800/60">
+                        <p class="text-[11px] font-bold uppercase tracking-wider text-amber-600">4. Validasi</p>
+                        <p class="mt-1 text-sm font-bold text-slate-900 dark:text-white">Cek seimbang</p>
+                        <p id="step-status-validate" class="mt-2 text-xs text-slate-500 dark:text-slate-400">Belum bisa</p>
+                    </div>
+                    <div id="step-guide-post" class="ob-step-card rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-800/60">
+                        <p class="text-[11px] font-bold uppercase tracking-wider text-slate-900 dark:text-white">5. Posting</p>
+                        <p class="mt-1 text-sm font-bold text-slate-900 dark:text-white">Kunci saldo awal</p>
+                        <p id="step-status-post" class="mt-2 text-xs text-slate-500 dark:text-slate-400">Menunggu validasi</p>
+                    </div>
+                </div>
+            </section>
+
             <section class="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
                 <div class="space-y-6">
-                    <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                    <section id="step-create-card" class="ob-step-card rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                         <div class="flex items-start justify-between gap-4">
                             <div>
-                                <p class="text-xs font-bold uppercase tracking-[0.24em] text-slate-400">Langkah 1</p>
-                                <h3 class="mt-2 text-lg font-bold text-slate-900 dark:text-white">Buat draft yang seimbang</h3>
-                                <p class="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">Pilih tanggal mulai pembukuan dan akun modal. Nominal modal boleh dikosongkan agar sistem otomatis menyamakan dengan total stok plus kas/bank awal.</p>
+                                <p class="text-xs font-bold uppercase tracking-[0.24em] text-primary">Langkah 1 - wajib pertama</p>
+                                <h3 class="mt-2 text-lg font-bold text-slate-900 dark:text-white">Isi tanggal mulai, lalu buat draft</h3>
+                                <p class="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">Cukup pilih tanggal mulai pembukuan. Akun modal dan nominal modal boleh dibiarkan default jika belum paham.</p>
                             </div>
                             <span class="material-symbols-outlined text-3xl text-primary/70">schedule</span>
                         </div>
@@ -163,16 +217,16 @@
                                 <span class="material-symbols-outlined text-base">add_circle</span>
                                 Buat Draft
                             </button>
-                            <p id="draft-hint" class="text-xs text-slate-500 dark:text-slate-400 self-center">Akun modal default dipakai jika pilihan dikosongkan. Nominal modal kosong berarti mengikuti total debit.</p>
+                            <p id="draft-hint" class="text-xs text-slate-500 dark:text-slate-400 self-center">Tips: untuk cara paling aman, kosongkan Nominal Modal agar sistem menyamakan otomatis.</p>
                         </div>
                     </section>
 
-                    <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                    <section id="step-stock-card" class="ob-step-card rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                         <div class="flex items-start justify-between gap-4">
                             <div>
-                                <p class="text-xs font-bold uppercase tracking-[0.24em] text-slate-400">Langkah 2</p>
-                                <h3 class="mt-2 text-lg font-bold text-slate-900 dark:text-white">Isi stok awal</h3>
-                                <p class="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">Isi lokasi, produk, qty, dan unit cost. Nilai line dihitung dari qty x cost saat dikirim ke engine.</p>
+                                <p class="text-xs font-bold uppercase tracking-[0.24em] text-emerald-600">Langkah 2 - jika ada barang</p>
+                                <h3 class="mt-2 text-lg font-bold text-slate-900 dark:text-white">Masukkan stok awal per produk</h3>
+                                <p class="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">Pilih lokasi dan produk, isi qty, lalu harga modal satuan. Ulangi untuk produk lain.</p>
                             </div>
                             <span class="material-symbols-outlined text-3xl text-emerald-600/70">inventory_2</span>
                         </div>
@@ -220,16 +274,16 @@
                                 <span class="material-symbols-outlined text-base">close</span>
                                 Batal Edit
                             </button>
-                            <p class="text-xs text-slate-500 dark:text-slate-400">Stok awal hanya untuk barang yang sudah ada sebelum transaksi pertama di aplikasi.</p>
+                            <p class="text-xs text-slate-500 dark:text-slate-400">Lewati langkah ini kalau toko belum punya stok lama.</p>
                         </div>
                     </section>
 
-                    <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                    <section id="step-fund-card" class="ob-step-card rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                         <div class="flex items-start justify-between gap-4">
                             <div>
-                                <p class="text-xs font-bold uppercase tracking-[0.24em] text-slate-400">Langkah 3</p>
-                                <h3 class="mt-2 text-lg font-bold text-slate-900 dark:text-white">Isi saldo kas/bank awal</h3>
-                                <p class="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">Gunakan ini untuk uang yang sudah ada saat aplikasi mulai dipakai. Untuk modal tambahan setelah hari berjalan, pakai menu Kas Masuk.</p>
+                                <p class="text-xs font-bold uppercase tracking-[0.24em] text-slate-600 dark:text-slate-300">Langkah 3 - jika ada uang awal</p>
+                                <h3 class="mt-2 text-lg font-bold text-slate-900 dark:text-white">Masukkan saldo kas/bank awal</h3>
+                                <p class="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">Isi hanya uang yang sudah ada sebelum aplikasi dipakai. Modal tambahan setelah berjalan tetap lewat menu Kas Masuk.</p>
                             </div>
                             <span class="material-symbols-outlined text-3xl text-primary/70">account_balance_wallet</span>
                         </div>
@@ -268,13 +322,13 @@
                                 <span class="material-symbols-outlined text-base">close</span>
                                 Batal Edit
                             </button>
-                            <p class="text-xs text-slate-500 dark:text-slate-400">Dana awal harus masuk ke akun kas atau bank yang benar.</p>
+                            <p class="text-xs text-slate-500 dark:text-slate-400">Lewati langkah ini kalau saldo kas/bank awal kosong.</p>
                         </div>
                     </section>
                 </div>
 
                 <aside class="space-y-6">
-                    <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                    <section id="step-summary-card" class="ob-step-card rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                         <div class="flex items-start justify-between gap-4">
                             <div>
                                 <p class="text-xs font-bold uppercase tracking-[0.24em] text-slate-400">Ringkasan Draft</p>
@@ -318,11 +372,12 @@
                         </div>
                     </section>
 
-                    <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                    <section id="step-validate-card" class="ob-step-card rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                         <div class="flex items-start justify-between gap-4">
                             <div>
-                                <p class="text-xs font-bold uppercase tracking-[0.24em] text-slate-400">Validasi</p>
-                                <h3 class="mt-2 text-lg font-bold text-slate-900 dark:text-white">Periksa sebelum posting</h3>
+                                <p class="text-xs font-bold uppercase tracking-[0.24em] text-amber-600">Langkah 4</p>
+                                <h3 class="mt-2 text-lg font-bold text-slate-900 dark:text-white">Validasi draft</h3>
+                                <p class="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">Klik setelah stok atau kas/bank selesai diisi. Kalau valid, tombol posting akan aktif.</p>
                             </div>
                             <span class="material-symbols-outlined text-3xl text-emerald-600/80">rule</span>
                         </div>
@@ -351,17 +406,17 @@
                         </button>
                     </section>
 
-                    <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                    <section id="step-post-card" class="ob-step-card rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                         <div class="flex items-start justify-between gap-4">
                             <div>
-                                <p class="text-xs font-bold uppercase tracking-[0.24em] text-slate-400">Posting</p>
+                                <p class="text-xs font-bold uppercase tracking-[0.24em] text-slate-700 dark:text-slate-200">Langkah 5 - terakhir</p>
                                 <h3 class="mt-2 text-lg font-bold text-slate-900 dark:text-white">Posting dan kunci saldo awal</h3>
                             </div>
                             <span class="material-symbols-outlined text-3xl text-slate-500/80">lock</span>
                         </div>
 
                         <p class="mt-3 text-sm leading-relaxed text-slate-600 dark:text-slate-400">
-                            Posting memicu jurnal, layer inventori, dan penguncian periode awal. Setelah itu draft tidak boleh diubah lagi.
+                            Posting memicu jurnal dan layer inventori. Setelah itu draft saldo awal tidak boleh diubah lagi.
                         </p>
 
                         <button id="post-draft-btn" class="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-slate-950/20 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200" type="button" disabled>
@@ -475,6 +530,23 @@
                 sessionStatus: document.getElementById('hero-status'),
                 heroStockValue: document.getElementById('hero-stock-value'),
                 heroFundValue: document.getElementById('hero-fund-value'),
+                nextActionLabel: document.getElementById('next-action-label'),
+                stepGuideCreate: document.getElementById('step-guide-create'),
+                stepGuideStock: document.getElementById('step-guide-stock'),
+                stepGuideFund: document.getElementById('step-guide-fund'),
+                stepGuideValidate: document.getElementById('step-guide-validate'),
+                stepGuidePost: document.getElementById('step-guide-post'),
+                stepStatusCreate: document.getElementById('step-status-create'),
+                stepStatusStock: document.getElementById('step-status-stock'),
+                stepStatusFund: document.getElementById('step-status-fund'),
+                stepStatusValidate: document.getElementById('step-status-validate'),
+                stepStatusPost: document.getElementById('step-status-post'),
+                stepCreateCard: document.getElementById('step-create-card'),
+                stepStockCard: document.getElementById('step-stock-card'),
+                stepFundCard: document.getElementById('step-fund-card'),
+                stepSummaryCard: document.getElementById('step-summary-card'),
+                stepValidateCard: document.getElementById('step-validate-card'),
+                stepPostCard: document.getElementById('step-post-card'),
                 sessionMessage: document.getElementById('session-message'),
                 stockUnavailable: document.getElementById('stock-unavailable'),
                 stockLocation: document.getElementById('stock-location'),
@@ -631,15 +703,89 @@
 
             const setBusy = (busy) => {
                 state.busy = busy;
-                el.createDraftBtn.disabled = busy;
-                el.createDraftBtnBottom.disabled = busy;
+                const hasSession = Boolean(state.session);
+                const validationReady = Boolean(state.validation) && state.validation?.status !== 'invalid';
+                el.createDraftBtn.disabled = busy || hasSession;
+                el.createDraftBtnBottom.disabled = busy || hasSession;
                 el.validateBtn.disabled = busy || !state.session;
-                el.postBtn.disabled = busy || !state.session || !state.validation;
+                el.postBtn.disabled = busy || !state.session || !validationReady;
                 el.addStockBtn.disabled = busy || !state.session || !state.productsAvailable || !state.products.length;
                 el.addFundBtn.disabled = busy || !state.session;
                 el.cancelStockEditBtn.disabled = busy || !state.editingStockLineId;
                 el.cancelFundEditBtn.disabled = busy || !state.editingFundLineId;
                 el.validateDraftBtn.disabled = busy || !state.session;
+                el.postDraftBtn.disabled = busy || !state.session || !validationReady;
+            };
+
+            const setStepVisual = (node, active, waiting) => {
+                if (!node) {
+                    return;
+                }
+
+                node.classList.toggle('is-active', active);
+                node.classList.toggle('is-waiting', waiting);
+            };
+
+            const syncStepGuide = () => {
+                const totals = localTotals();
+                const hasSession = Boolean(state.session);
+                const isPosted = state.session?.status === 'posted';
+                const hasStock = state.stockLines.length > 0;
+                const hasFund = state.fundLines.length > 0;
+                const hasLines = hasStock || hasFund;
+                const isValid = Boolean(state.validation) && state.validation?.status !== 'invalid';
+
+                let activeStep = 'create';
+                let nextAction = 'Mulai dari Langkah 1: isi tanggal mulai lalu buat draft.';
+
+                if (isPosted) {
+                    activeStep = 'done';
+                    nextAction = 'Selesai. Saldo awal sudah diposting dan terkunci.';
+                } else if (!hasSession) {
+                    activeStep = 'create';
+                } else if (!hasLines) {
+                    activeStep = 'stock';
+                    nextAction = 'Lanjut Langkah 2 atau 3: isi stok awal dan/atau saldo kas/bank yang memang ada.';
+                } else if (!isValid) {
+                    activeStep = 'validate';
+                    nextAction = 'Lanjut Langkah 4: validasi draft sebelum posting.';
+                } else {
+                    activeStep = 'post';
+                    nextAction = 'Lanjut Langkah 5: posting saldo awal.';
+                }
+
+                if (el.nextActionLabel) {
+                    el.nextActionLabel.textContent = nextAction;
+                }
+
+                if (el.stepStatusCreate) {
+                    el.stepStatusCreate.textContent = hasSession ? 'Draft dibuat' : 'Isi tanggal dahulu';
+                }
+                if (el.stepStatusStock) {
+                    el.stepStatusStock.textContent = !hasSession ? 'Menunggu draft' : (hasStock ? `${state.stockLines.length} baris stok` : 'Opsional, isi jika ada');
+                }
+                if (el.stepStatusFund) {
+                    el.stepStatusFund.textContent = !hasSession ? 'Menunggu draft' : (hasFund ? `${state.fundLines.length} baris dana` : 'Opsional, isi jika ada');
+                }
+                if (el.stepStatusValidate) {
+                    el.stepStatusValidate.textContent = !hasLines ? 'Isi stok/kas dulu' : (isValid ? `Valid: ${formatCurrency(totals.debitTotal)}` : 'Siap divalidasi');
+                }
+                if (el.stepStatusPost) {
+                    el.stepStatusPost.textContent = isPosted ? 'Sudah diposting' : (isValid ? 'Siap posting' : 'Menunggu validasi');
+                }
+
+                setStepVisual(el.stepGuideCreate, activeStep === 'create', hasSession);
+                setStepVisual(el.stepGuideStock, activeStep === 'stock', !hasSession || isPosted);
+                setStepVisual(el.stepGuideFund, activeStep === 'stock', !hasSession || isPosted);
+                setStepVisual(el.stepGuideValidate, activeStep === 'validate', !hasLines || isPosted);
+                setStepVisual(el.stepGuidePost, activeStep === 'post', !isValid || isPosted);
+
+                setStepVisual(el.stepCreateCard, activeStep === 'create', hasSession && !isPosted);
+                setStepVisual(el.stepStockCard, activeStep === 'stock', !hasSession || isPosted);
+                setStepVisual(el.stepFundCard, activeStep === 'stock', !hasSession || isPosted);
+                setStepVisual(el.stepSummaryCard, activeStep === 'validate' || activeStep === 'post', !hasSession);
+                setStepVisual(el.stepValidateCard, activeStep === 'validate', !hasLines || isPosted);
+                setStepVisual(el.stepPostCard, activeStep === 'post', !isValid || isPosted);
             };
 
             const syncEditorButtons = () => {
@@ -1061,6 +1207,7 @@
                     setValidationMessage(state.validation.message || 'Draft belum valid.', 'invalid');
                 }
 
+                syncStepGuide();
                 setBusy(state.busy);
             };
 
@@ -1472,7 +1619,7 @@
 
                     applySession(payload?.session || state.session);
                     await loadOpeningHistory();
-                    setMessage('Saldo awal berhasil diposting dan periode awal dikunci.', 'success');
+                    setMessage('Saldo awal berhasil diposting dan draft saldo awal dikunci.', 'success');
                     el.validateBtn.disabled = true;
                     el.postBtn.disabled = true;
                     el.addStockBtn.disabled = true;
