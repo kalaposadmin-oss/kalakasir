@@ -119,6 +119,7 @@
                             <span class="material-symbols-outlined text-lg">verified_user</span>
                             <span data-close-label>Review & Tutup Buku</span>
                         </button>
+                        <div id="close-status" class="hidden rounded-xl border px-3 py-2 text-xs leading-relaxed"></div>
                     @endif
                 </div>
             </section>
@@ -154,6 +155,7 @@
                     end: document.getElementById('end-date'),
                     name: document.getElementById('period-name'),
                     create: document.getElementById('create-period'),
+                    closeStatus: document.getElementById('close-status'),
                     reason: document.getElementById('period-reason'),
                     list: document.getElementById('period-list'),
                     count: document.getElementById('period-count'),
@@ -173,15 +175,38 @@
                     }
 
                     const allChecked = reviewState.requiredKeys.every((key) => reviewState.checkedKeys.has(key));
-                    const disabled = reviewState.blocked || !allChecked;
+                    const disabled = reviewState.submitting || reviewState.blocked || !allChecked;
                     el.create.disabled = disabled;
                     el.create.classList.toggle('opacity-50', disabled);
                     el.create.classList.toggle('cursor-not-allowed', disabled);
                     el.create.querySelector('[data-close-label]')?.replaceChildren(
-                        document.createTextNode(reviewState.blocked
+                        document.createTextNode(reviewState.submitting
+                            ? 'Memproses Tutup Buku...'
+                            : (reviewState.blocked
                             ? 'Perbaiki Data Dulu'
-                            : (allChecked ? 'Review & Tutup Buku' : 'Centang Checklist Dulu'))
+                            : (allChecked ? 'Review & Tutup Buku' : 'Centang Checklist Dulu')))
                     );
+                };
+
+                const setCloseStatus = (type, message) => {
+                    if (!el.closeStatus) {
+                        return;
+                    }
+
+                    const tone = {
+                        info: 'border-blue-200 bg-blue-50 text-blue-800',
+                        success: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+                        error: 'border-rose-200 bg-rose-50 text-rose-800',
+                    }[type] || 'border-slate-200 bg-slate-50 text-slate-700';
+
+                    el.closeStatus.className = `rounded-xl border px-3 py-2 text-xs leading-relaxed ${tone}`;
+                    el.closeStatus.textContent = message;
+                    el.closeStatus.classList.remove('hidden');
+                };
+
+                const setSubmitting = (submitting) => {
+                    reviewState.submitting = submitting;
+                    syncCloseButtonState();
                 };
 
                 const formatDate = (value) => new Intl.DateTimeFormat('id-ID', {
@@ -470,68 +495,83 @@
 
                 el.create.addEventListener('click', async () => {
                     if (reviewState.blocked) {
-                        alert('Masih ada data yang wajib dibereskan. Buka langkah yang bermasalah, koreksi datanya, lalu muat ulang halaman.');
+                        setCloseStatus('error', 'Masih ada data yang wajib dibereskan. Buka langkah yang bermasalah, koreksi datanya, lalu muat ulang halaman.');
                         return;
                     }
                     if (!reviewState.requiredKeys.every((key) => reviewState.checkedKeys.has(key))) {
-                        alert('Centang semua langkah "Sudah saya cek" sebelum tutup buku.');
+                        setCloseStatus('error', 'Centang semua langkah "Sudah saya cek" sebelum tutup buku.');
                         return;
                     }
                     if (!el.start.value || !el.end.value) {
-                        alert('Lengkapi tanggal periode.');
+                        setCloseStatus('error', 'Lengkapi tanggal periode.');
                         return;
                     }
-                    const previewUrl = new URL('/api/v1/lock-periods/preview', window.location.origin);
-                    previewUrl.searchParams.set('start_date', el.start.value);
-                    previewUrl.searchParams.set('end_date', el.end.value);
+                    setSubmitting(true);
+                    setCloseStatus('info', 'Sedang mengecek ringkasan tutup buku...');
 
-                    const previewResponse = await fetch(previewUrl, { headers });
-                    if (!previewResponse.ok) {
-                        alert(await apiMessage(previewResponse, 'Gagal memuat preview tutup buku.'));
-                        return;
+                    try {
+                        const previewUrl = new URL('/api/v1/lock-periods/preview', window.location.origin);
+                        previewUrl.searchParams.set('start_date', el.start.value);
+                        previewUrl.searchParams.set('end_date', el.end.value);
+
+                        const previewResponse = await fetch(previewUrl, { headers });
+                        if (!previewResponse.ok) {
+                            setCloseStatus('error', await apiMessage(previewResponse, 'Gagal memuat preview tutup buku.'));
+                            return;
+                        }
+
+                        const preview = await previewResponse.json();
+                        const carry = preview.carry_forward || {};
+                        const checks = preview.checks || {};
+
+                        if (!checks.can_close) {
+                            setCloseStatus('error', `Periode belum bisa ditutup. Shift terbuka: ${checks.open_shift_count || 0}. Stok minus: ${checks.negative_stock_count || 0}.`);
+                            return;
+                        }
+
+                        const confirmed = window.confirm([
+                            'Tutup Buku',
+                            '',
+                            `Periode: ${formatDate(el.start.value)} - ${formatDate(el.end.value)}`,
+                            `Kas akhir: ${formatCurrency(carry.cash_balance || 0)}`,
+                            `Nilai stok: ${formatCurrency(carry.stock_value || 0)}`,
+                            `Hutang: ${formatCurrency(carry.supplier_debt || 0)}`,
+                            `Piutang: ${formatCurrency(carry.receivable_balance || 0)}`,
+                            '',
+                            'Transaksi pada periode ini akan dikunci. Lanjutkan?',
+                        ].join('\n'));
+
+                        if (!confirmed) {
+                            setCloseStatus('info', 'Tutup buku dibatalkan. Data belum dikunci.');
+                            return;
+                        }
+
+                        setCloseStatus('info', 'Sedang menutup periode dan menyimpan snapshot saldo...');
+
+                        const response = await fetch('/api/v1/lock-periods/close', {
+                            method: 'POST',
+                            headers: writeHeaders,
+                            body: JSON.stringify({
+                                start_date: el.start.value,
+                                end_date: el.end.value,
+                                name: el.name.value.trim() || null,
+                                reason: el.reason.value.trim() || null,
+                            }),
+                        });
+                        if (!response.ok) {
+                            setCloseStatus('error', await apiMessage(response, 'Gagal tutup buku.'));
+                            return;
+                        }
+
+                        const periods = await loadPeriods();
+                        renderPeriods(periods);
+                        setCloseStatus('success', `Berhasil tutup buku ${formatDate(el.start.value)} - ${formatDate(el.end.value)}. Periode sudah terkunci dan muncul di daftar periode akuntansi.`);
+                        el.list.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    } catch (error) {
+                        setCloseStatus('error', 'Gagal tutup buku karena koneksi atau sesi bermasalah. Refresh halaman lalu coba lagi.');
+                    } finally {
+                        setSubmitting(false);
                     }
-
-                    const preview = await previewResponse.json();
-                    const carry = preview.carry_forward || {};
-                    const checks = preview.checks || {};
-
-                    if (!checks.can_close) {
-                        alert(`Periode belum bisa ditutup.\nShift terbuka: ${checks.open_shift_count || 0}\nStok minus: ${checks.negative_stock_count || 0}`);
-                        return;
-                    }
-
-                    const confirmed = window.confirm([
-                        'Tutup Buku',
-                        '',
-                        `Periode: ${formatDate(el.start.value)} - ${formatDate(el.end.value)}`,
-                        `Kas akhir: ${formatCurrency(carry.cash_balance || 0)}`,
-                        `Nilai stok: ${formatCurrency(carry.stock_value || 0)}`,
-                        `Hutang: ${formatCurrency(carry.supplier_debt || 0)}`,
-                        `Piutang: ${formatCurrency(carry.receivable_balance || 0)}`,
-                        '',
-                        'Transaksi pada periode ini akan dikunci. Lanjutkan?',
-                    ].join('\n'));
-
-                    if (!confirmed) {
-                        return;
-                    }
-
-                    const response = await fetch('/api/v1/lock-periods/close', {
-                        method: 'POST',
-                        headers: writeHeaders,
-                        body: JSON.stringify({
-                            start_date: el.start.value,
-                            end_date: el.end.value,
-                            name: el.name.value.trim() || null,
-                            reason: el.reason.value.trim() || null,
-                        }),
-                    });
-                    if (!response.ok) {
-                        alert(await apiMessage(response, 'Gagal tutup buku.'));
-                        return;
-                    }
-                    const periods = await loadPeriods();
-                    renderPeriods(periods);
                 });
 
                 el.list.addEventListener('change', async (event) => {

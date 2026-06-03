@@ -19,6 +19,7 @@ use App\Support\PurchaseFlowResolver;
 use App\Support\PurchaseMode;
 use App\Support\PurchaseStatus;
 use App\Support\TenantContext;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -68,6 +69,7 @@ class PurchaseController extends Controller
                 Schema::hasColumn('purchases', 'subtotal') ? 'purchases.subtotal' : null,
                 Schema::hasColumn('purchases', 'tax_rate') ? 'purchases.tax_rate' : null,
                 Schema::hasColumn('purchases', 'tax') ? 'purchases.tax' : null,
+                Schema::hasColumn('purchases', 'additional_cost_total') ? 'purchases.additional_cost_total' : null,
                 'purchases.total',
                 'purchases.status',
                 'purchases.payment_method',
@@ -85,6 +87,7 @@ class PurchaseController extends Controller
             ->map(function ($purchase) use ($flowResolver, $tenantPurchaseMode) {
                 $subtotal = (float) ($purchase->subtotal ?? $purchase->total ?? 0);
                 $tax = (float) ($purchase->tax ?? 0);
+                $additionalCostTotal = (float) ($purchase->additional_cost_total ?? 0);
 
                 return [
                     'id' => $purchase->id,
@@ -96,6 +99,7 @@ class PurchaseController extends Controller
                     'subtotal' => $subtotal,
                     'tax_rate' => (float) ($purchase->tax_rate ?? 0),
                     'tax' => $tax,
+                    'additional_cost_total' => $additionalCostTotal,
                     'total' => (float) $purchase->total,
                     'item_count' => (int) $purchase->item_count,
                     'total_item_qty' => (float) $purchase->total_item_qty,
@@ -181,12 +185,15 @@ class PurchaseController extends Controller
                 return $item;
             });
 
+        $additionalCosts = $this->resolveAdditionalCosts($tenantId, $purchaseRow->id);
+
         return response()->json([
             'purchase' => [
                 'id' => $purchaseRow->id,
                 'subtotal' => (float) ($purchaseRow->subtotal ?? $purchaseRow->total ?? 0),
                 'tax_rate' => (float) ($purchaseRow->tax_rate ?? 0),
                 'tax' => (float) ($purchaseRow->tax ?? 0),
+                'additional_cost_total' => (float) ($purchaseRow->additional_cost_total ?? $additionalCosts->sum('amount')),
                 'total' => (float) $purchaseRow->total,
                 'status' => $purchaseRow->status,
                 'payment_method' => $purchaseRow->payment_method,
@@ -204,6 +211,7 @@ class PurchaseController extends Controller
                 'name' => $supplier->name,
             ] : null,
             'items' => $items,
+            'additional_costs' => $additionalCosts,
             'receipts' => $this->resolveReceiptHistory($tenantId, $purchaseRow->id),
             'flow' => [
                 'purchase_mode' => $flowResolver->resolveMode($purchaseRow->purchase_mode, $tenantPurchaseMode),
@@ -212,6 +220,25 @@ class PurchaseController extends Controller
                 'can_close' => $flowResolver->canClose((string) $purchaseRow->status, $purchaseRow->purchase_mode, $tenantPurchaseMode),
             ],
         ]);
+    }
+
+    private function resolveAdditionalCosts(?string $tenantId, string $purchaseId)
+    {
+        if (! $tenantId || ! Schema::hasTable('purchase_additional_costs')) {
+            return collect();
+        }
+
+        return DB::table('purchase_additional_costs')
+            ->where('tenant_id', $tenantId)
+            ->where('purchase_id', $purchaseId)
+            ->orderBy('created_at')
+            ->get(['id', 'name', 'category', 'amount', 'posted_at'])
+            ->map(function ($cost) {
+                $cost->amount = (float) $cost->amount;
+                $cost->posted = filled($cost->posted_at);
+
+                return $cost;
+            });
     }
 
     private function resolveReceiptHistory(?string $tenantId, string $purchaseId): array
@@ -303,6 +330,20 @@ class PurchaseController extends Controller
         return array_values($grouped);
     }
 
+    private function transactionDateBounds(): array
+    {
+        $timezone = TenantContext::get()?->timezone ?? config('app.timezone', 'UTC');
+        $today = CarbonImmutable::now($timezone)->startOfDay();
+        $maxBackdateDays = (int) config('app.max_backdate_days', 1);
+
+        return [
+            'min_date' => $today->subDays($maxBackdateDays)->toDateString(),
+            'max_date' => $today->toDateString(),
+            'max_backdate_days' => $maxBackdateDays,
+            'timezone' => $timezone,
+        ];
+    }
+
     public function store(Request $request)
     {
         $tenantId = TenantContext::id();
@@ -333,6 +374,10 @@ class PurchaseController extends Controller
             'items.*.qty' => ['required', 'numeric', 'min:0.01'],
             'items.*.purchase_unit' => ['nullable', 'string', 'max:30'],
             'items.*.price' => ['required', 'numeric', 'min:0'],
+            'additional_costs' => ['nullable', 'array'],
+            'additional_costs.*.name' => ['required_with:additional_costs', 'string', 'max:120'],
+            'additional_costs.*.category' => ['nullable', 'string', 'max:60'],
+            'additional_costs.*.amount' => ['required_with:additional_costs', 'numeric', 'min:0.01'],
             'tax_enabled' => ['nullable', 'boolean'],
             'tax_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'tax' => ['nullable', 'numeric', 'min:0'],
@@ -376,7 +421,10 @@ class PurchaseController extends Controller
         $taxRate = $taxEnabled ? (float) ($validated['tax_rate'] ?? 0) : 0.0;
         $tax = $taxEnabled ? (float) ($validated['tax'] ?? round($subtotal * ($taxRate / 100), 2)) : 0.0;
         $tax = max(0.0, round($tax, 2));
-        $total = round($subtotal + $tax, 2);
+        $additionalCostTotal = collect($validated['additional_costs'] ?? [])
+            ->sum(fn ($cost) => (float) ($cost['amount'] ?? 0));
+        $additionalCostTotal = max(0.0, round($additionalCostTotal, 2));
+        $total = round($subtotal + $tax + $additionalCostTotal, 2);
 
         try {
             $transactionDate = (new TransactionDateService())
@@ -397,7 +445,7 @@ class PurchaseController extends Controller
             return response()->json([
                 'code' => 'INVALID_TRANSACTION_DATE',
                 'message' => $exception->getMessage(),
-                'details' => [],
+                'details' => $this->transactionDateBounds(),
             ], 422);
         }
 
@@ -456,6 +504,7 @@ class PurchaseController extends Controller
             'subtotal' => $subtotal,
             'tax_rate' => $taxRate,
             'tax' => $tax,
+            'additional_cost_total' => $additionalCostTotal,
             'total' => $total,
             'payment_method' => $paymentMethod,
             'due_date' => $dueDate,
@@ -463,6 +512,7 @@ class PurchaseController extends Controller
             'notes' => $validated['notes'] ?? null,
             'transaction_date' => $transactionDate->toDateString(),
             'items' => $validated['items'],
+            'additional_costs' => $validated['additional_costs'] ?? [],
             'purchase_mode' => $purchaseMode,
         ];
 
@@ -521,6 +571,10 @@ class PurchaseController extends Controller
             'items.*.qty' => ['required', 'numeric', 'min:0.01'],
             'items.*.purchase_unit' => ['nullable', 'string', 'max:30'],
             'items.*.price' => ['required', 'numeric', 'min:0'],
+            'additional_costs' => ['nullable', 'array'],
+            'additional_costs.*.name' => ['required_with:additional_costs', 'string', 'max:120'],
+            'additional_costs.*.category' => ['nullable', 'string', 'max:60'],
+            'additional_costs.*.amount' => ['required_with:additional_costs', 'numeric', 'min:0.01'],
             'tax_enabled' => ['nullable', 'boolean'],
             'tax_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'tax' => ['nullable', 'numeric', 'min:0'],
@@ -545,7 +599,7 @@ class PurchaseController extends Controller
             return response()->json([
                 'code' => $exception->errorCode(),
                 'message' => $exception->getMessage(),
-                'details' => [],
+                'details' => $this->transactionDateBounds(),
             ], $exception->status());
         } catch (InvalidArgumentException $exception) {
             if ($tenantId) {
@@ -563,7 +617,7 @@ class PurchaseController extends Controller
             return response()->json([
                 'code' => 'INVALID_TRANSACTION_DATE',
                 'message' => $exception->getMessage(),
-                'details' => [],
+                'details' => $this->transactionDateBounds(),
             ], 422);
         } catch (ValidationException $exception) {
             return response()->json([
@@ -579,7 +633,7 @@ class PurchaseController extends Controller
             return response()->json([
                 'code' => $code,
                 'message' => $exception->getMessage(),
-                'details' => [],
+                'details' => $this->transactionDateBounds(),
             ], 422);
         }
     }
@@ -757,7 +811,7 @@ class PurchaseController extends Controller
             return response()->json([
                 'code' => $exception->errorCode(),
                 'message' => $exception->getMessage(),
-                'details' => [],
+                'details' => $this->transactionDateBounds(),
             ], $exception->status());
         } catch (InvalidArgumentException $exception) {
             if ($tenantId) {
@@ -775,7 +829,7 @@ class PurchaseController extends Controller
             return response()->json([
                 'code' => 'INVALID_TRANSACTION_DATE',
                 'message' => $exception->getMessage(),
-                'details' => [],
+                'details' => $this->transactionDateBounds(),
             ], 422);
         }
 
@@ -818,7 +872,7 @@ class PurchaseController extends Controller
             return response()->json([
                 'code' => 'INVALID_TRANSACTION_DATE',
                 'message' => $exception->getMessage(),
-                'details' => [],
+                'details' => $this->transactionDateBounds(),
             ], 422);
         } catch (ValidationException $exception) {
             return response()->json([
@@ -901,6 +955,7 @@ class PurchaseController extends Controller
                     'subtotal' => (float) ($purchaseRow->subtotal ?? $purchaseRow->total),
                     'tax_rate' => (float) ($purchaseRow->tax_rate ?? 0),
                     'tax' => (float) ($purchaseRow->tax ?? 0),
+                    'additional_cost_total' => (float) ($purchaseRow->additional_cost_total ?? 0),
                     'total' => (float) $purchaseRow->total,
                 ],
             ]);
@@ -925,6 +980,9 @@ class PurchaseController extends Controller
             return response()->json([
                 'purchase' => [
                     'id' => $result['purchase']->id,
+                    'subtotal' => (float) ($result['purchase']->subtotal ?? $result['purchase']->total),
+                    'tax' => (float) ($result['purchase']->tax ?? 0),
+                    'additional_cost_total' => (float) ($result['purchase']->additional_cost_total ?? 0),
                     'total' => (float) $result['purchase']->total,
                     'status' => $result['purchase']->status,
                 ],

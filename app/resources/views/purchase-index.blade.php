@@ -156,6 +156,8 @@
                 rows.forEach((purchase) => {
                     const status = normalizePurchaseStatus(purchase.status || 'draft');
                     const statusLabel = purchaseStatusLabels[status] || purchaseStatusLabels.draft;
+                    const subtotal = Number(purchase.subtotal || 0);
+                    const additionalCost = Number(purchase.additional_cost_total || 0);
                     const detailPath = portalPrefix === '/pos'
                         ? `${portalPrefix}/receiving/${encodeURIComponent(purchase.id)}`
                         : `${portalPrefix}/purchases/${encodeURIComponent(purchase.id)}`;
@@ -190,6 +192,17 @@
                                 <p class="mt-1 font-black text-primary">${rupiah(purchase.total || 0)}</p>
                             </div>
                         </div>
+                        ${additionalCost > 0 ? `
+                            <div class="mt-2 flex items-center justify-between rounded-xl border border-orange-100 bg-orange-50 px-3 py-2 text-xs dark:border-orange-900/40 dark:bg-orange-950/20">
+                                <span class="font-semibold text-orange-700 dark:text-orange-300">Biaya tambahan</span>
+                                <span class="font-black text-orange-700 dark:text-orange-300">${rupiah(additionalCost)}</span>
+                            </div>
+                        ` : `
+                            <div class="mt-2 flex items-center justify-between px-1 text-[11px] text-slate-400">
+                                <span>Nilai barang</span>
+                                <span>${rupiah(subtotal || purchase.total || 0)}</span>
+                            </div>
+                        `}
                     `;
                     el.list.appendChild(row);
                 });

@@ -92,7 +92,8 @@ class PurchaseService
                 $tax = 0.0;
             }
             $tax = max(0.0, round($tax, 2));
-            $total = round($subtotal + $tax, 2);
+            $additionalCostTotal = $this->additionalCostTotal($payload['additional_costs'] ?? []);
+            $total = round($subtotal + $tax + $additionalCostTotal, 2);
 
             $paymentMethod = $payload['payment_method'] ?? (string) ($purchase->payment_method ?? 'tempo');
             $paymentMethod = in_array($paymentMethod, ['tunai', 'tempo'], true) ? $paymentMethod : 'tempo';
@@ -113,6 +114,9 @@ class PurchaseService
                 'subtotal' => $subtotal,
                 'tax_rate' => $taxRate,
                 'tax' => $tax,
+                'additional_cost_total' => Schema::hasColumn('purchases', 'additional_cost_total')
+                    ? $additionalCostTotal
+                    : ($purchase->additional_cost_total ?? 0),
                 'total' => $total,
                 'payment_method' => $paymentMethod,
                 'due_date' => $dueDate,
@@ -130,12 +134,15 @@ class PurchaseService
                 $this->buildPurchaseItemRows($tenantId, (string) $purchase->id, $items)
             );
 
+            $this->replaceAdditionalCosts($tenantId, (string) $purchase->id, $payload['additional_costs'] ?? []);
+
             return [
                 'purchase_id' => (string) $purchase->id,
                 'status' => (string) $purchase->status,
                 'subtotal' => $subtotal,
                 'tax_rate' => $taxRate,
                 'tax' => $tax,
+                'additional_cost_total' => $additionalCostTotal,
                 'total' => $total,
                 'transaction_date' => $transactionDate->toDateString(),
             ];
@@ -366,13 +373,17 @@ class PurchaseService
                 'purchase_price' => $price,
             ]);
 
-            $purchaseTotal = (float) (PurchaseItem::query()
+            $purchaseSubtotal = (float) (PurchaseItem::query()
                 ->where('tenant_id', $tenantId)
                 ->where('purchase_id', $purchase->id)
-                ->selectRaw('COALESCE(SUM(qty * price), 0) as total')
+                ->selectRaw('COALESCE(SUM(purchase_qty * purchase_price), SUM(qty * price), 0) as total')
                 ->value('total') ?? 0);
+            $tax = (float) ($purchase->tax ?? 0);
+            $additionalCostTotal = (float) ($purchase->additional_cost_total ?? 0);
+            $purchaseTotal = round($purchaseSubtotal + $tax + $additionalCostTotal, 2);
 
             $purchase->update([
+                'subtotal' => round($purchaseSubtotal, 2),
                 'total' => $purchaseTotal,
             ]);
 
@@ -416,7 +427,8 @@ class PurchaseService
             $taxRate = $taxEnabled ? (float) ($payload['tax_rate'] ?? 0) : 0.0;
             $tax = $taxEnabled ? (float) ($payload['tax'] ?? round($subtotal * ($taxRate / 100), 2)) : 0.0;
             $tax = max(0.0, round($tax, 2));
-            $total = round($subtotal + $tax, 2);
+            $additionalCostTotal = (float) ($purchase->additional_cost_total ?? 0);
+            $total = round($subtotal + $tax + $additionalCostTotal, 2);
 
             $purchase->update([
                 'subtotal' => $subtotal,
@@ -479,13 +491,63 @@ class PurchaseService
         ] + (Schema::hasColumn('purchases', 'subtotal') ? ['subtotal' => $payload['subtotal'] ?? $payload['total']] : [])
             + (Schema::hasColumn('purchases', 'tax_rate') ? ['tax_rate' => $payload['tax_rate'] ?? 0] : [])
             + (Schema::hasColumn('purchases', 'tax') ? ['tax' => $payload['tax'] ?? 0] : [])
+            + (Schema::hasColumn('purchases', 'additional_cost_total') ? ['additional_cost_total' => $payload['additional_cost_total'] ?? 0] : [])
             + (Schema::hasColumn('purchases', 'purchase_mode') ? ['purchase_mode' => $purchaseMode] : []));
 
         PurchaseItem::query()->insert(
             $this->buildPurchaseItemRows($tenantId, $purchaseId, $payload['items'] ?? [])
         );
 
+        $this->replaceAdditionalCosts($tenantId, $purchaseId, $payload['additional_costs'] ?? []);
+
         return Purchase::query()->where('tenant_id', $tenantId)->where('id', $purchaseId)->firstOrFail();
+    }
+
+    private function additionalCostTotal(array $costs): float
+    {
+        return Decimal::float(collect($costs)->reduce(
+            fn ($carry, $cost) => Decimal::add($carry, Decimal::money($cost['amount'] ?? 0), Decimal::MONEY_SCALE),
+            Decimal::money(0)
+        ), Decimal::MONEY_SCALE);
+    }
+
+    private function replaceAdditionalCosts(string $tenantId, string $purchaseId, array $costs): void
+    {
+        if (! Schema::hasTable('purchase_additional_costs')) {
+            return;
+        }
+
+        DB::table('purchase_additional_costs')
+            ->where('tenant_id', $tenantId)
+            ->where('purchase_id', $purchaseId)
+            ->delete();
+
+        $rows = collect($costs)
+            ->map(function ($cost): array {
+                return [
+                    'name' => trim((string) ($cost['name'] ?? '')),
+                    'category' => trim((string) ($cost['category'] ?? 'packaging')) ?: 'packaging',
+                    'amount' => Decimal::float(Decimal::money($cost['amount'] ?? 0), Decimal::MONEY_SCALE),
+                ];
+            })
+            ->filter(fn (array $cost): bool => $cost['name'] !== '' && $cost['amount'] > 0)
+            ->values()
+            ->map(fn (array $cost): array => [
+                'id' => (string) Str::uuid(),
+                'tenant_id' => $tenantId,
+                'purchase_id' => $purchaseId,
+                'name' => $cost['name'],
+                'category' => $cost['category'],
+                'amount' => $cost['amount'],
+                'posted_at' => null,
+                'created_at' => CarbonImmutable::now('UTC'),
+                'updated_at' => CarbonImmutable::now('UTC'),
+            ])
+            ->all();
+
+        if ($rows) {
+            DB::table('purchase_additional_costs')->insert($rows);
+        }
     }
 
     private function buildPurchaseItemRows(string $tenantId, string $purchaseId, array $payloadItems): array
@@ -619,6 +681,7 @@ class PurchaseService
 
         $ledgerRows = [];
         $totalReceivedValue = Decimal::money(0);
+        $totalAdditionalCost = Decimal::money(0);
         $receivedCount = 0;
 
         foreach ($items as $item) {
@@ -727,6 +790,21 @@ class PurchaseService
             throw new RuntimeException('Tidak ada item yang diterima.');
         }
 
+        $additionalCostIds = [];
+        if (Schema::hasTable('purchase_additional_costs')) {
+            $additionalCosts = DB::table('purchase_additional_costs')
+                ->where('tenant_id', $tenantId)
+                ->where('purchase_id', $purchase->id)
+                ->whereNull('posted_at')
+                ->lockForUpdate()
+                ->get(['id', 'amount']);
+
+            foreach ($additionalCosts as $cost) {
+                $totalAdditionalCost = Decimal::add($totalAdditionalCost, Decimal::money($cost->amount ?? 0), Decimal::MONEY_SCALE);
+                $additionalCostIds[] = (string) $cost->id;
+            }
+        }
+
         StockLedger::query()->insert($ledgerRows);
 
         $this->createJournalEntries(
@@ -734,11 +812,22 @@ class PurchaseService
             purchaseId: $purchase->id,
             paymentMethod: (string) ($purchase->payment_method ?? 'tempo'),
             cashAccountId: $purchase->cash_account_id ? (string) $purchase->cash_account_id : null,
-            total: Decimal::float($totalReceivedValue, Decimal::MONEY_SCALE),
+            inventoryTotal: Decimal::float($totalReceivedValue, Decimal::MONEY_SCALE),
+            additionalCostTotal: Decimal::float($totalAdditionalCost, Decimal::MONEY_SCALE),
             userId: $userId,
             now: $now,
             transactionDate: $transactionDate
         );
+
+        if ($additionalCostIds) {
+            DB::table('purchase_additional_costs')
+                ->where('tenant_id', $tenantId)
+                ->whereIn('id', $additionalCostIds)
+                ->update([
+                    'posted_at' => $now,
+                    'updated_at' => $now,
+                ]);
+        }
 
         $hasRemaining = PurchaseItem::query()
             ->where('tenant_id', $tenantId)
@@ -764,6 +853,7 @@ class PurchaseService
         return [
             'status' => $purchase->status,
             'received_total' => Decimal::float($totalReceivedValue, Decimal::MONEY_SCALE),
+            'additional_cost_total' => Decimal::float($totalAdditionalCost, Decimal::MONEY_SCALE),
         ];
     }
 
@@ -786,7 +876,8 @@ class PurchaseService
         string $purchaseId,
         string $paymentMethod,
         ?string $cashAccountId,
-        float $total,
+        float $inventoryTotal,
+        float $additionalCostTotal,
         ?string $userId,
         CarbonImmutable $now,
         CarbonImmutable $transactionDate
@@ -825,19 +916,36 @@ class PurchaseService
                 'journal_entry_id' => $journalEntryId,
                 'tenant_id' => $tenantId,
                 'account_id' => $mapping->inventory_account_id,
-                'debit' => $total,
+                'debit' => $inventoryTotal,
                 'credit' => 0,
                 'is_reversal' => false,
             ],
-            [
+        ];
+
+        if ($additionalCostTotal > 0) {
+            if (! $mapping->expense_adjustment_account_id) {
+                throw new RuntimeException('Akun beban biaya tambahan purchase belum ditentukan.');
+            }
+
+            $journalItems[] = [
                 'id' => (string) Str::uuid(),
                 'journal_entry_id' => $journalEntryId,
                 'tenant_id' => $tenantId,
-                'account_id' => $creditAccountId,
-                'debit' => 0,
-                'credit' => $total,
+                'account_id' => $mapping->expense_adjustment_account_id,
+                'debit' => $additionalCostTotal,
+                'credit' => 0,
                 'is_reversal' => false,
-            ],
+            ];
+        }
+
+        $journalItems[] = [
+            'id' => (string) Str::uuid(),
+            'journal_entry_id' => $journalEntryId,
+            'tenant_id' => $tenantId,
+            'account_id' => $creditAccountId,
+            'debit' => 0,
+            'credit' => $inventoryTotal + $additionalCostTotal,
+            'is_reversal' => false,
         ];
 
         JournalItem::query()->insert($journalItems);

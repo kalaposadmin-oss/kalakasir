@@ -48,6 +48,47 @@ class PurchaseItemPriceUpdateTest extends TestCase
         ]);
     }
 
+    public function test_update_purchase_item_price_keeps_tax_and_additional_costs_in_purchase_total(): void
+    {
+        [$tenant, $user] = $this->bootApiActor('admin', 'purchase-item-price-edit-cost@example.test');
+        $fixture = $this->seedCheckoutFixture($tenant->id, $user->id);
+        $supplierId = $this->insertSupplier($tenant->id, 'Supplier Harga Biaya');
+
+        $purchaseId = $this->createPurchase($tenant->id, $supplierId, $fixture['location_id'], $fixture['product_id'], [
+            [
+                'name' => 'Kardus',
+                'category' => 'packaging',
+                'amount' => 2500,
+            ],
+        ]);
+        DB::table('purchases')
+            ->where('id', $purchaseId)
+            ->where('tenant_id', $tenant->id)
+            ->update([
+                'tax_rate' => 10,
+                'tax' => 1000,
+                'total' => 13500,
+            ]);
+        $itemId = (string) DB::table('purchase_items')->where('purchase_id', $purchaseId)->value('id');
+
+        $response = $this->withHeaders($this->tenantHeaders($tenant->id))
+            ->patchJson('/api/v1/purchases/'.$purchaseId.'/items/'.$itemId.'/price', [
+                'price' => 12500,
+            ]);
+
+        $response->assertOk()
+            ->assertJsonPath('purchase.total', 16000);
+
+        $this->assertDatabaseHas('purchases', [
+            'id' => $purchaseId,
+            'tenant_id' => $tenant->id,
+            'subtotal' => 12500,
+            'tax' => 1000,
+            'additional_cost_total' => 2500,
+            'total' => 16000,
+        ]);
+    }
+
     public function test_update_purchase_item_price_is_blocked_after_receiving_started(): void
     {
         [$tenant, $user] = $this->bootApiActor('admin', 'purchase-item-price-blocked@example.test');
@@ -74,7 +115,7 @@ class PurchaseItemPriceUpdateTest extends TestCase
             ->assertJsonPath('message', 'Harga hanya bisa diubah sebelum penerimaan barang dimulai.');
     }
 
-    private function createPurchase(string $tenantId, string $supplierId, string $locationId, string $productId): string
+    private function createPurchase(string $tenantId, string $supplierId, string $locationId, string $productId, array $additionalCosts = []): string
     {
         $response = $this->withHeaders($this->tenantHeaders($tenantId))
             ->postJson('/api/v1/purchases', [
@@ -82,6 +123,7 @@ class PurchaseItemPriceUpdateTest extends TestCase
                 'location_id' => $locationId,
                 'status' => PurchaseStatus::SUBMITTED,
                 'payment_method' => 'tempo',
+                'additional_costs' => $additionalCosts,
                 'items' => [
                     [
                         'product_id' => $productId,

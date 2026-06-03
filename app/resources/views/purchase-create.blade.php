@@ -23,6 +23,11 @@
     $purchasePortalPrefix = request()->is('pos/*') ? '/pos' : '/backoffice';
     $purchaseListUrl = $purchasePortalPrefix.'/purchases';
     $purchaseDetailUrl = $purchasePortalPrefix.'/purchases';
+    $purchaseMaxBackdateDays = (int) config('app.max_backdate_days', 1);
+    $purchaseTimezone = $purchaseCreateTenant?->timezone ?? config('app.timezone', 'Asia/Jakarta');
+    $purchaseToday = \Carbon\CarbonImmutable::now($purchaseTimezone)->startOfDay();
+    $purchaseMinDate = $purchaseToday->subDays($purchaseMaxBackdateDays)->toDateString();
+    $purchaseMaxDate = $purchaseToday->toDateString();
 @endphp
 
 @section('page_title', 'Form Buat PO Baru')
@@ -69,7 +74,8 @@
                     </div>
                     <div class="flex-1">
                         <label class="text-xs text-slate-400 block" for="order-date">Tanggal Pesanan</label>
-                        <input id="order-date" class="mt-1 h-9 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-800" type="date" />
+                        <input id="order-date" class="mt-1 h-9 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-800" type="date" min="{{ $purchaseMinDate }}" max="{{ $purchaseMaxDate }}" />
+                        <p id="order-date-hint" class="mt-1 text-[11px] font-semibold text-slate-400">Boleh tanggal {{ $purchaseMinDate }} sampai {{ $purchaseMaxDate }}.</p>
                     </div>
                 </div>
             </div>
@@ -106,11 +112,12 @@
     <section class="space-y-3">
         <div class="flex items-center justify-between px-1">
             <h3 class="text-[13px] font-semibold text-slate-500 uppercase tracking-wider">Item Produk</h3>
-            <button class="text-primary text-xs font-bold flex items-center gap-1" type="button">
-                <span class="material-symbols-outlined text-sm">barcode_scanner</span>
-                Scan Barcode
+            <button id="refresh-products" class="text-primary text-xs font-bold flex items-center gap-1" type="button">
+                <span class="material-symbols-outlined text-sm">sync</span>
+                Refresh Produk
             </button>
         </div>
+        <p id="product-refresh-status" class="hidden px-1 text-xs font-semibold text-slate-500"></p>
         <div class="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4" id="item-container"></div>
         <button id="add-item" class="w-full h-11 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl text-slate-400 text-sm font-semibold flex items-center justify-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors" type="button">
             <span class="material-symbols-outlined">add_circle</span>
@@ -121,6 +128,10 @@
         <div class="flex justify-between items-center text-sm">
             <span class="text-slate-500">Subtotal</span>
             <span class="font-medium" id="subtotal">Rp 0</span>
+        </div>
+        <div class="flex justify-between items-center text-sm">
+            <span class="text-slate-500">Biaya Tambahan</span>
+            <span class="font-medium" id="additional-cost-total">Rp 0</span>
         </div>
         <div class="flex items-center justify-between gap-3 text-sm">
             <div class="flex items-center gap-2">
@@ -139,6 +150,19 @@
             <span class="text-base font-bold text-slate-900 dark:text-white">Total Estimasi</span>
             <span class="text-lg font-bold text-primary tracking-tight" id="total">Rp 0</span>
         </div>
+    </section>
+    <section class="space-y-3">
+        <div class="flex items-center justify-between px-1">
+            <div>
+                <h3 class="text-[13px] font-semibold text-slate-500 uppercase tracking-wider">Biaya Tambahan</h3>
+                <p class="mt-1 text-xs text-slate-400">Untuk plastik, kardus, ongkir, atau biaya supplier yang tidak menambah stok barang.</p>
+            </div>
+            <button id="add-additional-cost" class="inline-flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1.5 text-[11px] font-bold text-primary" type="button">
+                <span class="material-symbols-outlined text-sm">add</span>
+                Tambah
+            </button>
+        </div>
+        <div id="additional-cost-list" class="space-y-3"></div>
     </section>
     <section class="space-y-1.5 px-1">
         <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider">Catatan Opsional</label>
@@ -192,14 +216,21 @@
                 const purchaseStatusSubmitted = @json(\App\Support\PurchaseStatus::SUBMITTED);
                 const purchaseModeSimple = @json(\App\Support\PurchaseMode::SIMPLE);
                 const purchaseModePoShort = @json(\App\Support\PurchaseMode::PO_SHORT);
+                const maxBackdateDays = @json($purchaseMaxBackdateDays);
                 const cashAccountManageUrl = '/backoffice/settings/chart-of-accounts';
 
                 const el = {
                     supplier: document.getElementById('supplier-select'),
                     orderDate: document.getElementById('order-date'),
+                    orderDateHint: document.getElementById('order-date-hint'),
                     container: document.getElementById('item-container'),
                     addItem: document.getElementById('add-item'),
+                    refreshProducts: document.getElementById('refresh-products'),
+                    productRefreshStatus: document.getElementById('product-refresh-status'),
                     subtotal: document.getElementById('subtotal'),
+                    additionalCostTotal: document.getElementById('additional-cost-total'),
+                    additionalCostList: document.getElementById('additional-cost-list'),
+                    addAdditionalCost: document.getElementById('add-additional-cost'),
                     taxEnabled: document.getElementById('tax-enabled'),
                     taxRateWrapper: document.getElementById('tax-rate-wrapper'),
                     taxRate: document.getElementById('tax-rate'),
@@ -244,8 +275,49 @@
                     return `${yyyy}-${mm}-${dd}`;
                 };
 
+                const currentAllowedDateRange = () => {
+                    const max = new Date();
+                    max.setHours(0, 0, 0, 0);
+                    const min = new Date(max);
+                    min.setDate(min.getDate() - maxBackdateDays);
+
+                    return {
+                        min: localDateInputValue(min),
+                        max: localDateInputValue(max),
+                    };
+                };
+
+                const syncOrderDateBounds = () => {
+                    const range = currentAllowedDateRange();
+                    el.orderDate.min = range.min;
+                    el.orderDate.max = range.max;
+                    if (el.orderDateHint) {
+                        el.orderDateHint.textContent = `Boleh tanggal ${range.min} sampai ${range.max}.`;
+                    }
+
+                    return range;
+                };
+
                 const setDefaultOrderDate = () => {
+                    syncOrderDateBounds();
                     el.orderDate.value = localDateInputValue();
+                };
+
+                const validateOrderDate = () => {
+                    const range = syncOrderDateBounds();
+                    const value = el.orderDate.value || '';
+                    const valid = value >= range.min && value <= range.max;
+                    if (el.orderDateHint) {
+                        el.orderDateHint.classList.toggle('text-rose-600', !valid);
+                        el.orderDateHint.classList.toggle('text-slate-400', valid);
+                    }
+
+                    if (!valid) {
+                        alert(`Tanggal pesanan ${value || '-'} tidak bisa dipakai. Pilih tanggal ${range.min} sampai ${range.max}.`);
+                        el.orderDate.focus();
+                    }
+
+                    return valid;
                 };
 
                 const setDefaultDueDate = () => {
@@ -285,6 +357,62 @@
 
                 const buildProductOptions = () => {
                     return state.products.map((product) => `<option value="${product.id}">${product.name}</option>`).join('');
+                };
+
+                const setProductRefreshStatus = (message, tone = 'info') => {
+                    if (!el.productRefreshStatus) {
+                        return;
+                    }
+
+                    el.productRefreshStatus.textContent = message;
+                    el.productRefreshStatus.classList.toggle('hidden', !message);
+                    el.productRefreshStatus.className = `px-1 text-xs font-semibold ${
+                        tone === 'success' ? 'text-emerald-600' : (tone === 'error' ? 'text-rose-600' : 'text-slate-500')
+                    }${message ? '' : ' hidden'}`;
+                };
+
+                const syncProductSelectOptions = () => {
+                    el.container.querySelectorAll('.product-select').forEach((select) => {
+                        const selectedProductId = select.value;
+                        const selectedLabel = select.options[select.selectedIndex]?.textContent || 'Produk belum ada di daftar';
+                        const productStillExists = state.products.some((product) => product.id === selectedProductId);
+
+                        select.innerHTML = `
+                            <option value="">Pilih Produk...</option>
+                            ${selectedProductId && !productStillExists ? `<option value="${selectedProductId}">${selectedLabel}</option>` : ''}
+                            ${buildProductOptions()}
+                        `;
+                        select.value = selectedProductId;
+                        updateRowUnit(select.closest('.space-y-4'), selectedProductId);
+                    });
+                };
+
+                const refreshProducts = async ({ silent = false } = {}) => {
+                    if (state.refreshingProducts) {
+                        return;
+                    }
+
+                    state.refreshingProducts = true;
+                    el.refreshProducts?.setAttribute('disabled', 'disabled');
+                    el.refreshProducts?.classList.add('opacity-60');
+                    if (!silent) {
+                        setProductRefreshStatus('Memuat ulang daftar produk...');
+                    }
+
+                    try {
+                        state.products = await loadProducts();
+                        syncProductSelectOptions();
+                        recalcTotals();
+                        setProductRefreshStatus(`Daftar produk diperbarui. Total ${state.products.length} produk tersedia.`, 'success');
+                    } catch (error) {
+                        if (!silent) {
+                            setProductRefreshStatus('Gagal refresh produk. Coba lagi tanpa reload halaman.', 'error');
+                        }
+                    } finally {
+                        state.refreshingProducts = false;
+                        el.refreshProducts?.removeAttribute('disabled');
+                        el.refreshProducts?.classList.remove('opacity-60');
+                    }
                 };
 
                 const buildSupplierOptions = () => {
@@ -394,6 +522,59 @@
                     });
                 };
 
+                const addAdditionalCostRow = (cost = {}) => {
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'additional-cost-row rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900';
+                    wrapper.innerHTML = `
+                        <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_9rem_2.5rem] sm:items-end">
+                            <div>
+                                <label class="block text-xs font-medium text-slate-400 mb-1.5 ml-1">Nama Biaya</label>
+                                <input class="additional-cost-name w-full h-11 rounded-xl border-0 bg-slate-50 px-3 text-sm font-semibold focus:ring-2 focus:ring-primary/20 dark:bg-slate-800" placeholder="Contoh: Plastik / Kardus / Ongkir" value="${cost.name || ''}" type="text" />
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-400 mb-1.5 ml-1">Nominal</label>
+                                <div class="relative">
+                                    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">Rp</span>
+                                    <input class="additional-cost-amount w-full h-11 rounded-xl border-0 bg-slate-50 pl-9 pr-3 text-sm font-bold focus:ring-2 focus:ring-primary/20 dark:bg-slate-800" placeholder="0" value="${cost.amount || ''}" min="0" type="number" />
+                                </div>
+                            </div>
+                            <button class="remove-additional-cost flex size-10 items-center justify-center rounded-xl bg-rose-50 text-rose-600" type="button" aria-label="Hapus biaya tambahan">
+                                <span class="material-symbols-outlined text-lg">delete</span>
+                            </button>
+                        </div>
+                        <select class="additional-cost-category mt-3 w-full h-10 rounded-xl border-0 bg-slate-50 px-3 text-xs font-bold text-slate-600 focus:ring-2 focus:ring-primary/20 dark:bg-slate-800 dark:text-slate-300">
+                            <option value="packaging">Kemasan / Packaging</option>
+                            <option value="shipping">Ongkir / Pengiriman</option>
+                            <option value="admin">Biaya Admin</option>
+                            <option value="other">Lainnya</option>
+                        </select>
+                    `;
+                    el.additionalCostList.appendChild(wrapper);
+                    wrapper.querySelector('.additional-cost-category').value = cost.category || 'packaging';
+                    wrapper.querySelectorAll('input, select').forEach((input) => {
+                        input.addEventListener('input', recalcTotals);
+                        input.addEventListener('change', recalcTotals);
+                    });
+                    wrapper.querySelector('.remove-additional-cost').addEventListener('click', () => {
+                        wrapper.remove();
+                        recalcTotals();
+                    });
+                };
+
+                const collectAdditionalCosts = () => {
+                    const costs = [];
+                    el.additionalCostList.querySelectorAll('.additional-cost-row').forEach((row) => {
+                        const name = row.querySelector('.additional-cost-name')?.value.trim() || '';
+                        const amount = parseFloat(row.querySelector('.additional-cost-amount')?.value || '0');
+                        const category = row.querySelector('.additional-cost-category')?.value || 'packaging';
+                        if (name && amount > 0) {
+                            costs.push({ name, category, amount });
+                        }
+                    });
+
+                    return costs;
+                };
+
                 const recalcTotals = () => {
                     let subtotal = 0;
                     el.container.querySelectorAll('.product-select').forEach((select) => {
@@ -428,9 +609,11 @@
                     const taxEnabled = el.taxEnabled?.checked ?? false;
                     const taxRate = taxEnabled ? Math.max(0, parseFloat(el.taxRate?.value || '0')) : 0;
                     const tax = subtotal * (taxRate / 100);
-                    const total = subtotal + tax;
+                    const additionalCostTotal = collectAdditionalCosts().reduce((sum, cost) => sum + Number(cost.amount || 0), 0);
+                    const total = subtotal + tax + additionalCostTotal;
                     syncTaxFields();
                     el.subtotal.textContent = formatCurrency(subtotal);
+                    el.additionalCostTotal.textContent = formatCurrency(additionalCostTotal);
                     el.tax.textContent = formatCurrency(tax);
                     el.total.textContent = formatCurrency(total);
                 };
@@ -555,10 +738,12 @@
 
                     const totalQty = items.reduce((sum, item) => sum + Number(item.qty || 0), 0);
                     const subtotalValue = items.reduce((sum, item) => sum + (Number(item.qty || 0) * Number(item.price || 0)), 0);
+                    const additionalCosts = collectAdditionalCosts();
+                    const additionalCostValue = additionalCosts.reduce((sum, cost) => sum + Number(cost.amount || 0), 0);
                     const taxEnabled = el.taxEnabled?.checked ?? false;
                     const taxRate = taxEnabled ? Math.max(0, parseFloat(el.taxRate?.value || '0')) : 0;
                     const taxValue = taxEnabled ? subtotalValue * (taxRate / 100) : 0;
-                    const totalValue = subtotalValue + taxValue;
+                    const totalValue = subtotalValue + taxValue + additionalCostValue;
                     const supplierName = el.supplier.options[el.supplier.selectedIndex]?.textContent || '-';
                     const paymentMethod = el.paymentMethod.value || 'tempo';
                     const dueDate = paymentMethod === 'tempo' ? (el.dueDate.value || null) : null;
@@ -567,6 +752,10 @@
 
                     if (!transactionDate) {
                         alert('Tanggal pesanan wajib diisi.');
+                        return;
+                    }
+
+                    if (!validateOrderDate()) {
                         return;
                     }
 
@@ -586,7 +775,7 @@
                             : status === purchaseStatusDraft
                                 ? 'Simpan sebagai Draft'
                                 : 'Konfirmasi dan Buat PO',
-                        message: `Supplier: ${supplierName}\nItem: ${items.length}\nTotal Qty: ${totalQty}\nSubtotal: ${formatCurrency(subtotalValue)}\nPajak: ${formatCurrency(taxValue)}\nEstimasi Nilai: ${formatCurrency(totalValue)}`,
+                        message: `Supplier: ${supplierName}\nItem: ${items.length}\nTotal Qty: ${totalQty}\nSubtotal: ${formatCurrency(subtotalValue)}\nBiaya tambahan: ${formatCurrency(additionalCostValue)}\nPajak: ${formatCurrency(taxValue)}\nEstimasi Nilai: ${formatCurrency(totalValue)}`,
                         icon: purchaseMode === purchaseModeSimple ? 'inventory_2' : 'shopping_cart_checkout',
                     });
                     if (!allowed) {
@@ -616,6 +805,7 @@
                                     tax_enabled: taxEnabled,
                                     tax_rate: taxRate,
                                     tax: taxValue,
+                                    additional_costs: additionalCosts,
                                     notes: el.notes.value.trim() || null,
                                     items,
                                 }),
@@ -629,6 +819,24 @@
                                     const available = mapped.details?.available_cash || 0;
                                     const required = mapped.details?.required_amount || 0;
                                     alert(`Saldo ${getActiveCashAccountLabel()} tidak cukup. Tersedia ${formatCurrency(available)}, dibutuhkan ${formatCurrency(required)}.`);
+                                    return;
+                                }
+                                if (mapped.code === 'INVALID_TRANSACTION_DATE') {
+                                    const minDate = mapped.details?.min_date;
+                                    const maxDate = mapped.details?.max_date;
+                                    if (minDate && maxDate) {
+                                        alert(`Tanggal pesanan ${transactionDate || '-'} tidak bisa dipakai. Pilih tanggal ${minDate} sampai ${maxDate}.`);
+                                        el.orderDate.min = minDate;
+                                        el.orderDate.max = maxDate;
+                                        if (el.orderDateHint) {
+                                            el.orderDateHint.textContent = `Boleh tanggal ${minDate} sampai ${maxDate}.`;
+                                            el.orderDateHint.classList.add('text-rose-600');
+                                            el.orderDateHint.classList.remove('text-slate-400');
+                                        }
+                                        el.orderDate.focus();
+                                    } else {
+                                        validateOrderDate();
+                                    }
                                     return;
                                 }
                                 alert(mapped.message);
@@ -654,7 +862,34 @@
                     addItemRow();
                 });
 
+                el.addAdditionalCost?.addEventListener('click', () => {
+                    addAdditionalCostRow();
+                });
+
+                el.refreshProducts?.addEventListener('click', () => {
+                    refreshProducts();
+                });
+
+                window.addEventListener('focus', () => {
+                    syncOrderDateBounds();
+                    refreshProducts({ silent: true });
+                });
+
+                document.addEventListener('visibilitychange', () => {
+                    if (!document.hidden) {
+                        syncOrderDateBounds();
+                        refreshProducts({ silent: true });
+                    }
+                });
+
                 el.paymentMethod.addEventListener('change', syncPaymentFields);
+                el.orderDate.addEventListener('change', () => {
+                    const range = syncOrderDateBounds();
+                    const value = el.orderDate.value || '';
+                    const valid = !value || (value >= range.min && value <= range.max);
+                    el.orderDateHint?.classList.toggle('text-rose-600', !valid);
+                    el.orderDateHint?.classList.toggle('text-slate-400', valid);
+                });
                 el.openSupplierModal.addEventListener('click', openSupplierModal);
                 el.closeSupplierModal.addEventListener('click', closeSupplierModal);
                 el.cancelSupplierCreate.addEventListener('click', closeSupplierModal);

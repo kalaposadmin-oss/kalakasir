@@ -165,8 +165,28 @@ class WebOperationalPagesSmokeTest extends TestCase
 
         $this->assertStringContainsString('item-line-total', $createContents);
         $this->assertStringContainsString('Total Item', $createContents);
+        $this->assertStringContainsString('refresh-products', $createContents);
+        $this->assertStringContainsString('product-refresh-status', $createContents);
+        $this->assertStringContainsString('syncProductSelectOptions', $createContents);
+        $this->assertStringContainsString('add-additional-cost', $createContents);
+        $this->assertStringContainsString('additional-cost-total', $createContents);
+        $this->assertStringContainsString('collectAdditionalCosts', $createContents);
+        $this->assertStringContainsString('additional_costs: additionalCosts', $createContents);
+        $this->assertStringContainsString('order-date-hint', $createContents);
+        $this->assertStringContainsString('syncOrderDateBounds', $createContents);
+        $this->assertStringContainsString('validateOrderDate', $createContents);
+        $this->assertStringContainsString("mapped.code === 'INVALID_TRANSACTION_DATE'", $createContents);
+        $this->assertStringContainsString("window.addEventListener('focus'", $createContents);
+        $this->assertStringContainsString("document.addEventListener('visibilitychange'", $createContents);
         $this->assertStringContainsString("'X-CSRF-TOKEN': csrfToken", $createContents);
         $this->assertStringContainsString('formatQuantity', $detailContents);
+        $this->assertStringContainsString('Biaya Tambahan', $detailContents);
+        $this->assertStringContainsString('Tidak masuk stok', $detailContents);
+        $this->assertStringContainsString('renderAdditionalCosts', $detailContents);
+        $this->assertStringContainsString('currentPurchaseAdditionalCostTotal', $detailContents);
+        $this->assertStringContainsString('draft-add-additional-cost', $detailContents);
+        $this->assertStringContainsString('collectDraftAdditionalCosts', $detailContents);
+        $this->assertStringContainsString('Biaya tambahan', file_get_contents(resource_path('views/purchase-index.blade.php')));
         $this->assertStringContainsString('/api/v1/purchases/${purchaseId}/decision', $detailContents);
         $this->assertStringContainsString('/api/v1/purchases/${purchaseId}/close', $detailContents);
         $this->assertStringContainsString("'X-CSRF-TOKEN': csrfToken", $detailContents);
@@ -218,6 +238,22 @@ class WebOperationalPagesSmokeTest extends TestCase
         $this->assertStringContainsString('report-top-products', $contents);
         $this->assertStringContainsString('report-download', $contents);
         $this->assertStringContainsString('Unduh Laporan PDF', $contents);
+    }
+
+    public function test_backoffice_purchase_report_separates_goods_and_additional_costs(): void
+    {
+        $route = Route::getRoutes()->match(Request::create('/backoffice/reports/purchases', 'GET'));
+        $middleware = $route->gatherMiddleware();
+        $contents = file_get_contents(resource_path('views/reports-purchases.blade.php'));
+
+        $this->assertContains('web_access:backoffice,supervisor|admin|owner|superadmin,reports.purchases_view', $middleware);
+        $this->assertTrue(view()->exists('reports-purchases'));
+        $this->assertStringContainsString('Nilai Barang', $contents);
+        $this->assertStringContainsString('purchase-report-subtotal-amount', $contents);
+        $this->assertStringContainsString('Biaya Tambahan', $contents);
+        $this->assertStringContainsString('purchase-report-additional-cost-amount', $contents);
+        $this->assertStringContainsString('Total Tagihan', $contents);
+        $this->assertStringContainsString('purchase.additional_cost_total', $contents);
     }
 
     public function test_backoffice_online_orders_route_and_view_expose_real_sync_sections(): void

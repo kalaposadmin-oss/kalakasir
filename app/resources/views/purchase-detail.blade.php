@@ -108,6 +108,10 @@
                 <span class="text-xs text-slate-500">Pajak</span>
                 <span class="text-sm font-medium text-red-500" id="tax">Rp 0</span>
             </div>
+            <div class="flex justify-between items-center mb-3">
+                <span class="text-xs text-slate-500">Biaya Tambahan</span>
+                <span class="text-sm font-medium" id="additional-cost-total">Rp 0</span>
+            </div>
             <div class="flex justify-between items-center pt-3 border-t border-primary/20">
                 <span class="font-bold text-slate-900 dark:text-white">Total Akhir</span>
                 <span class="text-lg font-bold text-primary" id="total">Rp 0</span>
@@ -115,6 +119,15 @@
             @if ($canManagePurchaseDetail)
                 <button id="edit-tax" class="mt-3 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300" type="button">Atur Pajak</button>
             @endif
+        </div>
+    </section>
+    <section class="mt-3 px-4">
+        <div class="rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div class="mb-2 flex items-center justify-between">
+                <h3 class="text-xs font-bold text-slate-500 uppercase tracking-widest">Biaya Tambahan</h3>
+                <span class="text-[10px] font-bold uppercase text-slate-400">Tidak masuk stok</span>
+            </div>
+            <div id="additional-cost-list" class="space-y-2"></div>
         </div>
     </section>
     <section class="mt-3 px-4">
@@ -282,8 +295,19 @@
                         </div>
                         <div id="draft-items" class="space-y-3"></div>
                     </div>
+                    <div>
+                        <div class="mb-2 flex items-center justify-between">
+                            <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Biaya Tambahan</p>
+                            <button id="draft-add-additional-cost" class="inline-flex items-center gap-1 rounded-full bg-orange-50 px-3 py-1.5 text-xs font-bold text-orange-700" type="button">
+                                <span class="material-symbols-outlined text-sm">add</span>
+                                Tambah
+                            </button>
+                        </div>
+                        <div id="draft-additional-costs" class="space-y-3"></div>
+                    </div>
                     <div class="rounded-2xl bg-slate-50 px-4 py-3 text-sm dark:bg-slate-800/70">
                         <div class="flex justify-between text-slate-500"><span>Subtotal Baru</span><span id="draft-preview-subtotal">Rp 0</span></div>
+                        <div class="mt-1 flex justify-between text-slate-500"><span>Biaya Tambahan</span><span id="draft-preview-additional-cost">Rp 0</span></div>
                         <div class="mt-1 flex justify-between text-slate-500"><span>Pajak</span><span id="draft-preview-tax">Rp 0</span></div>
                         <div class="mt-2 flex justify-between border-t border-slate-200 pt-2 font-bold text-slate-900 dark:border-slate-700 dark:text-slate-100"><span>Total Baru</span><span id="draft-preview-total">Rp 0</span></div>
                     </div>
@@ -337,6 +361,8 @@
                     itemList: document.getElementById('item-list'),
                     subtotal: document.getElementById('subtotal'),
                     tax: document.getElementById('tax'),
+                    additionalCostTotal: document.getElementById('additional-cost-total'),
+                    additionalCostList: document.getElementById('additional-cost-list'),
                     total: document.getElementById('total'),
                     createdInfo: document.getElementById('created-info'),
                     statusTitle: document.getElementById('status-title'),
@@ -362,7 +388,10 @@
                     draftNotes: document.getElementById('draft-notes'),
                     draftItems: document.getElementById('draft-items'),
                     draftAddItem: document.getElementById('draft-add-item'),
+                    draftAdditionalCosts: document.getElementById('draft-additional-costs'),
+                    draftAddAdditionalCost: document.getElementById('draft-add-additional-cost'),
                     draftPreviewSubtotal: document.getElementById('draft-preview-subtotal'),
+                    draftPreviewAdditionalCost: document.getElementById('draft-preview-additional-cost'),
                     draftPreviewTax: document.getElementById('draft-preview-tax'),
                     draftPreviewTotal: document.getElementById('draft-preview-total'),
                     draftFeedback: document.getElementById('draft-feedback'),
@@ -405,7 +434,9 @@
                 let currentPurchaseSubtotal = 0;
                 let currentPurchaseTaxRate = 0;
                 let currentPurchaseTax = 0;
+                let currentPurchaseAdditionalCostTotal = 0;
                 let currentPurchaseTotal = 0;
+                let currentAdditionalCosts = [];
                 let currentPurchaseTransactionDate = null;
                 let currentPurchaseLocationId = null;
                 let currentPurchaseNotes = null;
@@ -516,6 +547,30 @@
                     if (el.total) {
                         el.total.textContent = formatCurrency(currentPurchaseTotal);
                     }
+                    if (el.additionalCostTotal) {
+                        el.additionalCostTotal.textContent = formatCurrency(currentPurchaseAdditionalCostTotal);
+                    }
+                };
+
+                const renderAdditionalCosts = (costs = []) => {
+                    if (!el.additionalCostList) {
+                        return;
+                    }
+
+                    if (!costs.length) {
+                        el.additionalCostList.innerHTML = '<div class="rounded-xl border border-dashed border-slate-200 px-3 py-3 text-xs text-slate-400 dark:border-slate-800">Tidak ada biaya tambahan di PO ini.</div>';
+                        return;
+                    }
+
+                    el.additionalCostList.innerHTML = costs.map((cost) => `
+                        <div class="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800/60">
+                            <div class="min-w-0">
+                                <p class="truncate font-bold text-slate-900 dark:text-slate-100">${escapeHtml(cost.name || 'Biaya tambahan')}</p>
+                                <p class="mt-0.5 text-[11px] text-slate-500">${escapeHtml(cost.category || 'packaging')} · ${cost.posted ? 'sudah dijurnal' : 'belum dijurnal'}</p>
+                            </div>
+                            <span class="shrink-0 font-bold text-slate-900 dark:text-slate-100">${formatCurrency(cost.amount || 0)}</span>
+                        </div>
+                    `).join('');
                 };
 
                 const syncTaxPreview = () => {
@@ -532,7 +587,7 @@
                     const amount = enabled ? Math.max(0, Number(el.taxAmountEdit?.value || 0)) : 0;
                     el.taxPreviewSubtotal.textContent = formatCurrency(currentPurchaseSubtotal);
                     el.taxPreviewTax.textContent = formatCurrency(amount);
-                    el.taxPreviewTotal.textContent = formatCurrency(currentPurchaseSubtotal + amount);
+                    el.taxPreviewTotal.textContent = formatCurrency(currentPurchaseSubtotal + amount + currentPurchaseAdditionalCostTotal);
                 };
 
                 const openTaxModal = () => {
@@ -641,6 +696,23 @@
                     }
                 };
 
+                const collectDraftAdditionalCosts = () => {
+                    const costs = [];
+                    el.draftAdditionalCosts?.querySelectorAll('.draft-additional-cost-row').forEach((row) => {
+                        const name = row.querySelector('.draft-additional-cost-name')?.value.trim() || '';
+                        const amount = Number(row.querySelector('.draft-additional-cost-amount')?.value || 0);
+                        const category = row.querySelector('.draft-additional-cost-category')?.value || 'packaging';
+                        if (name && amount > 0) {
+                            costs.push({ name, category, amount });
+                        }
+                    });
+
+                    return costs;
+                };
+
+                const draftAdditionalCostTotal = () => collectDraftAdditionalCosts()
+                    .reduce((sum, cost) => sum + Number(cost.amount || 0), 0);
+
                 const syncDraftTotals = () => {
                     let subtotal = 0;
                     el.draftItems?.querySelectorAll('.draft-item-row').forEach((row) => {
@@ -652,9 +724,11 @@
                     const taxEnabled = currentPurchaseTax > 0 || currentPurchaseTaxRate > 0;
                     const taxRate = taxEnabled ? Number(currentPurchaseTaxRate || 0) : 0;
                     const tax = taxEnabled ? Math.round(subtotal * (taxRate / 100)) : 0;
+                    const additionalCost = draftAdditionalCostTotal();
                     el.draftPreviewSubtotal.textContent = formatCurrency(subtotal);
+                    el.draftPreviewAdditionalCost.textContent = formatCurrency(additionalCost);
                     el.draftPreviewTax.textContent = taxRate > 0 ? `${formatCurrency(tax)} (${formatQuantity(taxRate)}%)` : formatCurrency(tax);
-                    el.draftPreviewTotal.textContent = formatCurrency(subtotal + tax);
+                    el.draftPreviewTotal.textContent = formatCurrency(subtotal + tax + additionalCost);
                 };
 
                 const addDraftItemRow = (item = {}) => {
@@ -705,6 +779,48 @@
                     syncDraftTotals();
                 };
 
+                const addDraftAdditionalCostRow = (cost = {}) => {
+                    const row = document.createElement('div');
+                    row.className = 'draft-additional-cost-row rounded-2xl border border-orange-100 bg-orange-50/70 p-3 dark:border-orange-900/40 dark:bg-orange-950/20';
+                    row.innerHTML = `
+                        <div class="flex items-start gap-2">
+                            <div class="min-w-0 flex-1">
+                                <label class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Nama Biaya</label>
+                                <input class="draft-additional-cost-name w-full rounded-xl border border-orange-100 bg-white px-3 py-2.5 text-sm font-bold dark:border-orange-900/40 dark:bg-slate-900" type="text" value="${escapeHtml(cost.name || '')}" placeholder="Plastik / Kardus / Ongkir" />
+                            </div>
+                            <button class="draft-remove-additional-cost mt-6 size-10 rounded-xl border border-rose-100 bg-rose-50 text-rose-500" type="button">
+                                <span class="material-symbols-outlined text-lg">delete</span>
+                            </button>
+                        </div>
+                        <div class="mt-3 grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Nominal</label>
+                                <input class="draft-additional-cost-amount w-full rounded-xl border border-orange-100 bg-white px-3 py-2.5 text-sm font-bold dark:border-orange-900/40 dark:bg-slate-900" type="number" min="0" step="1" value="${Number(cost.amount || 0) || ''}" />
+                            </div>
+                            <div>
+                                <label class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Kategori</label>
+                                <select class="draft-additional-cost-category w-full rounded-xl border border-orange-100 bg-white px-3 py-2.5 text-xs font-bold dark:border-orange-900/40 dark:bg-slate-900">
+                                    <option value="packaging">Kemasan</option>
+                                    <option value="shipping">Ongkir</option>
+                                    <option value="admin">Admin</option>
+                                    <option value="other">Lainnya</option>
+                                </select>
+                            </div>
+                        </div>
+                    `;
+                    el.draftAdditionalCosts?.appendChild(row);
+                    row.querySelector('.draft-additional-cost-category').value = cost.category || 'packaging';
+                    row.querySelectorAll('input, select').forEach((input) => {
+                        input.addEventListener('input', syncDraftTotals);
+                        input.addEventListener('change', syncDraftTotals);
+                    });
+                    row.querySelector('.draft-remove-additional-cost')?.addEventListener('click', () => {
+                        row.remove();
+                        syncDraftTotals();
+                    });
+                    syncDraftTotals();
+                };
+
                 const openDraftModal = async () => {
                     if (!el.draftModal) {
                         return;
@@ -716,6 +832,10 @@
                     el.draftNotes.value = currentPurchaseNotes || '';
                     el.draftItems.innerHTML = '';
                     (currentItems.length ? currentItems : [{}]).forEach((item) => addDraftItemRow(item));
+                    if (el.draftAdditionalCosts) {
+                        el.draftAdditionalCosts.innerHTML = '';
+                        currentAdditionalCosts.forEach((cost) => addDraftAdditionalCostRow(cost));
+                    }
                     if (el.draftFeedback) {
                         el.draftFeedback.classList.add('hidden');
                         el.draftFeedback.textContent = '';
@@ -925,7 +1045,9 @@
                     currentPurchaseSubtotal = Number(data.purchase.subtotal ?? fallbackSubtotal);
                     currentPurchaseTaxRate = Number(data.purchase.tax_rate || 0);
                     currentPurchaseTax = Number(data.purchase.tax || 0);
-                    currentPurchaseTotal = Number(data.purchase.total ?? (currentPurchaseSubtotal + currentPurchaseTax));
+                    currentPurchaseAdditionalCostTotal = Number(data.purchase.additional_cost_total || 0);
+                    currentPurchaseTotal = Number(data.purchase.total ?? (currentPurchaseSubtotal + currentPurchaseTax + currentPurchaseAdditionalCostTotal));
+                    currentAdditionalCosts = data.additional_costs || [];
                     currentPurchaseMode = normalizePurchaseMode(data.purchase.purchase_mode || purchaseFlowDefaultMode);
                     currentPurchaseFlow = data.flow || currentPurchaseFlow;
                     currentPurchasePaymentMethod = data.purchase.payment_method || 'tempo';
@@ -946,6 +1068,7 @@
                     setPaymentSummary();
                     renderTotals();
                     renderItems(items);
+                    renderAdditionalCosts(data.additional_costs || []);
                     renderReceiptHistory(data.receipts || []);
                     setStatus(data.purchase.status || purchaseStatusSubmitted, currentPurchaseMode);
                 };
@@ -1032,6 +1155,7 @@
                         }
                     });
                     el.draftAddItem?.addEventListener('click', () => addDraftItemRow({}));
+                    el.draftAddAdditionalCost?.addEventListener('click', () => addDraftAdditionalCostRow({}));
                     el.saveDraftEdit?.addEventListener('click', (event) => {
                         event.preventDefault();
                         el.draftForm?.requestSubmit();
@@ -1077,6 +1201,8 @@
                         const taxEnabled = currentPurchaseTax > 0 || currentPurchaseTaxRate > 0;
                         const taxRate = taxEnabled ? Number(currentPurchaseTaxRate || 0) : 0;
                         const tax = taxEnabled ? Math.round(subtotal * (taxRate / 100)) : 0;
+                        const additionalCosts = collectDraftAdditionalCosts();
+                        const additionalCost = additionalCosts.reduce((sum, cost) => sum + Number(cost.amount || 0), 0);
                         const paymentMethod = normalizePaymentMethod(currentPurchasePaymentMethod);
                         const payload = {
                             supplier_id: el.draftSupplier.value,
@@ -1089,12 +1215,13 @@
                             tax_enabled: taxEnabled,
                             tax_rate: taxRate,
                             tax,
+                            additional_costs: additionalCosts,
                             items,
                         };
 
                         const allowed = await window.PosUi.confirmRiskActionAsync({
                             title: 'Simpan Perubahan Draft',
-                            message: `Tanggal: ${formatDate(payload.transaction_date)}\nItem: ${items.length}\nTotal Baru: ${formatCurrency(subtotal + tax)}`,
+                            message: `Tanggal: ${formatDate(payload.transaction_date)}\nItem: ${items.length}\nBiaya tambahan: ${formatCurrency(additionalCost)}\nTotal Baru: ${formatCurrency(subtotal + tax + additionalCost)}`,
                             confirmText: 'Simpan Draft',
                             icon: 'edit_note',
                         });
@@ -1244,7 +1371,7 @@
                         const tax = taxEnabled ? Math.max(0, Number(el.taxAmountEdit?.value || 0)) : 0;
                         const allowed = await window.PosUi.confirmRiskActionAsync({
                             title: 'Simpan Pajak PO',
-                            message: `Subtotal: ${formatCurrency(currentPurchaseSubtotal)}\nPajak: ${formatCurrency(tax)}\nTotal Baru: ${formatCurrency(currentPurchaseSubtotal + tax)}`,
+                            message: `Subtotal: ${formatCurrency(currentPurchaseSubtotal)}\nBiaya tambahan: ${formatCurrency(currentPurchaseAdditionalCostTotal)}\nPajak: ${formatCurrency(tax)}\nTotal Baru: ${formatCurrency(currentPurchaseSubtotal + currentPurchaseAdditionalCostTotal + tax)}`,
                             confirmText: 'Simpan',
                             icon: 'percent',
                         });
@@ -1277,7 +1404,8 @@
                             currentPurchaseSubtotal = Number(responseData.purchase?.subtotal || currentPurchaseSubtotal);
                             currentPurchaseTaxRate = Number(responseData.purchase?.tax_rate || 0);
                             currentPurchaseTax = Number(responseData.purchase?.tax || 0);
-                            currentPurchaseTotal = Number(responseData.purchase?.total || (currentPurchaseSubtotal + currentPurchaseTax));
+                            currentPurchaseAdditionalCostTotal = Number(responseData.purchase?.additional_cost_total || currentPurchaseAdditionalCostTotal);
+                            currentPurchaseTotal = Number(responseData.purchase?.total || (currentPurchaseSubtotal + currentPurchaseTax + currentPurchaseAdditionalCostTotal));
                             renderTotals();
                             closeTaxModal();
                         }, {
@@ -1296,7 +1424,9 @@
                         currentPurchaseSubtotal = Number(data.purchase.subtotal ?? fallbackSubtotal);
                         currentPurchaseTaxRate = Number(data.purchase.tax_rate || 0);
                         currentPurchaseTax = Number(data.purchase.tax || 0);
-                        currentPurchaseTotal = Number(data.purchase.total ?? (currentPurchaseSubtotal + currentPurchaseTax));
+                        currentPurchaseAdditionalCostTotal = Number(data.purchase.additional_cost_total || 0);
+                        currentPurchaseTotal = Number(data.purchase.total ?? (currentPurchaseSubtotal + currentPurchaseTax + currentPurchaseAdditionalCostTotal));
+                        currentAdditionalCosts = data.additional_costs || [];
                         currentPurchaseMode = normalizePurchaseMode(data.purchase.purchase_mode || purchaseFlowDefaultMode);
                         currentPurchaseFlow = data.flow || currentPurchaseFlow;
                         currentPurchasePaymentMethod = data.purchase.payment_method || 'tempo';
@@ -1314,6 +1444,7 @@
                         setPaymentSummary();
                         renderTotals();
                         renderItems(items);
+                        renderAdditionalCosts(data.additional_costs || []);
                         renderReceiptHistory(data.receipts || []);
                         setStatus(data.purchase.status || purchaseStatusSubmitted, currentPurchaseMode);
                     } catch (error) {

@@ -33,21 +33,26 @@
 
 @section('content')
     <div class="w-full px-4 py-5 lg:px-8 space-y-6">
-        <section class="grid gap-4 md:grid-cols-3">
+        <section class="grid gap-4 md:grid-cols-4">
             <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                 <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Total PO</p>
                 <p id="purchase-report-total-count" class="mt-3 text-3xl font-black text-slate-900 dark:text-white">0</p>
                 <p class="mt-2 text-xs text-slate-500">Jumlah purchase order yang masuk ke laporan aktif.</p>
             </div>
             <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Nilai Pembelian</p>
-                <p id="purchase-report-total-amount" class="mt-3 text-3xl font-black text-primary">Rp 0</p>
-                <p class="mt-2 text-xs text-slate-500">Akumulasi nilai PO dari data yang sedang dimuat.</p>
+                <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Nilai Barang</p>
+                <p id="purchase-report-subtotal-amount" class="mt-3 text-3xl font-black text-slate-900 dark:text-white">Rp 0</p>
+                <p class="mt-2 text-xs text-slate-500">Subtotal barang yang menambah stok.</p>
             </div>
             <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Status Dominan</p>
-                <p id="purchase-report-dominant-status" class="mt-3 text-2xl font-black text-slate-900 dark:text-white">-</p>
-                <p class="mt-2 text-xs text-slate-500">Ringkasan cepat untuk status PO paling banyak.</p>
+                <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Biaya Tambahan</p>
+                <p id="purchase-report-additional-cost-amount" class="mt-3 text-3xl font-black text-orange-600">Rp 0</p>
+                <p class="mt-2 text-xs text-slate-500">Plastik, kardus, ongkir, dan biaya non-stok.</p>
+            </div>
+            <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Total Tagihan</p>
+                <p id="purchase-report-total-amount" class="mt-3 text-3xl font-black text-primary">Rp 0</p>
+                <p class="mt-2 text-xs text-slate-500">Barang, pajak, dan biaya tambahan.</p>
             </div>
         </section>
 
@@ -80,8 +85,9 @@
 
             const el = {
                 totalCount: document.getElementById('purchase-report-total-count'),
+                subtotalAmount: document.getElementById('purchase-report-subtotal-amount'),
+                additionalCostAmount: document.getElementById('purchase-report-additional-cost-amount'),
                 totalAmount: document.getElementById('purchase-report-total-amount'),
-                dominantStatus: document.getElementById('purchase-report-dominant-status'),
                 list: document.getElementById('purchase-report-list'),
                 empty: document.getElementById('purchase-report-empty'),
             };
@@ -108,24 +114,20 @@
                 if (!purchases.length) {
                     el.empty.classList.remove('hidden');
                     el.totalCount.textContent = '0';
+                    el.subtotalAmount.textContent = formatCurrency(0);
+                    el.additionalCostAmount.textContent = formatCurrency(0);
                     el.totalAmount.textContent = formatCurrency(0);
-                    el.dominantStatus.textContent = '-';
                     return;
                 }
 
                 el.empty.classList.add('hidden');
                 el.totalCount.textContent = String(purchases.length);
+                el.subtotalAmount.textContent = formatCurrency(purchases.reduce((sum, purchase) => sum + Number(purchase.subtotal || 0), 0));
+                el.additionalCostAmount.textContent = formatCurrency(purchases.reduce((sum, purchase) => sum + Number(purchase.additional_cost_total || 0), 0));
                 el.totalAmount.textContent = formatCurrency(purchases.reduce((sum, purchase) => sum + Number(purchase.total || 0), 0));
 
-                const statusCounts = purchases.reduce((carry, purchase) => {
-                    const key = normalizePurchaseStatus(purchase.status || 'draft');
-                    carry[key] = (carry[key] || 0) + 1;
-                    return carry;
-                }, {});
-                const dominantStatus = Object.entries(statusCounts).sort((left, right) => right[1] - left[1])[0]?.[0] || '-';
-                el.dominantStatus.textContent = dominantStatus !== '-' ? (purchaseStatusLabels[dominantStatus] || dominantStatus).toUpperCase() : '-';
-
                 purchases.forEach((purchase) => {
+                    const additionalCost = Number(purchase.additional_cost_total || 0);
                     const row = document.createElement('a');
                     row.href = `/backoffice/purchases/${purchase.id}?from=${encodeURIComponent('/backoffice/reports/purchases')}`;
                     row.className = 'block bg-white px-4 py-4 transition hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-800/60';
@@ -137,9 +139,19 @@
                             </div>
                             <span class="rounded-full px-2 py-1 text-[10px] font-bold uppercase ${statusTone(purchase.status)}">${purchaseStatusLabels[normalizePurchaseStatus(purchase.status)] || 'Draft'}</span>
                         </div>
-                        <div class="mt-3 flex items-center justify-between text-sm">
-                            <span class="text-slate-500">Total</span>
-                            <span class="font-bold text-slate-900 dark:text-white">${formatCurrency(purchase.total || 0)}</span>
+                        <div class="mt-3 grid grid-cols-3 gap-2 text-sm">
+                            <div>
+                                <span class="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Barang</span>
+                                <span class="font-bold text-slate-900 dark:text-white">${formatCurrency(purchase.subtotal || 0)}</span>
+                            </div>
+                            <div>
+                                <span class="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Biaya</span>
+                                <span class="font-bold ${additionalCost > 0 ? 'text-orange-600' : 'text-slate-400'}">${formatCurrency(additionalCost)}</span>
+                            </div>
+                            <div class="text-right">
+                                <span class="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Total</span>
+                                <span class="font-bold text-slate-900 dark:text-white">${formatCurrency(purchase.total || 0)}</span>
+                            </div>
                         </div>
                     `;
                     el.list.appendChild(row);

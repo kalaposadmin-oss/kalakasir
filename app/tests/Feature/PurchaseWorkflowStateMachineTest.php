@@ -90,6 +90,157 @@ class PurchaseWorkflowStateMachineTest extends TestCase
             ->assertJsonPath('purchase.total', 20000);
     }
 
+    public function test_purchase_additional_costs_are_stored_and_posted_as_expense_not_stock(): void
+    {
+        [$tenant, $user] = $this->bootApiActor('admin', 'purchase-additional-cost@example.test');
+        $fixture = $this->seedCheckoutFixture($tenant->id, $user->id);
+        $supplierId = $this->insertSupplier($tenant->id, 'Supplier Packaging');
+        $purchaseId = $this->createPurchase(
+            $tenant->id,
+            $supplierId,
+            $fixture['location_id'],
+            $fixture['product_id'],
+            PurchaseStatus::SUBMITTED,
+            5,
+            10000,
+            [
+                [
+                    'name' => 'Plastik dan kardus',
+                    'category' => 'packaging',
+                    'amount' => 3000,
+                ],
+            ]
+        );
+
+        $this->assertDatabaseHas('purchases', [
+            'id' => $purchaseId,
+            'tenant_id' => $tenant->id,
+            'subtotal' => 50000,
+            'additional_cost_total' => 3000,
+            'total' => 53000,
+        ]);
+
+        $this->assertDatabaseHas('purchase_additional_costs', [
+            'tenant_id' => $tenant->id,
+            'purchase_id' => $purchaseId,
+            'name' => 'Plastik dan kardus',
+            'category' => 'packaging',
+            'amount' => 3000,
+            'posted_at' => null,
+        ]);
+
+        $this->withHeaders($this->tenantHeaders($tenant->id))
+            ->getJson('/api/v1/purchases/'.$purchaseId)
+            ->assertOk()
+            ->assertJsonPath('purchase.additional_cost_total', 3000)
+            ->assertJsonPath('purchase.total', 53000)
+            ->assertJsonPath('additional_costs.0.name', 'Plastik dan kardus')
+            ->assertJsonPath('additional_costs.0.posted', false);
+
+        $this->approvePurchase($tenant->id, $purchaseId);
+
+        $firstReceive = $this->withHeaders($this->tenantHeaders($tenant->id))
+            ->postJson('/api/v1/purchases/'.$purchaseId.'/receive', [
+                'items' => [
+                    [
+                        'product_id' => $fixture['product_id'],
+                        'qty' => 2,
+                    ],
+                ],
+            ]);
+
+        $firstReceive->assertOk()
+            ->assertJsonPath('status', PurchaseStatus::PARTIALLY_RECEIVED)
+            ->assertJsonPath('received_total', 20000)
+            ->assertJsonPath('additional_cost_total', 3000);
+
+        $this->assertNotNull(DB::table('purchase_additional_costs')
+            ->where('tenant_id', $tenant->id)
+            ->where('purchase_id', $purchaseId)
+            ->value('posted_at'));
+
+        $secondReceive = $this->withHeaders($this->tenantHeaders($tenant->id))
+            ->postJson('/api/v1/purchases/'.$purchaseId.'/receive', [
+                'items' => [
+                    [
+                        'product_id' => $fixture['product_id'],
+                        'qty' => 3,
+                    ],
+                ],
+            ]);
+
+        $secondReceive->assertOk()
+            ->assertJsonPath('status', PurchaseStatus::RECEIVED)
+            ->assertJsonPath('received_total', 30000)
+            ->assertJsonPath('additional_cost_total', 0);
+
+        $this->assertSame(50000.0, (float) DB::table('stock_ledger')
+            ->where('tenant_id', $tenant->id)
+            ->where('reference_type', 'purchase')
+            ->where('reference_id', $purchaseId)
+            ->sum('total_cost'));
+
+        $mapping = DB::table('account_mappings')
+            ->where('tenant_id', $tenant->id)
+            ->first();
+
+        $journalItems = DB::table('journal_items')
+            ->join('journal_entries', 'journal_entries.id', '=', 'journal_items.journal_entry_id')
+            ->where('journal_entries.tenant_id', $tenant->id)
+            ->where('journal_entries.reference_type', 'purchase')
+            ->where('journal_entries.reference_id', $purchaseId)
+            ->select('journal_items.account_id')
+            ->selectRaw('sum(journal_items.debit) as debit_total')
+            ->selectRaw('sum(journal_items.credit) as credit_total')
+            ->groupBy('journal_items.account_id')
+            ->pluck('debit_total', 'account_id')
+            ->map(fn ($value) => (float) $value);
+
+        $journalCredits = DB::table('journal_items')
+            ->join('journal_entries', 'journal_entries.id', '=', 'journal_items.journal_entry_id')
+            ->where('journal_entries.tenant_id', $tenant->id)
+            ->where('journal_entries.reference_type', 'purchase')
+            ->where('journal_entries.reference_id', $purchaseId)
+            ->select('journal_items.account_id')
+            ->selectRaw('sum(journal_items.credit) as credit_total')
+            ->groupBy('journal_items.account_id')
+            ->pluck('credit_total', 'account_id')
+            ->map(fn ($value) => (float) $value);
+
+        $this->assertSame(50000.0, $journalItems[(string) $mapping->inventory_account_id] ?? 0.0);
+        $this->assertSame(3000.0, $journalItems[(string) $mapping->expense_adjustment_account_id] ?? 0.0);
+        $this->assertSame(53000.0, $journalCredits[(string) $mapping->payable_account_id] ?? 0.0);
+    }
+
+    public function test_create_purchase_returns_date_bounds_when_order_date_exceeds_backdate_limit(): void
+    {
+        [$tenant, $user] = $this->bootApiActor('admin', 'purchase-create-date-bounds@example.test');
+        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-06-03 10:00:00', 'Asia/Jakarta'));
+        $fixture = $this->seedCheckoutFixture($tenant->id, $user->id);
+        $supplierId = $this->insertSupplier($tenant->id, 'Supplier Date Bounds');
+
+        $response = $this->withHeaders($this->tenantHeaders($tenant->id))
+            ->postJson('/api/v1/purchases', [
+                'supplier_id' => $supplierId,
+                'location_id' => $fixture['location_id'],
+                'status' => PurchaseStatus::SUBMITTED,
+                'transaction_date' => '2026-06-01',
+                'items' => [
+                    [
+                        'product_id' => $fixture['product_id'],
+                        'qty' => 1,
+                        'price' => 10000,
+                    ],
+                ],
+            ]);
+
+        $response->assertStatus(422)
+            ->assertJsonPath('code', 'INVALID_TRANSACTION_DATE')
+            ->assertJsonPath('details.min_date', '2026-06-02')
+            ->assertJsonPath('details.max_date', '2026-06-03')
+            ->assertJsonPath('details.max_backdate_days', 1);
+    }
+
     public function test_purchase_index_includes_item_summary_for_list_cards(): void
     {
         [$tenant, $user] = $this->bootApiActor('admin', 'purchase-index-summary@example.test');
@@ -137,13 +288,21 @@ class PurchaseWorkflowStateMachineTest extends TestCase
                         'price' => 5000,
                     ],
                 ],
+                'additional_costs' => [
+                    [
+                        'name' => 'Kardus',
+                        'category' => 'packaging',
+                        'amount' => 2500,
+                    ],
+                ],
             ]);
 
         $response->assertOk()
             ->assertJsonPath('transaction_date', '2026-06-01')
             ->assertJsonPath('subtotal', 41000)
             ->assertJsonPath('tax', 4100)
-            ->assertJsonPath('total', 45100);
+            ->assertJsonPath('additional_cost_total', 2500)
+            ->assertJsonPath('total', 47600);
 
         $this->assertDatabaseHas('purchases', [
             'id' => $purchaseId,
@@ -152,7 +311,16 @@ class PurchaseWorkflowStateMachineTest extends TestCase
             'transaction_date' => '2026-06-01',
             'subtotal' => 41000,
             'tax' => 4100,
-            'total' => 45100,
+            'additional_cost_total' => 2500,
+            'total' => 47600,
+        ]);
+
+        $this->assertDatabaseHas('purchase_additional_costs', [
+            'tenant_id' => $tenant->id,
+            'purchase_id' => $purchaseId,
+            'name' => 'Kardus',
+            'category' => 'packaging',
+            'amount' => 2500,
         ]);
 
         $this->assertSame(2, DB::table('purchase_items')
@@ -164,6 +332,8 @@ class PurchaseWorkflowStateMachineTest extends TestCase
             ->getJson('/api/v1/purchases/'.$purchaseId)
             ->assertOk()
             ->assertJsonPath('purchase.transaction_date', '2026-06-01')
+            ->assertJsonPath('purchase.additional_cost_total', 2500)
+            ->assertJsonPath('additional_costs.0.name', 'Kardus')
             ->assertJsonPath('items.0.purchase_qty', 3);
     }
 
@@ -500,13 +670,14 @@ class PurchaseWorkflowStateMachineTest extends TestCase
             ->assertJsonPath('message', $message);
     }
 
-    private function createPurchase(string $tenantId, string $supplierId, string $locationId, string $productId, string $status, float $qty = 1, float $price = 10000): string
+    private function createPurchase(string $tenantId, string $supplierId, string $locationId, string $productId, string $status, float $qty = 1, float $price = 10000, array $additionalCosts = []): string
     {
         $response = $this->withHeaders($this->tenantHeaders($tenantId))
             ->postJson('/api/v1/purchases', [
                 'supplier_id' => $supplierId,
                 'location_id' => $locationId,
                 'status' => $status,
+                'additional_costs' => $additionalCosts,
                 'items' => [
                     [
                         'product_id' => $productId,
