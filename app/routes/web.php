@@ -477,6 +477,10 @@ Route::middleware(['canonical_portal_host:backoffice'])->group(function () {
     Route::get('/backoffice/settings/observability', [TenantViewController::class, 'show'])->defaults('view', 'observability')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,admin|owner|superadmin,settings.observability');
     Route::get('/backoffice/settings/chart-of-accounts', [TenantViewController::class, 'show'])->defaults('view', 'chart-of-accounts')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,admin|owner|superadmin,finance.bank_accounts');
     Route::get('/backoffice/finance/payment-settlements', [TenantViewController::class, 'show'])->defaults('view', 'payment-settlements')->defaults('data', ['showMenu' => true])->middleware('web_access:backoffice,admin|owner|superadmin,finance.bank_accounts');
+    Route::get('/backoffice/finance/cash', [CashManagementController::class, 'index'])->middleware('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,finance.cash_transactions');
+    Route::get('/backoffice/finance/cash/out', fn () => redirect('/backoffice/finance/cash'))->middleware('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,finance.cash_transactions');
+    Route::post('/backoffice/finance/cash', [CashManagementController::class, 'storeCashIn'])->middleware('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,finance.cash_transactions');
+    Route::post('/backoffice/finance/cash/out', [CashManagementController::class, 'storeCashOut'])->middleware('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,finance.cash_transactions');
     Route::get('/backoffice/settings/chart-of-accounts/{account}', [TenantViewController::class, 'showWithRouteParam'])
         ->defaults('view', 'chart-of-accounts-detail')
         ->defaults('routeParam', 'account')

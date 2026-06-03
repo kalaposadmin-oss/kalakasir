@@ -150,6 +150,7 @@
                 ($canFeature('reports.inventory_view') ? ['href' => '/backoffice/reports/inventory', 'match' => '/backoffice/reports/inventory', 'match_children' => false, 'icon' => 'inventory_2', 'label' => 'Persediaan', 'description' => 'Stok dan valuasi'] : null),
                 ($canFeature('reports.inventory_stock_card') ? ['href' => '/backoffice/reports/inventory/stock-card', 'match' => '/backoffice/reports/inventory/stock-card', 'icon' => 'receipt_long', 'label' => 'Kartu Stok', 'description' => 'Ledger produk'] : null),
                 ($canFeature('finance.summary_basic') ? ['href' => '/backoffice/finance/summary', 'match' => '/backoffice/finance/summary', 'match_children' => false, 'icon' => 'account_balance_wallet', 'label' => 'Keuangan', 'description' => 'Laba rugi dan neraca'] : null),
+                ($canFeature('finance.cash_transactions') ? ['href' => '/backoffice/finance/cash', 'match' => ['/backoffice/finance/cash', '/backoffice/finance/cash/out'], 'match_children' => false, 'icon' => 'payments', 'label' => 'Kas Masuk/Keluar', 'description' => 'Setoran dan biaya'] : null),
                 ($canManageSettings && $canFeature('finance.bank_accounts') ? ['href' => '/backoffice/finance/payment-settlements', 'match' => '/backoffice/finance/payment-settlements', 'match_children' => false, 'icon' => 'price_check', 'label' => 'Settlement QRIS', 'description' => 'Uang masuk real'] : null),
             ])),
         ],

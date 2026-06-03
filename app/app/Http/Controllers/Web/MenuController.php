@@ -88,6 +88,7 @@ class MenuController extends Controller
                 'title' => 'Keuangan',
                 'items' => [
                     ['label' => 'Keuangan', 'icon' => 'account_balance_wallet', 'href' => $posOrBackoffice('/pos/finance/summary', '/backoffice/finance/summary'), 'feature' => 'finance.summary_basic'],
+                    ['label' => 'Kas Masuk/Keluar', 'icon' => 'payments', 'href' => $posOrBackoffice('/pos/cash-in', '/backoffice/finance/cash'), 'feature' => 'finance.cash_transactions'],
                     ['label' => 'Riwayat Transaksi Kas/Bank', 'icon' => 'history', 'href' => $backofficeOnly('/backoffice/finance/lock-periods'), 'feature' => 'finance.lock_period'],
                 ],
             ],

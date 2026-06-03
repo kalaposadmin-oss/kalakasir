@@ -2,7 +2,11 @@
 
 @php
     $showMenu = true;
-    $cashBackUrl = pos_default_url();
+    $cashPortal = $cashPortal ?? (request()->is('backoffice/*') ? 'backoffice' : 'pos');
+    $cashBasePath = $cashBasePath ?? ($cashPortal === 'backoffice' ? '/backoffice/finance/cash' : '/pos/cash-in');
+    $cashInUrl = $cashInUrl ?? $cashBasePath;
+    $cashOutUrl = $cashOutUrl ?? ($cashPortal === 'backoffice' ? '/backoffice/finance/cash/out' : '/pos/cash-out');
+    $cashBackUrl = $cashBackUrl ?? ($cashPortal === 'backoffice' ? '/backoffice/finance/summary' : pos_default_url());
     $from = (string) request()->query('from', '');
     if ($from !== '') {
         $normalizedFrom = ltrim($from, '/');
@@ -20,8 +24,8 @@
 
 @section('page_title', 'Kas')
 @section('body_class', 'bg-background-light dark:bg-background-dark font-display text-slate-800 dark:text-slate-100 antialiased')
-@section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-background-light dark:bg-background-dark shadow-2xl')
-@section('main_class', 'flex-1 overflow-y-auto pb-24 app-bottom-safe-space')
+@section('app_shell_class', $cashPortal === 'backoffice' ? 'relative flex h-screen w-full flex-col overflow-hidden bg-background-light dark:bg-background-dark lg:pl-72' : 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-background-light dark:bg-background-dark shadow-2xl')
+@section('main_class', $cashPortal === 'backoffice' ? 'flex-1 overflow-y-auto pb-8' : 'flex-1 overflow-y-auto pb-24 app-bottom-safe-space')
 @php($bottom_nav = 'dashboard')
 
 @push('head')
@@ -37,7 +41,7 @@
         .cash-sheet-backdrop { position:absolute;inset:0;background:rgba(0,0,0,.35); }
         .cash-sheet {
             position:absolute;bottom:0;left:50%;transform:translateX(-50%) translateY(100%);
-            width:100%;max-width:430px;max-height:88vh;overflow-y:auto;
+            width:100%;max-width:{{ $cashPortal === 'backoffice' ? '560px' : '430px' }};max-height:88vh;overflow-y:auto;
             border-radius:1.5rem 1.5rem 0 0;background:#fff;
             padding:1.25rem 1.25rem 2rem;
             box-shadow:0 -8px 30px rgba(0,0,0,.12);
@@ -74,7 +78,7 @@
 @endsection
 
 @section('content')
-    <main class="flex flex-col gap-4 p-4">
+    <main class="{{ $cashPortal === 'backoffice' ? 'mx-auto flex w-full max-w-6xl flex-col gap-4 p-4 lg:p-6' : 'flex flex-col gap-4 p-4' }}">
         {{-- Flash message --}}
         @if (session('status'))
             <div id="cash-flash" class="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm font-medium text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-300 fade-in-up">
@@ -212,7 +216,7 @@
             @endif
 
             {{-- Form --}}
-            <form id="cash-form" action="/pos/cash-in" method="POST" class="space-y-4">
+            <form id="cash-form" action="{{ $cashInUrl }}" method="POST" class="space-y-4">
                 @csrf
                 <input type="hidden" name="direction" id="form-direction" value="cash-in" />
                 <div class="grid grid-cols-2 gap-3">
@@ -272,6 +276,8 @@
             // ===== Category options data from server =====
             const categoryOptionsIn = @json(collect($categoryOptions['cash-in'] ?? [])->values());
             const categoryOptionsOut = @json(collect($categoryOptions['cash-out'] ?? [])->values());
+            const cashInUrl = @json($cashInUrl);
+            const cashOutUrl = @json($cashOutUrl);
 
             // ===== Sheet elements =====
             const overlay = document.getElementById('cash-sheet-overlay');
@@ -300,7 +306,7 @@
             const setDirection = (direction) => {
                 const isIn = direction === 'cash-in';
                 directionInput.value = direction;
-                form.action = isIn ? '/pos/cash-in' : '/pos/cash-out';
+                form.action = isIn ? cashInUrl : cashOutUrl;
 
                 modeLabel.textContent = isIn ? 'Pemasukan Kas' : 'Pengeluaran Kas';
                 sheetTitle.textContent = isIn ? 'Kas Masuk' : 'Kas Keluar';

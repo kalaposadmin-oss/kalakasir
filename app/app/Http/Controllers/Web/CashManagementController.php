@@ -21,10 +21,17 @@ class CashManagementController extends Controller
     {
         $tenantId = (string) $this->routeContext->resolveTenantId();
         $month = $request->query('month', now()->format('Y-m'));
+        $isBackoffice = $request->is('backoffice/*');
+        $basePath = $isBackoffice ? '/backoffice/finance/cash' : '/pos/cash-in';
 
         return view('cash-management', array_merge(
             $this->routeContext->withTenant([
                 'showMenu' => true,
+                'cashPortal' => $isBackoffice ? 'backoffice' : 'pos',
+                'cashBasePath' => $basePath,
+                'cashInUrl' => $basePath,
+                'cashOutUrl' => $isBackoffice ? '/backoffice/finance/cash/out' : '/pos/cash-out',
+                'cashBackUrl' => $isBackoffice ? '/backoffice/finance/summary' : pos_default_url(),
             ]),
             $this->cashTransactionService->managementContext($tenantId, $month),
         ));
@@ -42,6 +49,9 @@ class CashManagementController extends Controller
 
     private function storeTransaction(Request $request, string $direction)
     {
+        $isBackoffice = $request->is('backoffice/*');
+        $redirectUrl = $isBackoffice ? '/backoffice/finance/cash' : '/pos/cash-in';
+
         $validated = $request->validate([
             'transaction_date' => ['required', 'date'],
             'amount' => ['required', 'numeric', 'gt:0'],
@@ -61,13 +71,13 @@ class CashManagementController extends Controller
                 $request->userAgent(),
             );
         } catch (ValidationException $exception) {
-            return redirect('/pos/cash-in')
+            return redirect($redirectUrl)
                 ->withErrors($exception->errors())
                 ->withInput(array_merge($request->all(), ['direction' => $direction]));
         }
 
         $label = $direction === 'cash-in' ? 'Kas masuk' : 'Kas keluar';
 
-        return redirect('/pos/cash-in')->with('status', "$label berhasil dicatat.");
+        return redirect($redirectUrl)->with('status', "$label berhasil dicatat.");
     }
 }
