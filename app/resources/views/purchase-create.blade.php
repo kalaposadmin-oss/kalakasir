@@ -23,10 +23,9 @@
     $purchasePortalPrefix = request()->is('pos/*') ? '/pos' : '/backoffice';
     $purchaseListUrl = $purchasePortalPrefix.'/purchases';
     $purchaseDetailUrl = $purchasePortalPrefix.'/purchases';
-    $purchaseMaxBackdateDays = (int) config('app.max_backdate_days', 1);
     $purchaseTimezone = $purchaseCreateTenant?->timezone ?? config('app.timezone', 'Asia/Jakarta');
     $purchaseToday = \Carbon\CarbonImmutable::now($purchaseTimezone)->startOfDay();
-    $purchaseMinDate = $purchaseToday->subDays($purchaseMaxBackdateDays)->toDateString();
+    $purchaseMinDate = $purchaseToday->startOfMonth()->toDateString();
     $purchaseMaxDate = $purchaseToday->toDateString();
 @endphp
 
@@ -216,7 +215,6 @@
                 const purchaseStatusSubmitted = @json(\App\Support\PurchaseStatus::SUBMITTED);
                 const purchaseModeSimple = @json(\App\Support\PurchaseMode::SIMPLE);
                 const purchaseModePoShort = @json(\App\Support\PurchaseMode::PO_SHORT);
-                const maxBackdateDays = @json($purchaseMaxBackdateDays);
                 const cashAccountManageUrl = '/backoffice/settings/chart-of-accounts';
 
                 const el = {
@@ -278,8 +276,7 @@
                 const currentAllowedDateRange = () => {
                     const max = new Date();
                     max.setHours(0, 0, 0, 0);
-                    const min = new Date(max);
-                    min.setDate(min.getDate() - maxBackdateDays);
+                    const min = new Date(max.getFullYear(), max.getMonth(), 1);
 
                     return {
                         min: localDateInputValue(min),

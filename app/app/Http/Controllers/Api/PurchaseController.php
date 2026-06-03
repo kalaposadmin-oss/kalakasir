@@ -334,12 +334,11 @@ class PurchaseController extends Controller
     {
         $timezone = TenantContext::get()?->timezone ?? config('app.timezone', 'UTC');
         $today = CarbonImmutable::now($timezone)->startOfDay();
-        $maxBackdateDays = (int) config('app.max_backdate_days', 1);
 
         return [
-            'min_date' => $today->subDays($maxBackdateDays)->toDateString(),
+            'min_date' => $today->startOfMonth()->toDateString(),
             'max_date' => $today->toDateString(),
-            'max_backdate_days' => $maxBackdateDays,
+            'policy' => 'current_month',
             'timezone' => $timezone,
         ];
     }

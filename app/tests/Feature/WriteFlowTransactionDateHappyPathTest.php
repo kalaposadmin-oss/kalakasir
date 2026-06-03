@@ -59,12 +59,18 @@ class WriteFlowTransactionDateHappyPathTest extends TestCase
         $response = $this->withHeaders($this->tenantHeaders($this->tenant->id))
             ->postJson('/api/v1/purchases/'.$purchaseId.'/receive', [
                 'transaction_date' => '2026-02-26',
+                'items' => [
+                    [
+                        'product_id' => $this->checkoutFixture['product_id'],
+                        'qty' => 1,
+                    ],
+                ],
             ]);
 
-        $response->assertStatus(200)
-            ->assertJson([
-                'status' => 'received',
-            ]);
+        $this->assertSame(200, $response->status(), $response->getContent());
+        $response->assertJson([
+            'status' => 'received',
+        ]);
 
         $this->assertDatabaseHas('purchases', [
             'id' => $purchaseId,
@@ -158,6 +164,7 @@ class WriteFlowTransactionDateHappyPathTest extends TestCase
             'location_id' => $this->checkoutFixture['location_id'],
             'total' => 10000,
             'status' => 'approved',
+            'purchase_mode' => 'controlled',
             'notes' => null,
             'created_at' => now('UTC'),
             'approved_at' => now('UTC'),

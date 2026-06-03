@@ -47,7 +47,7 @@ class TransactionDateServiceTest extends TestCase
         (new TransactionDateService())->resolve('2026-02-28');
     }
 
-    public function test_resolve_rejects_backdate_beyond_limit(): void
+    public function test_resolve_rejects_transaction_date_before_current_month(): void
     {
         CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-02-27 10:30:00', 'UTC'));
         TenantContext::set(new Tenant([
@@ -58,10 +58,10 @@ class TransactionDateServiceTest extends TestCase
 
         $this->expectException(InvalidTransactionDateException::class);
 
-        (new TransactionDateService())->resolve('2026-02-25');
+        (new TransactionDateService())->resolve('2026-01-31');
     }
 
-    public function test_resolve_accepts_backdate_within_limit(): void
+    public function test_resolve_accepts_transaction_date_in_current_month(): void
     {
         CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-02-27 10:30:00', 'UTC'));
         TenantContext::set(new Tenant([
@@ -70,8 +70,8 @@ class TransactionDateServiceTest extends TestCase
             'timezone' => 'UTC',
         ]));
 
-        $resolved = (new TransactionDateService())->resolve('2026-02-26');
+        $resolved = (new TransactionDateService())->resolve('2026-02-01');
 
-        $this->assertSame('2026-02-26', $resolved->toDateString());
+        $this->assertSame('2026-02-01', $resolved->toDateString());
     }
 }

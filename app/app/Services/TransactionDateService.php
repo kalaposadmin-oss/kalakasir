@@ -23,9 +23,8 @@ class TransactionDateService
             throw new InvalidTransactionDateException('Tanggal transaksi tidak boleh di masa depan.');
         }
 
-        $maxBackdateDays = (int) config('app.max_backdate_days', 1);
-        if ($value->lessThan($today->subDays($maxBackdateDays))) {
-            throw new InvalidTransactionDateException('Tanggal transaksi melewati batas backdate yang diizinkan.');
+        if ($value->lessThan($today->startOfMonth())) {
+            throw new InvalidTransactionDateException('Tanggal transaksi tidak boleh melewati bulan berjalan.');
         }
 
         return $value;

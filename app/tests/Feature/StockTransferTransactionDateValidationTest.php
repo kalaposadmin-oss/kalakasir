@@ -44,11 +44,11 @@ class StockTransferTransactionDateValidationTest extends TestCase
             ]);
     }
 
-    public function test_transfer_receive_returns_invalid_transaction_date_for_backdate_beyond_limit(): void
+    public function test_transfer_receive_returns_invalid_transaction_date_before_current_month(): void
     {
         $response = $this->withHeaders($this->tenantHeaders($this->tenant->id))
             ->postJson('/api/v1/stock-transfers/'.(string) Str::uuid().'/receive', [
-            'transaction_date' => '2026-02-25',
+            'transaction_date' => '2026-01-31',
         ]);
 
         $response->assertStatus(422)
