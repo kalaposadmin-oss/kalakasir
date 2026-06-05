@@ -179,9 +179,9 @@
                 <div class="absolute inset-0 bg-gradient-to-t from-black/55 via-black/20 to-transparent"></div>
                 <div class="relative flex h-full min-h-[220px] items-end p-4 sm:min-h-[250px] sm:p-6">
                     <div class="max-w-md">
-                        <p class="text-[11px] font-bold uppercase tracking-[0.22em] text-white/70">Production Hub</p>
-                        <h3 class="mt-1 text-[28px] font-bold leading-tight tracking-tight drop-shadow-sm sm:text-[32px]">Batch Produksi</h3>
-                        <p class="mt-2 max-w-xl text-sm leading-relaxed text-white/85 sm:text-[15px]">Kelola transformasi inventaris mentah menjadi produk bernilai tinggi melalui sistem batching yang presisi.</p>
+                        <p class="text-[11px] font-bold uppercase tracking-[0.22em] text-white/70">Produksi</p>
+                        <h3 class="mt-1 text-[28px] font-bold leading-tight tracking-tight drop-shadow-sm sm:text-[32px]">Buat dan Pantau Produksi</h3>
+                        <p class="mt-2 max-w-xl text-sm leading-relaxed text-white/85 sm:text-[15px]">Rencanakan produksi, cek kebutuhan bahan, lalu selesaikan saat hasil aktual sudah siap masuk stok.</p>
                     </div>
                 </div>
             </div>
@@ -245,7 +245,7 @@
         <section class="production-panel rounded-3xl p-3 dark:production-panel-dark lg:p-4">
             <div class="mb-3 mt-3 flex items-center justify-between gap-3">
                 <div>
-                    <h3 class="text-xl font-bold uppercase tracking-tight text-[#121212]">History Produksi</h3>
+                    <h3 class="text-xl font-bold uppercase tracking-tight text-[#121212]">Daftar Batch Produksi</h3>
                     <p id="production-batch-meta" class="mt-1 hidden text-xs text-slate-500">Memuat batch produksi...</p>
                 </div>
                 <button id="production-filter-open" class="inline-flex size-10 items-center justify-center rounded-full bg-transparent text-slate-500" type="button" aria-label="Buka filter detail">
@@ -327,7 +327,7 @@
 
     <button id="production-batch-create-open" class="production-action-fab fixed z-20 inline-flex items-center justify-center gap-2 rounded-2xl px-6 py-4 text-base font-bold uppercase tracking-[0.04em] text-white lg:text-sm" type="button">
         <span class="material-symbols-outlined text-[20px]">add</span>
-        <span>Buat Draft Batch</span>
+        <span>Buat Produksi</span>
     </button>
 
     <div id="production-batch-create-modal" class="fixed inset-0 z-50 hidden">
@@ -337,7 +337,7 @@
             <div class="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
                 <div>
                     <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Batch Produksi</p>
-                    <h3 class="mt-1 text-lg font-bold tracking-tight text-slate-900">Buat Draf Batch</h3>
+                    <h3 class="mt-1 text-lg font-bold tracking-tight text-slate-900">Buat Rencana Produksi</h3>
                 </div>
                 <button id="production-batch-create-close" class="flex size-9 items-center justify-center rounded-full bg-slate-100 text-slate-500" type="button">
                     <span class="material-symbols-outlined text-base">close</span>
@@ -373,48 +373,56 @@
                     </div>
                     <div id="production-create-eligibility-list" class="mt-3 space-y-2"></div>
                 </div>
-                <div id="production-create-recipe-preview" class="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600 shadow-sm">
-                    <div class="rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700">
-                        <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Pratinjau Resep</p>
-                        <p class="mt-1 font-medium leading-relaxed">Pilih produk untuk melihat bahan baku resep. Bahan baku tidak dipilih manual di sini.</p>
-                    </div>
-                </div>
-                <section class="rounded-3xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
-                    <div class="flex items-start justify-between gap-3">
-                        <div>
-                            <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Hasil Jadi</p>
-                            <h4 class="mt-1 text-sm font-bold text-slate-900">Pecah hasil dari resep yang sama</h4>
-                        </div>
-                        <button id="production-output-add" class="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-orange-50 text-primary ring-1 ring-orange-100" type="button" title="Tambah hasil jadi">
-                            <span class="material-symbols-outlined text-[18px]">add</span>
-                        </button>
-                    </div>
-                    <div id="production-output-summary" class="mt-3 rounded-2xl bg-slate-50 px-3 py-3 text-xs font-semibold text-slate-600">
-                        Total hasil mengikuti output harapan produk yang dipilih.
-                    </div>
-                    <div id="production-output-rows" class="mt-3 space-y-3"></div>
-                </section>
                 <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <label class="block">
-                        <span class="mb-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400 sm:text-[11px]">Tanggal Transaksi</span>
+                        <span class="mb-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400 sm:text-[11px]">Tanggal Produksi</span>
                         <input id="production-create-date" class="production-filter-block production-mobile-field w-full rounded-2xl px-4 py-3 text-sm font-medium text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" type="date" />
                     </label>
                     <label class="block">
-                        <span class="mb-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400 sm:text-[11px]">Output Harapan</span>
-                        <input id="production-create-output" class="production-filter-block production-mobile-field w-full rounded-2xl px-4 py-3 text-sm font-medium text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" min="0.0001" step="0.0001" type="number" value="" readonly />
-                        <span class="mt-1 block text-[11px] text-slate-500">Dihitung otomatis dari jumlah resep x hasil standar per resep.</span>
+                        <span class="mb-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400 sm:text-[11px]">Jumlah Pembuatan Resep</span>
+                        <input id="production-create-recipe-version" class="production-filter-block production-mobile-field w-full rounded-2xl px-4 py-3 text-sm font-medium text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" min="1" step="1" type="number" value="1" />
+                        <span class="mt-1 block text-[11px] text-slate-500">Contoh: isi 3 kalau resep dibuat tiga kali.</span>
                     </label>
                 </div>
                 <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <label class="block">
-                        <span class="mb-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400 sm:text-[11px]">Jumlah Resep</span>
-                        <input id="production-create-recipe-version" class="production-filter-block production-mobile-field w-full rounded-2xl px-4 py-3 text-sm font-medium text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" min="1" step="1" type="number" value="1" />
+                        <span class="mb-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400 sm:text-[11px]">Perkiraan Hasil</span>
+                        <input id="production-create-output" class="production-filter-block production-mobile-field w-full rounded-2xl px-4 py-3 text-sm font-medium text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" min="0.0001" step="0.0001" type="number" value="" readonly />
                     </label>
                     <label class="block">
                         <span class="mb-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400 sm:text-[11px]">Referensi</span>
                         <input id="production-create-reference" class="production-filter-block production-mobile-field w-full rounded-2xl px-4 py-3 text-sm font-medium text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" maxlength="100" placeholder="PB-20260408-001" type="text" />
                     </label>
                 </div>
+                <div id="production-create-plan-summary" class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                    <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-600">Rencana Produksi</p>
+                    <p class="mt-1 font-semibold">Pilih produk dan isi jumlah pembuatan resep untuk melihat perkiraan hasil.</p>
+                </div>
+                <div id="production-create-recipe-preview" class="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600 shadow-sm">
+                    <div class="rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700">
+                        <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Cek Bahan</p>
+                        <p class="mt-1 font-medium leading-relaxed">Bahan otomatis mengikuti resep produk. Pilih produk, lokasi, dan jumlah resep untuk melihat kebutuhan bahan.</p>
+                    </div>
+                </div>
+                <details id="production-output-advanced" class="rounded-3xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+                    <summary class="flex cursor-pointer list-none items-center justify-between gap-3">
+                        <span>
+                            <span class="block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Hasil Jadi Lanjutan</span>
+                            <span class="mt-1 block text-sm font-bold text-slate-900">Ubah kalau satu resep menghasilkan beberapa produk</span>
+                        </span>
+                        <span class="material-symbols-outlined text-[18px] text-slate-400">expand_more</span>
+                    </summary>
+                    <div class="mt-3 flex items-start justify-between gap-3">
+                        <p class="text-xs leading-relaxed text-slate-500">Default mengikuti produk yang diproduksi. Tambahkan hasil lain hanya untuk produksi dengan beberapa output.</p>
+                        <button id="production-output-add" class="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-orange-50 text-primary ring-1 ring-orange-100" type="button" title="Tambah hasil jadi">
+                            <span class="material-symbols-outlined text-[18px]">add</span>
+                        </button>
+                    </div>
+                    <div id="production-output-summary" class="mt-3 rounded-2xl bg-slate-50 px-3 py-3 text-xs font-semibold text-slate-600">
+                        Total hasil mengikuti perkiraan hasil produk yang dipilih.
+                    </div>
+                    <div id="production-output-rows" class="mt-3 space-y-3"></div>
+                </details>
                 <label class="block">
                     <span class="mb-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400 sm:text-[11px]">Catatan</span>
                     <textarea id="production-create-notes" class="production-filter-block min-h-[96px] w-full rounded-2xl px-4 py-3 text-sm font-medium text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" maxlength="2000" placeholder="Catatan operator atau target produksi"></textarea>
@@ -422,7 +430,7 @@
                 <div id="production-create-feedback" class="hidden rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600"></div>
                 <div class="production-mobile-footer sticky bottom-0 -mx-5 grid grid-cols-2 gap-3 border-t border-slate-200 bg-white px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4">
                     <button class="production-btn-secondary rounded-2xl px-4 py-3 text-sm font-bold shadow-sm transition" type="button" id="production-create-cancel">Batal</button>
-                    <button class="production-btn-primary rounded-2xl px-5 py-3 text-sm font-bold transition" type="submit" id="production-create-submit">Simpan Draft</button>
+                    <button class="production-btn-primary rounded-2xl px-5 py-3 text-sm font-bold transition" type="submit" id="production-create-submit">Simpan Rencana</button>
                 </div>
             </form>
         </div>
@@ -474,6 +482,7 @@
                 createDate: document.getElementById('production-create-date'),
                 createOutput: document.getElementById('production-create-output'),
                 createRecipeVersion: document.getElementById('production-create-recipe-version'),
+                createPlanSummary: document.getElementById('production-create-plan-summary'),
                 createReference: document.getElementById('production-create-reference'),
                 createNotes: document.getElementById('production-create-notes'),
                 createFeedback: document.getElementById('production-create-feedback'),
@@ -700,13 +709,13 @@
             };
 
             const previewCopy = {
-                noProduct: 'Pilih produk yang diproduksi untuk melihat resep. Bahan baku tidak dipilih manual di sini.',
+                noProduct: 'Pilih produk yang akan diproduksi untuk melihat kebutuhan bahan.',
                 noLocation: 'Pilih lokasi dulu agar pratinjau stok mengikuti gudang yang benar.',
-                loading: 'Memuat resep produk...',
-                emptyBom: 'Resep aktif belum tersedia untuk produk ini. Draf batch tidak bisa diposting sebelum resep diisi.',
-                shortage: 'Stok bahan belum cukup untuk batch ini.',
+                loading: 'Menghitung kebutuhan bahan...',
+                emptyBom: 'Resep aktif belum tersedia untuk produk ini. Lengkapi resep sebelum membuat produksi.',
+                shortage: 'Bahan belum cukup untuk menyelesaikan produksi. Rencana masih bisa disimpan, tapi posting akan ditolak sampai stok cukup.',
                 technical: 'Pratinjau resep gagal dimuat. Coba muat ulang.',
-                stale: 'Stok berubah setelah pratinjau. Muat ulang pratinjau sebelum posting batch.',
+                stale: 'Stok berubah setelah pratinjau. Muat ulang cek bahan sebelum menyelesaikan produksi.',
                 validation: 'Data preview belum valid. Periksa input cabang, lokasi, dan produk.',
             };
 
@@ -760,6 +769,7 @@
                     : 0;
 
                 el.createOutput.value = expectedOutputQty > 0 ? String(expectedOutputQty) : '';
+                renderCreatePlanSummary(product, recipeCount, recipeOutputQty, expectedOutputQty);
 
                 return {
                     recipe_count: recipeCount,
@@ -768,9 +778,36 @@
                 };
             };
 
+            const renderCreatePlanSummary = (product, recipeCount, recipeOutputQty, expectedOutputQty) => {
+                if (!el.createPlanSummary) {
+                    return;
+                }
+
+                if (!product) {
+                    el.createPlanSummary.className = 'rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600';
+                    el.createPlanSummary.innerHTML = `
+                        <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Rencana Produksi</p>
+                        <p class="mt-1 font-semibold">Pilih produk dan isi jumlah pembuatan resep untuk melihat perkiraan hasil.</p>
+                    `;
+                    return;
+                }
+
+                const validPlan = recipeCount > 0 && recipeOutputQty > 0 && expectedOutputQty > 0;
+                el.createPlanSummary.className = `rounded-2xl border px-4 py-3 text-sm ${validPlan ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-amber-200 bg-amber-50 text-amber-900'}`;
+                el.createPlanSummary.innerHTML = validPlan
+                    ? `
+                        <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-600">Rencana Produksi</p>
+                        <p class="mt-1 font-semibold">${formatNumber(recipeCount)} kali resep ${product.name} menghasilkan sekitar ${formatNumber(expectedOutputQty)} ${product.unit || 'unit'}.</p>
+                    `
+                    : `
+                        <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-600">Rencana Belum Lengkap</p>
+                        <p class="mt-1 font-semibold">Produk ini belum punya hasil standar per resep. Lengkapi master produk lebih dulu.</p>
+                    `;
+            };
+
             const previewIngredientLine = (item, preview = {}) => {
                 const recipeCount = Number(preview.recipe_count || el.createRecipeVersion?.value || 0);
-                return `Per resep ${formatNumber(item.recipe_qty)} ${item.unit || ''} • Untuk ${formatNumber(recipeCount)} resep butuh ${formatNumber(item.required_qty)} ${item.unit || ''}`;
+                return `Per resep ${formatNumber(item.recipe_qty)} ${item.unit || ''} - untuk ${formatNumber(recipeCount)} kali resep butuh ${formatNumber(item.required_qty)} ${item.unit || ''}`;
             };
 
             const toggleCreateModal = (open) => {
@@ -849,10 +886,34 @@
                 const defaultFactor = recipePlan.expected_output_qty > 0 && recipePlan.recipe_count > 0
                     ? normalizeQtyValue(recipePlan.recipe_count / recipePlan.expected_output_qty)
                     : 1;
+                const recipeProductId = String(el.createProduct?.value || '');
                 state.outputRows = [{
                     id: outputRowId(),
-                    product_id: '',
+                    product_id: recipeProductId,
                     planned_qty: recipePlan.expected_output_qty || 1,
+                    recipe_factor: defaultFactor,
+                }];
+            };
+
+            const syncDefaultOutputRowFromPlan = () => {
+                const recipeProductId = String(el.createProduct?.value || '');
+                if (!recipeProductId || state.outputRows.length !== 1) {
+                    return;
+                }
+
+                const currentRow = state.outputRows[0];
+                if (String(currentRow.product_id || '') !== recipeProductId) {
+                    return;
+                }
+
+                const recipePlan = syncCreateExpectedOutput();
+                const defaultFactor = recipePlan.expected_output_qty > 0 && recipePlan.recipe_count > 0
+                    ? normalizeQtyValue(recipePlan.recipe_count / recipePlan.expected_output_qty)
+                    : 1;
+
+                state.outputRows = [{
+                    ...currentRow,
+                    planned_qty: recipePlan.expected_output_qty || currentRow.planned_qty,
                     recipe_factor: defaultFactor,
                 }];
             };
@@ -875,7 +936,7 @@
                 const summary = outputPlanSummary();
                 const over = summary.remaining < -0.0001;
                 el.outputSummary.className = `mt-3 rounded-2xl px-3 py-3 text-xs font-semibold ${over ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200' : 'bg-slate-50 text-slate-600'}`;
-                el.outputSummary.textContent = `Resep dibuat ${formatNumber(summary.recipeCount)} • terpakai ${formatNumber(summary.usage)} • sisa ${formatNumber(Math.max(0, summary.remaining))}`;
+                el.outputSummary.textContent = `Resep dibuat ${formatNumber(summary.recipeCount)} - dipakai output ${formatNumber(summary.usage)} - sisa ${formatNumber(Math.max(0, summary.remaining))}`;
             };
 
             const renderOutputRows = () => {
@@ -911,7 +972,7 @@
                                 <input class="production-filter-block w-full rounded-2xl px-3 py-2.5 text-sm font-medium text-slate-800" min="0.0001" step="0.0001" type="number" value="${row.planned_qty || ''}" data-output-field="planned_qty" />
                             </label>
                             <label class="block">
-                                <span class="mb-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Faktor Resep/Pcs</span>
+                                <span class="mb-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Porsi Resep/Unit</span>
                                 <input class="production-filter-block w-full rounded-2xl px-3 py-2.5 text-sm font-medium text-slate-800" min="0.0001" step="0.0001" type="number" value="${row.recipe_factor || ''}" data-output-field="recipe_factor" />
                             </label>
                         </div>
@@ -1223,9 +1284,9 @@
                         <div class="mb-3 flex items-center justify-between gap-3">
                             <div class="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-200">
                                 <span class="material-symbols-outlined text-[14px]">check_circle</span>
-                                Pratinjau valid
+                                Bahan cukup
                             </div>
-                            <span class="text-[10px] font-bold uppercase tracking-[0.18em] text-outline">Output harapan ${formatNumber(state.recipePreview.expected_output_qty || 0)}</span>
+                            <span class="text-[10px] font-bold uppercase tracking-[0.18em] text-outline">Perkiraan hasil ${formatNumber(state.recipePreview.expected_output_qty || 0)}</span>
                         </div>
                         <div class="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-400">
                             <span class="material-symbols-outlined text-[16px]">recipe</span>
@@ -1295,7 +1356,7 @@
                             ${preview.message || previewCopy.shortage}
                         </div>
                         <div class="mb-2 flex items-center justify-between gap-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
-                            <span>${ingredients.length} bahan • output harapan ${formatNumber(preview.expected_output_qty || 0)}</span>
+                            <span>${ingredients.length} bahan - perkiraan hasil ${formatNumber(preview.expected_output_qty || 0)}</span>
                             <span>Draft bisa disimpan</span>
                         </div>
                         <div class="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-400">
@@ -1329,9 +1390,9 @@
                         <div class="mb-3 flex items-center justify-between gap-3">
                             <div class="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-200">
                                 <span class="material-symbols-outlined text-[14px]">check_circle</span>
-                                Pratinjau valid
+                                Bahan cukup
                             </div>
-                            <span class="text-[10px] font-bold uppercase tracking-[0.18em] text-outline">${formatNumber(preview.recipe_count || 0)} resep • output ${formatNumber(preview.expected_output_qty || 0)}</span>
+                            <span class="text-[10px] font-bold uppercase tracking-[0.18em] text-outline">${formatNumber(preview.recipe_count || 0)} kali resep - hasil ${formatNumber(preview.expected_output_qty || 0)}</span>
                         </div>
                         ${preview.message ? `<div class="mb-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-200">${preview.message}</div>` : ''}
                         <div class="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-400">
@@ -1835,6 +1896,8 @@
             el.createRecipeVersion?.addEventListener('input', () => {
                 syncCreateExpectedOutput();
                 collectOutputRows();
+                syncDefaultOutputRowFromPlan();
+                renderOutputRows();
                 updateSubmitState();
                 if (el.createProduct.value && el.createLocation.value) {
                     loadCreateRecipePreview();
@@ -1975,7 +2038,7 @@
                     setCreateFeedback(error.message || 'Gagal membuat draf batch.');
                 } finally {
                     el.createSubmit.disabled = false;
-                    el.createSubmit.textContent = 'Simpan Draft';
+                    el.createSubmit.textContent = 'Simpan Rencana';
                 }
             });
 

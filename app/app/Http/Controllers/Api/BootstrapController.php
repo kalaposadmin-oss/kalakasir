@@ -161,6 +161,7 @@ class BootstrapController extends Controller
                         'track_stock' => (bool) $product->track_stock,
                         'production_mode' => $product->production_mode,
                         'item_type' => $product->item_type,
+                        'bom_items' => is_array($product->bom_items) ? $product->bom_items : [],
                         'recipe_output_qty' => $product->recipe_output_qty !== null
                             ? Decimal::float(Decimal::snappedQty($product->recipe_output_qty), Decimal::QTY_SCALE)
                             : null,

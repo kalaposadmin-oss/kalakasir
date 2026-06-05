@@ -1284,6 +1284,9 @@ class ProductionBatchQuickFlowTest extends TestCase
 
         $this->assertNotNull($finishedGood);
         $this->assertTrue((bool) ($finishedGood['production_batch_eligible'] ?? false));
+        $this->assertIsArray($finishedGood['bom_items'] ?? null);
+        $this->assertSame($fixture['raw_material_id'], $finishedGood['bom_items'][0]['product_id'] ?? null);
+        $this->assertSame(10.0, (float) ($finishedGood['recipe_output_qty'] ?? 0));
 
         $branchesResponse = $this->getJson('/api/v1/branches', $this->tenantHeaders($tenant->id));
         $branchesResponse->assertOk();
