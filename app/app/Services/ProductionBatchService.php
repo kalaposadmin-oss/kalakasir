@@ -1173,6 +1173,23 @@ class ProductionBatchService
             ]);
         }
 
+        $varianceState = $this->yieldVarianceState(
+            (float) ($batch->expected_output_qty ?? 0),
+            Decimal::float($actualOutputQty, Decimal::QTY_SCALE)
+        );
+
+        if ($this->varianceReasonIndicatesInputMistake($varianceReason)) {
+            throw ValidationException::withMessages([
+                'variance_reason' => 'Alasan menunjukkan salah input. Jangan posting batch; edit draft atau batalkan draft dulu agar stok dan HPP tidak bergerak dari angka salah.',
+            ]);
+        }
+
+        if ($varianceState['blocks_posting']) {
+            throw ValidationException::withMessages([
+                'actual_output_qty' => 'Selisih hasil terlalu besar dan kemungkinan salah input. Koreksi draft atau batalkan batch dulu.',
+            ]);
+        }
+
         $expectedKeys = $inputs
             ->map(fn (ProductionBatchItem $item) => $this->itemKey((string) $item->product_id, $item->product_variant_id ? (string) $item->product_variant_id : null))
             ->values()
@@ -1208,7 +1225,7 @@ class ProductionBatchService
         $hasRecipeFactors = $outputs->contains(fn (ProductionBatchItem $item) => $item->recipe_factor !== null && (float) $item->recipe_factor > 0);
 
         if (! $hasRecipeFactors) {
-            if ($this->yieldVarianceExceedsAlertThreshold((float) ($batch->expected_output_qty ?? 0), Decimal::float($actualOutputQty, Decimal::QTY_SCALE))
+            if ($varianceState['requires_reason']
                 && trim((string) $varianceReason) === '') {
                 throw ValidationException::withMessages([
                     'variance_reason' => 'Variance reason wajib diisi saat yield variance menyentuh threshold monitoring.',
@@ -1230,7 +1247,7 @@ class ProductionBatchService
             ]);
         }
 
-        if ($this->yieldVarianceExceedsAlertThreshold((float) ($batch->expected_output_qty ?? 0), Decimal::float($actualOutputQty, Decimal::QTY_SCALE))
+        if ($varianceState['requires_reason']
             && trim((string) $varianceReason) === '') {
             throw ValidationException::withMessages([
                 'variance_reason' => 'Variance reason wajib diisi saat yield variance menyentuh threshold monitoring.',
@@ -1429,13 +1446,33 @@ class ProductionBatchService
 
     private function yieldVarianceExceedsAlertThreshold(float $expectedOutputQty, float $actualOutputQty): bool
     {
+        return $this->yieldVarianceState($expectedOutputQty, $actualOutputQty)['requires_reason'];
+    }
+
+    private function yieldVarianceState(float $expectedOutputQty, float $actualOutputQty): array
+    {
         [$pctThreshold, $qtyThreshold] = $this->yieldVarianceThresholds();
         $varianceQty = abs($actualOutputQty - $expectedOutputQty);
         $variancePct = $expectedOutputQty > 0
             ? abs((($actualOutputQty - $expectedOutputQty) * 100) / $expectedOutputQty)
             : 0.0;
 
-        return $varianceQty >= $qtyThreshold || $variancePct >= $pctThreshold;
+        return [
+            'variance_qty' => $varianceQty,
+            'variance_pct' => $variancePct,
+            'requires_reason' => $varianceQty >= $qtyThreshold || $variancePct >= $pctThreshold,
+            'requires_confirmation' => $variancePct >= 20.0,
+            'blocks_posting' => $variancePct >= 50.0,
+        ];
+    }
+
+    private function varianceReasonIndicatesInputMistake(?string $varianceReason): bool
+    {
+        $reason = mb_strtolower(trim((string) $varianceReason));
+
+        return str_contains($reason, 'salah input')
+            || str_contains($reason, 'typo')
+            || str_contains($reason, 'koreksi');
     }
 
     private function idempotencyCacheKey(string $tenantId, string $batchId, string $idempotencyKey): string

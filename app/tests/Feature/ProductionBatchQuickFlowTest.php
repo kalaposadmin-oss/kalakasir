@@ -400,6 +400,65 @@ class ProductionBatchQuickFlowTest extends TestCase
         $this->assertSame(5454.55, round((float) ($finishedGood['hpp_average'] ?? 0), 2));
     }
 
+    public function test_post_batch_blocks_extreme_yield_variance_as_likely_input_error(): void
+    {
+        [$tenant] = $this->bootApiActor('admin', 'admin+production-extreme-variance@example.test');
+
+        $fixture = $this->seedFixture($tenant);
+        $batchId = $this->createDraftBatch($tenant->id, $fixture, expectedOutputQty: 10, recipeVersion: 3);
+
+        $this->postJson(
+            '/api/v1/production-batches/'.$batchId.'/post',
+            [
+                'actual_output_qty' => 100,
+                'variance_reason' => 'Output terlalu jauh dari rencana',
+                'inputs' => [
+                    [
+                        'product_id' => $fixture['raw_material_id'],
+                        'actual_qty' => 20,
+                    ],
+                ],
+            ],
+            $this->tenantHeadersWithIdempotency($tenant->id, 'prod-post-extreme-variance')
+        )
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'VALIDATION_ERROR')
+            ->assertJsonPath('details.actual_output_qty.0', 'Selisih hasil terlalu besar dan kemungkinan salah input. Koreksi draft atau batalkan batch dulu.');
+    }
+
+    public function test_post_batch_rejects_input_mistake_reason_before_stock_moves(): void
+    {
+        [$tenant] = $this->bootApiActor('admin', 'admin+production-input-mistake-reason@example.test');
+
+        $fixture = $this->seedFixture($tenant);
+        $batchId = $this->createDraftBatch($tenant->id, $fixture, expectedOutputQty: 10, recipeVersion: 3);
+
+        $this->postJson(
+            '/api/v1/production-batches/'.$batchId.'/post',
+            [
+                'actual_output_qty' => 11,
+                'variance_reason' => 'Salah input - koreksi draft',
+                'inputs' => [
+                    [
+                        'product_id' => $fixture['raw_material_id'],
+                        'actual_qty' => 20,
+                    ],
+                ],
+            ],
+            $this->tenantHeadersWithIdempotency($tenant->id, 'prod-post-input-mistake-reason')
+        )
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'VALIDATION_ERROR')
+            ->assertJsonPath('details.variance_reason.0', 'Alasan menunjukkan salah input. Jangan posting batch; edit draft atau batalkan draft dulu agar stok dan HPP tidak bergerak dari angka salah.');
+
+        $this->assertDatabaseHas('production_batches', [
+            'id' => $batchId,
+            'tenant_id' => $tenant->id,
+            'status' => 'draft',
+            'actual_output_qty' => 0.0000,
+        ]);
+    }
+
     public function test_multi_output_batch_allocates_stock_and_cost_by_recipe_factor(): void
     {
         [$tenant] = $this->bootApiActor('admin', 'admin+production-multi-output@example.test');

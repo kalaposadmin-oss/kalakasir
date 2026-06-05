@@ -12,6 +12,7 @@ class ProductProductionReadinessLiveUiTest extends TestCase
         $editContents = file_get_contents(resource_path('views/product-edit.blade.php'));
         $helpersContents = file_get_contents(resource_path('views/partials/ui-helpers.blade.php'));
         $productionBatchContents = file_get_contents(resource_path('views/production-batches.blade.php'));
+        $productionBatchDetailContents = file_get_contents(resource_path('views/production-batch-detail.blade.php'));
 
         $this->assertStringContainsString('id="is-active"', $createContents);
         $this->assertStringContainsString('id="production-readiness"', $createContents);
@@ -65,5 +66,14 @@ class ProductProductionReadinessLiveUiTest extends TestCase
         $this->assertStringContainsString('const includeAdvancedOutputs = outputAdvancedIsActive();', $productionBatchContents);
         $this->assertStringContainsString('if (includeAdvancedOutputs) {', $productionBatchContents);
         $this->assertStringContainsString('Produk hasil duplikat. Gabungkan qty pada satu baris', $productionBatchContents);
+
+        $this->assertStringContainsString('batch-post-variance-reason-presets', $productionBatchDetailContents);
+        $this->assertStringContainsString('data-variance-reason="Salah input - koreksi draft"', $productionBatchDetailContents);
+        $this->assertStringContainsString('const varianceState = () => {', $productionBatchDetailContents);
+        $this->assertStringContainsString('reasonIndicatesInputMistake', $productionBatchDetailContents);
+        $this->assertStringContainsString('Selisih hasil terlalu besar dan kemungkinan salah input', $productionBatchDetailContents);
+        $this->assertStringContainsString('max-h-[92dvh]', $productionBatchDetailContents);
+        $this->assertStringContainsString('overflow-y-auto overscroll-contain', $productionBatchDetailContents);
+        $this->assertStringContainsString('sticky bottom-0', $productionBatchDetailContents);
     }
 }

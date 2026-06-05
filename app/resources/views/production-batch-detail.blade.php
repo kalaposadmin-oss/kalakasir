@@ -273,9 +273,11 @@
 
     <div id="batch-detail-post-modal" class="fixed inset-0 z-50 hidden">
         <div data-close="post" class="absolute inset-0 bg-slate-950/40"></div>
-        <div class="absolute inset-x-0 bottom-0 mx-auto w-full max-w-2xl rounded-t-[28px] bg-white p-5 shadow-2xl dark:bg-slate-950 lg:top-1/2 lg:bottom-auto lg:-translate-y-1/2 lg:rounded-[28px]">
-            <div class="mx-auto mb-4 h-1.5 w-14 rounded-full bg-slate-200 dark:bg-slate-700"></div>
-            <div class="mb-4 flex items-start justify-between gap-4">
+        <div class="absolute inset-x-0 bottom-0 mx-auto flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-[28px] bg-white shadow-2xl dark:bg-slate-950 lg:top-1/2 lg:bottom-auto lg:max-h-[88dvh] lg:-translate-y-1/2 lg:rounded-[28px]">
+            <div class="shrink-0 px-5 pt-5">
+                <div class="mx-auto mb-4 h-1.5 w-14 rounded-full bg-slate-200 dark:bg-slate-700"></div>
+            </div>
+            <div class="mb-4 flex shrink-0 items-start justify-between gap-4 px-5">
                 <div>
                     <p class="text-[11px] font-bold uppercase tracking-widest text-slate-400">Posting Batch</p>
                     <h3 class="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">Konfirmasi Actual Yield</h3>
@@ -284,7 +286,7 @@
                     <span class="material-symbols-outlined text-base">close</span>
                 </button>
             </div>
-            <form id="batch-post-form" class="space-y-3">
+            <form id="batch-post-form" class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-28 space-y-3">
                 <div class="grid gap-3 md:grid-cols-2">
                     <label class="block">
                         <span class="mb-1 block text-[11px] font-bold uppercase tracking-widest text-slate-400">Actual Output Qty</span>
@@ -292,8 +294,14 @@
                     </label>
                     <label class="block">
                         <span class="mb-1 block text-[11px] font-bold uppercase tracking-widest text-slate-400">Variance Reason</span>
-                        <input id="batch-post-variance-reason" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium dark:border-slate-700 dark:bg-slate-900" maxlength="2000" type="text" />
+                        <input id="batch-post-variance-reason" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium dark:border-slate-700 dark:bg-slate-900" maxlength="2000" placeholder="Isi bila hasil aktual berbeda dari rencana" type="text" />
                     </label>
+                </div>
+                <div class="flex flex-wrap gap-2" id="batch-post-variance-reason-presets">
+                    <button class="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600" data-variance-reason="Susut produksi" type="button">Susut produksi</button>
+                    <button class="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600" data-variance-reason="Produk rusak" type="button">Produk rusak</button>
+                    <button class="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600" data-variance-reason="Over yield" type="button">Over yield</button>
+                    <button class="rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-600" data-variance-reason="Salah input - koreksi draft" type="button">Salah input</button>
                 </div>
                 <div>
                     <p class="mb-2 text-[11px] font-bold uppercase tracking-widest text-slate-400">Actual Output Jadi</p>
@@ -307,7 +315,7 @@
                     <div id="batch-post-inputs" class="space-y-3"></div>
                 </div>
                 <div id="batch-post-feedback" class="hidden rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600"></div>
-                <div class="flex justify-end gap-3 pt-2">
+                <div class="sticky bottom-0 -mx-5 flex justify-end gap-3 border-t border-slate-200 bg-white px-5 py-4 shadow-[0_-12px_24px_-20px_rgba(15,23,42,0.35)] dark:border-slate-800 dark:bg-slate-950">
                     <button data-close="post" class="rounded-full border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600 dark:border-slate-700 dark:text-slate-300" type="button">Batal</button>
                     <button id="batch-post-submit" class="rounded-full bg-emerald-500 px-5 py-2.5 text-sm font-bold text-white" type="submit">Post Batch</button>
                 </div>
@@ -422,6 +430,7 @@
                 postOutput: document.getElementById('batch-post-output'),
                 postOutputs: document.getElementById('batch-post-outputs'),
                 postVarianceReason: document.getElementById('batch-post-variance-reason'),
+                postVarianceReasonPresets: document.getElementById('batch-post-variance-reason-presets'),
                 postVarianceHint: document.getElementById('batch-post-variance-hint'),
                 postInputs: document.getElementById('batch-post-inputs'),
                 postFeedback: document.getElementById('batch-post-feedback'),
@@ -511,13 +520,40 @@
 
                 return `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}`;
             };
-            const requiresVarianceReason = () => {
+            const varianceState = () => {
                 const expectedQty = Number(state.detail?.batch?.expected_output_qty || 0);
                 const actualQty = Number(el.postOutput.value || 0);
-                const varianceQty = Math.abs(actualQty - expectedQty);
-                const variancePct = expectedQty > 0 ? Math.abs(((actualQty - expectedQty) * 100) / expectedQty) : 0;
+                const signedVarianceQty = normalizeQtyValue(actualQty - expectedQty);
+                const varianceQty = Math.abs(signedVarianceQty);
+                const signedVariancePct = expectedQty > 0 ? ((actualQty - expectedQty) * 100) / expectedQty : 0;
+                const variancePct = Math.abs(signedVariancePct);
+                const requiresReason = varianceQty >= varianceThresholds.qty || variancePct >= varianceThresholds.pct;
+                const requiresConfirmation = variancePct >= 20;
+                const blocksPosting = variancePct >= 50;
 
-                return varianceQty >= varianceThresholds.qty || variancePct >= varianceThresholds.pct;
+                return {
+                    expectedQty,
+                    actualQty,
+                    signedVarianceQty,
+                    signedVariancePct,
+                    varianceQty,
+                    variancePct,
+                    requiresReason,
+                    requiresConfirmation,
+                    blocksPosting,
+                };
+            };
+
+            const reasonIndicatesInputMistake = () => {
+                const reason = (el.postVarianceReason.value || '').toLowerCase();
+
+                return reason.includes('salah input') || reason.includes('typo') || reason.includes('koreksi');
+            };
+
+            const requiresVarianceReason = () => {
+                const current = varianceState();
+
+                return current.requiresReason;
             };
             const collectPostOutputs = () => {
                 if (!el.postOutputs) {
@@ -543,14 +579,39 @@
                 return total;
             };
             const refreshVarianceHint = () => {
-                const required = requiresVarianceReason();
-                el.postVarianceReason.toggleAttribute('required', required);
-                el.postVarianceHint.className = `rounded-2xl px-4 py-3 text-sm ${required
-                    ? 'border border-amber-200 bg-amber-50 text-amber-700'
-                    : 'border border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-300'}`;
-                el.postVarianceHint.textContent = required
-                    ? `Variance reason wajib diisi karena selisih hasil menyentuh threshold monitoring (${varianceThresholds.qty} qty / ${varianceThresholds.pct}%).`
-                    : `Variance reason opsional selama selisih hasil masih di bawah threshold monitoring (${varianceThresholds.qty} qty / ${varianceThresholds.pct}%).`;
+                const current = varianceState();
+                const hasMistakeReason = reasonIndicatesInputMistake();
+                const reasonRequired = current.requiresReason || current.requiresConfirmation;
+                el.postVarianceReason.toggleAttribute('required', reasonRequired);
+
+                const baseText = `Rencana ${formatNumber(current.expectedQty)} - aktual ${formatNumber(current.actualQty)} - selisih ${formatNumber(current.signedVarianceQty)} (${formatNumber(current.signedVariancePct)}%).`;
+
+                if (hasMistakeReason) {
+                    el.postVarianceHint.className = 'rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700';
+                    el.postVarianceHint.textContent = `${baseText} Alasan menunjukkan salah input. Jangan posting batch; gunakan Edit Draft atau Batalkan Draft agar stok dan HPP tidak bergerak dari angka salah.`;
+                    return;
+                }
+
+                if (current.blocksPosting) {
+                    el.postVarianceHint.className = 'rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700';
+                    el.postVarianceHint.textContent = `${baseText} Selisih terlalu besar dan kemungkinan salah input. Koreksi draft atau batalkan batch dulu.`;
+                    return;
+                }
+
+                if (current.requiresConfirmation) {
+                    el.postVarianceHint.className = 'rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800';
+                    el.postVarianceHint.textContent = `${baseText} Selisih besar. Pastikan ini benar-benar hasil produksi, lalu isi alasan sebelum posting.`;
+                    return;
+                }
+
+                if (current.requiresReason) {
+                    el.postVarianceHint.className = 'rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700';
+                    el.postVarianceHint.textContent = `${baseText} Alasan selisih wajib diisi karena menyentuh threshold monitoring (${varianceThresholds.qty} qty / ${varianceThresholds.pct}%).`;
+                    return;
+                }
+
+                el.postVarianceHint.className = 'rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-300';
+                el.postVarianceHint.textContent = `${baseText} Selisih masih kecil; alasan opsional.`;
             };
             const buildObservabilityUrl = (detail) => {
                 if (!canViewObservability || !observabilityBaseUrl) {
@@ -913,6 +974,16 @@
             document.querySelectorAll('[data-close="resolve"]').forEach((node) => node.addEventListener('click', () => toggleModal('resolve', false)));
             el.editRecipeVersion?.addEventListener('input', syncEditExpectedOutput);
             el.postOutput?.addEventListener('input', refreshVarianceHint);
+            el.postVarianceReason?.addEventListener('input', refreshVarianceHint);
+            el.postVarianceReasonPresets?.addEventListener('click', (event) => {
+                const trigger = event.target.closest('[data-variance-reason]');
+                if (!trigger) {
+                    return;
+                }
+
+                el.postVarianceReason.value = trigger.dataset.varianceReason || '';
+                refreshVarianceHint();
+            });
             el.postOutputs?.addEventListener('input', syncPostOutputTotal);
             el.tabNav?.addEventListener('click', (event) => {
                 const button = event.target.closest('[data-batch-tab]');
@@ -971,9 +1042,22 @@
                 event.preventDefault();
                 setFeedback(el.postFeedback, '');
 
-                if (requiresVarianceReason() && !(el.postVarianceReason.value || '').trim()) {
+                const currentVariance = varianceState();
+                if (reasonIndicatesInputMistake()) {
                     refreshVarianceHint();
-                    setFeedback(el.postFeedback, 'Variance reason wajib diisi saat yield variance menyentuh threshold monitoring.');
+                    setFeedback(el.postFeedback, 'Alasan menunjukkan salah input. Jangan posting batch; edit draft atau batalkan draft dulu.');
+                    return;
+                }
+
+                if (currentVariance.blocksPosting) {
+                    refreshVarianceHint();
+                    setFeedback(el.postFeedback, 'Selisih hasil terlalu besar dan kemungkinan salah input. Koreksi draft atau batalkan batch dulu.');
+                    return;
+                }
+
+                if ((currentVariance.requiresReason || currentVariance.requiresConfirmation) && !(el.postVarianceReason.value || '').trim()) {
+                    refreshVarianceHint();
+                    setFeedback(el.postFeedback, 'Alasan selisih wajib diisi sebelum posting hasil aktual yang berbeda dari rencana.');
                     return;
                 }
 
