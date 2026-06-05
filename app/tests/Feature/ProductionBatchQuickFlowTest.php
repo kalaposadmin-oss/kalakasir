@@ -108,6 +108,25 @@ class ProductionBatchQuickFlowTest extends TestCase
             ->assertJsonPath('details.product_id.0', 'Produk batch production harus aktif.');
     }
 
+    public function test_warehouse_can_create_production_batch_draft(): void
+    {
+        [$tenant] = $this->bootApiActor('warehouse', 'warehouse+production-draft@example.test');
+
+        $fixture = $this->seedFixture($tenant);
+
+        $response = $this->postJson('/api/v1/production-batches', [
+            'branch_id' => $fixture['branch_id'],
+            'location_id' => $fixture['location_id'],
+            'product_id' => $fixture['finished_good_id'],
+            'transaction_date' => '2026-02-27',
+            'recipe_count' => 1,
+        ], $this->tenantHeaders($tenant->id));
+
+        $response->assertCreated()
+            ->assertJsonPath('status', 'draft')
+            ->assertJsonPath('recipe_count', 1);
+    }
+
     public function test_update_draft_rescales_inputs_and_updates_metadata(): void
     {
         [$tenant] = $this->bootApiActor('admin', 'admin+production-update-draft@example.test');

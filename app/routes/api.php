@@ -190,10 +190,10 @@ Route::prefix('v1')
         Route::post('purchases/{purchase}/close', [PurchaseController::class, 'close'])->middleware(['role:admin,owner', 'feature_gate:purchase.receive']);
         Route::post('purchase-returns', [PurchaseReturnController::class, 'store'])->middleware(['role:admin,owner', 'feature_gate:purchase.return']);
         Route::post('products', [ProductController::class, 'store'])->middleware(['role:admin,owner', 'feature_gate:product.list']);
-        Route::post('production-batches', [ProductionBatchController::class, 'store'])->middleware(['role:admin,owner', 'feature_gate:inventory.production_batches']);
-        Route::patch('production-batches/{batch}', [ProductionBatchController::class, 'update'])->middleware(['role:admin,owner', 'feature_gate:inventory.production_batches']);
-        Route::post('production-batches/{batch}/post', [ProductionBatchController::class, 'post'])->middleware(['role:admin,owner', 'feature_gate:inventory.production_batches']);
-        Route::post('production-batches/{batch}/cancel', [ProductionBatchController::class, 'cancel'])->middleware(['role:admin,owner', 'feature_gate:inventory.production_batches']);
+        Route::post('production-batches', [ProductionBatchController::class, 'store'])->middleware(['role:warehouse,supervisor,admin,owner,superadmin', 'feature_gate:inventory.production_batches']);
+        Route::patch('production-batches/{batch}', [ProductionBatchController::class, 'update'])->middleware(['role:warehouse,supervisor,admin,owner,superadmin', 'feature_gate:inventory.production_batches']);
+        Route::post('production-batches/{batch}/post', [ProductionBatchController::class, 'post'])->middleware(['role:warehouse,supervisor,admin,owner,superadmin', 'feature_gate:inventory.production_batches']);
+        Route::post('production-batches/{batch}/cancel', [ProductionBatchController::class, 'cancel'])->middleware(['role:warehouse,supervisor,admin,owner,superadmin', 'feature_gate:inventory.production_batches']);
         Route::post('refunds', [RefundController::class, 'store'])->middleware('role:cashier,supervisor,admin,owner');
         Route::patch('subscription/plan', [SubscriptionController::class, 'updatePlan'])->middleware(['role:admin,owner,superadmin', 'feature_gate:settings.subscription_billing']);
         Route::post('subscription/invoices/{invoice}/mark-paid', [SubscriptionInvoiceController::class, 'markPaid'])->middleware(['role:admin,owner,superadmin', 'feature_gate:settings.subscription_billing']);

@@ -47,6 +47,47 @@ class CashManagementController extends Controller
         return $this->storeTransaction($request, 'cash-out');
     }
 
+    public function update(Request $request, string $transaction)
+    {
+        $isBackoffice = $request->is('backoffice/*');
+        $redirectUrl = $isBackoffice ? '/backoffice/finance/cash' : '/pos/cash-in';
+
+        $validated = $request->validate([
+            'direction' => ['required', 'in:cash-in,cash-out'],
+            'transaction_date' => ['required', 'date'],
+            'amount' => ['required', 'numeric', 'gt:0'],
+            'account_id' => ['required', 'uuid'],
+            'category' => ['required', 'string', 'max:100'],
+            'description' => ['required', 'string', 'max:500'],
+            'reference' => ['nullable', 'string', 'max:100'],
+            'form_mode' => ['nullable', 'string'],
+            'edit_transaction_id' => ['nullable', 'uuid'],
+        ]);
+
+        try {
+            $this->cashTransactionService->update(
+                (string) $this->routeContext->resolveTenantId(),
+                $transaction,
+                $validated,
+                $request->user(),
+                $request->ip(),
+                $request->userAgent(),
+            );
+        } catch (ValidationException $exception) {
+            return redirect($redirectUrl)
+                ->withErrors($exception->errors())
+                ->withInput(array_merge($request->all(), [
+                    'direction' => $validated['direction'] ?? $request->input('direction', 'cash-in'),
+                    'form_mode' => 'edit',
+                    'edit_transaction_id' => $transaction,
+                ]));
+        }
+
+        $label = ($validated['direction'] ?? 'cash-in') === 'cash-in' ? 'Kas masuk' : 'Kas keluar';
+
+        return redirect($redirectUrl)->with('status', "$label berhasil diperbarui.");
+    }
+
     private function storeTransaction(Request $request, string $direction)
     {
         $isBackoffice = $request->is('backoffice/*');

@@ -82,8 +82,12 @@ class CashTransactionService
             ->limit(100)
             ->get([
                 'ct.id',
+                'ct.tenant_id',
                 'ct.direction',
                 'ct.transaction_date',
+                'ct.account_id',
+                'ct.counter_account_id',
+                'ct.journal_entry_id',
                 'ct.category',
                 'ct.amount',
                 'ct.description',
@@ -109,17 +113,21 @@ class CashTransactionService
             return [
                 'id' => (string) $row->id,
                 'direction' => (string) $row->direction,
-                'transaction_date' => (string) $row->transaction_date,
+                'transaction_date' => CarbonImmutable::parse((string) $row->transaction_date)->toDateString(),
                 'category' => (string) $row->category,
                 'amount' => (float) $row->amount,
                 'description' => (string) $row->description,
                 'reference' => $row->reference,
+                'account_id' => (string) $row->account_id,
+                'counter_account_id' => (string) $row->counter_account_id,
+                'journal_entry_id' => (string) $row->journal_entry_id,
                 'balance_before' => (float) ($row->balance_before ?? 0),
                 'balance_after' => (float) ($row->balance_after ?? 0),
                 'created_at' => $row->created_at,
                 'account_label' => $cashAccountLabel,
                 'counter_account_label' => $counterAccountLabel,
                 'created_by_name' => $row->created_by_name,
+                'can_edit' => ! $this->isSystemLinkedTransaction((string) $row->tenant_id, (string) $row->id),
             ];
         })->values()->all();
     }
@@ -329,6 +337,176 @@ class CashTransactionService
     }
 
     /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    public function update(string $tenantId, string $transactionId, array $payload, ?User $actor = null, ?string $ipAddress = null, ?string $userAgent = null): array
+    {
+        $direction = (string) ($payload['direction'] ?? '');
+        if (! in_array($direction, ['cash-in', 'cash-out'], true)) {
+            throw ValidationException::withMessages([
+                'direction' => 'Arah transaksi kas tidak valid.',
+            ]);
+        }
+
+        $validated = validator($payload, [
+            'direction' => ['required', 'in:cash-in,cash-out'],
+            'transaction_date' => ['required', 'date'],
+            'amount' => ['required', 'numeric', 'gt:0'],
+            'account_id' => ['required', 'uuid'],
+            'category' => ['required', 'string', 'max:100'],
+            'description' => ['required', 'string', 'max:500'],
+            'reference' => ['nullable', 'string', 'max:100'],
+        ])->validate();
+
+        $amount = (float) $validated['amount'];
+        $transactionDate = CarbonImmutable::parse((string) $validated['transaction_date']);
+
+        $actorRole = $this->resolveActorRole($tenantId, $actor?->id);
+        if ($actorRole === 'cashier' && $amount >= self::CASHIER_TRANSACTION_LIMIT) {
+            throw ValidationException::withMessages([
+                'amount' => 'Nominal transaksi kas melebihi batas maksimal untuk cashier.',
+            ]);
+        }
+
+        $categoryOptions = $this->categoryOptions($direction);
+        if (! collect($categoryOptions)->contains('value', (string) $validated['category'])) {
+            throw ValidationException::withMessages([
+                'category' => 'Kategori transaksi tidak valid.',
+            ]);
+        }
+
+        $existing = CashTransaction::query()
+            ->where('tenant_id', $tenantId)
+            ->whereKey($transactionId)
+            ->firstOrFail();
+
+        if ($this->isSystemLinkedTransaction($tenantId, $transactionId)) {
+            throw ValidationException::withMessages([
+                'transaction' => 'Transaksi ini dibuat dari modul lain dan tidak bisa diedit dari menu Kas.',
+            ]);
+        }
+
+        $lockPeriodService = new LockPeriodService();
+        foreach (collect([$existing->transaction_date?->toDateString(), $transactionDate->toDateString()])->filter()->unique() as $date) {
+            try {
+                $lockPeriodService->ensureNotLocked(CarbonImmutable::parse((string) $date), $tenantId);
+            } catch (LockPeriodException $exception) {
+                throw ValidationException::withMessages([
+                    'transaction_date' => 'Periode transaksi terkunci. Pilih tanggal di periode yang masih terbuka.',
+                ]);
+            }
+        }
+
+        return DB::transaction(function () use ($tenantId, $transactionId, $direction, $validated, $actor, $ipAddress, $userAgent, $amount) {
+            $transaction = CashTransaction::query()
+                ->where('tenant_id', $tenantId)
+                ->whereKey($transactionId)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $cashAccountId = $this->resolvePostingAccountId($tenantId, (string) $validated['account_id']);
+            $counterAccountId = $this->resolveCounterpartAccountId($tenantId, $direction, (string) $validated['category'], $cashAccountId);
+            $balanceBefore = $this->accountBalance($tenantId, $cashAccountId, (string) $validated['transaction_date'], (string) $transaction->journal_entry_id);
+
+            if ($direction === 'cash-out' && $balanceBefore < $amount) {
+                throw ValidationException::withMessages([
+                    'amount' => 'Saldo kas/bank tidak mencukupi untuk kas keluar ini.',
+                ]);
+            }
+
+            $categoryLabel = $this->categoryLabel($direction, (string) $validated['category']);
+            $description = trim((string) $validated['description']);
+            $reference = trim((string) ($validated['reference'] ?? ''));
+            $balanceAfter = $direction === 'cash-in'
+                ? $balanceBefore + $amount
+                : $balanceBefore - $amount;
+            $oldValues = [
+                'direction' => $transaction->direction,
+                'transaction_date' => $transaction->transaction_date?->toDateString(),
+                'account_id' => $transaction->account_id,
+                'counter_account_id' => $transaction->counter_account_id,
+                'category' => $transaction->category,
+                'amount' => (float) $transaction->amount,
+                'description' => $transaction->description,
+                'reference' => $transaction->reference,
+            ];
+
+            JournalEntry::query()
+                ->where('tenant_id', $tenantId)
+                ->whereKey((string) $transaction->journal_entry_id)
+                ->update([
+                    'date' => CarbonImmutable::parse((string) $validated['transaction_date'])->toDateString(),
+                    'description' => ($direction === 'cash-in' ? 'Kas Masuk: ' : 'Kas Keluar: ').$categoryLabel,
+                    'status' => 'posted',
+                    'posted_at' => CarbonImmutable::now('UTC'),
+                ]);
+
+            JournalItem::query()
+                ->where('tenant_id', $tenantId)
+                ->where('journal_entry_id', (string) $transaction->journal_entry_id)
+                ->delete();
+
+            JournalItem::query()->insert($this->cashTransactionJournalItems(
+                (string) $transaction->journal_entry_id,
+                $tenantId,
+                $direction,
+                $cashAccountId,
+                $counterAccountId,
+                $amount,
+            ));
+
+            $transaction->update([
+                'direction' => $direction,
+                'transaction_date' => CarbonImmutable::parse((string) $validated['transaction_date'])->toDateString(),
+                'account_id' => $cashAccountId,
+                'counter_account_id' => $counterAccountId,
+                'category' => (string) $validated['category'],
+                'amount' => $amount,
+                'description' => $description,
+                'reference' => $reference !== '' ? $reference : null,
+                'balance_before' => $balanceBefore,
+                'balance_after' => $balanceAfter,
+            ]);
+
+            app(AuditLogger::class)->log(
+                $direction === 'cash-in' ? 'cash_in_updated' : 'cash_out_updated',
+                $actor?->id,
+                'cash_transaction',
+                $transactionId,
+                [
+                    'old' => $oldValues,
+                    'new' => [
+                        'direction' => $direction,
+                        'transaction_date' => (string) $validated['transaction_date'],
+                        'account_id' => $cashAccountId,
+                        'counter_account_id' => $counterAccountId,
+                        'category' => (string) $validated['category'],
+                        'amount' => $amount,
+                        'balance_before' => $balanceBefore,
+                        'balance_after' => $balanceAfter,
+                        'description' => $description,
+                        'reference' => $reference !== '' ? $reference : null,
+                    ],
+                ],
+                $ipAddress,
+                $userAgent,
+                $tenantId,
+                CarbonImmutable::now('UTC'),
+            );
+
+            return [
+                'transaction_id' => $transactionId,
+                'journal_entry_id' => (string) $transaction->journal_entry_id,
+                'balance_before' => $balanceBefore,
+                'balance_after' => $balanceAfter,
+                'direction' => $direction,
+                'category_label' => $categoryLabel,
+            ];
+        });
+    }
+
+    /**
      * @return array<int, array<string, string>>
      */
     private function cashAccounts(string $tenantId): array
@@ -449,7 +627,7 @@ class CashTransactionService
 
             return [
                 'id' => (string) $row->id,
-                'transaction_date' => (string) $row->transaction_date,
+                'transaction_date' => CarbonImmutable::parse((string) $row->transaction_date)->toDateString(),
                 'category' => (string) $row->category,
                 'amount' => (float) $row->amount,
                 'description' => (string) $row->description,
@@ -565,9 +743,57 @@ class CashTransactionService
         ]);
     }
 
-    private function accountBalance(string $tenantId, string $accountId, string $asOfDate): float
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function cashTransactionJournalItems(string $journalEntryId, string $tenantId, string $direction, string $cashAccountId, string $counterAccountId, float $amount): array
     {
-        $row = DB::table('journal_items as ji')
+        return $direction === 'cash-in'
+            ? [
+                [
+                    'id' => (string) Str::uuid(),
+                    'journal_entry_id' => $journalEntryId,
+                    'tenant_id' => $tenantId,
+                    'account_id' => $cashAccountId,
+                    'debit' => $amount,
+                    'credit' => 0,
+                    'is_reversal' => false,
+                ],
+                [
+                    'id' => (string) Str::uuid(),
+                    'journal_entry_id' => $journalEntryId,
+                    'tenant_id' => $tenantId,
+                    'account_id' => $counterAccountId,
+                    'debit' => 0,
+                    'credit' => $amount,
+                    'is_reversal' => false,
+                ],
+            ]
+            : [
+                [
+                    'id' => (string) Str::uuid(),
+                    'journal_entry_id' => $journalEntryId,
+                    'tenant_id' => $tenantId,
+                    'account_id' => $counterAccountId,
+                    'debit' => $amount,
+                    'credit' => 0,
+                    'is_reversal' => false,
+                ],
+                [
+                    'id' => (string) Str::uuid(),
+                    'journal_entry_id' => $journalEntryId,
+                    'tenant_id' => $tenantId,
+                    'account_id' => $cashAccountId,
+                    'debit' => 0,
+                    'credit' => $amount,
+                    'is_reversal' => false,
+                ],
+            ];
+    }
+
+    private function accountBalance(string $tenantId, string $accountId, string $asOfDate, ?string $excludeJournalEntryId = null): float
+    {
+        $query = DB::table('journal_items as ji')
             ->join('journal_entries as je', function ($join) {
                 $join->on('je.id', '=', 'ji.journal_entry_id')
                     ->on('je.tenant_id', '=', 'ji.tenant_id');
@@ -575,11 +801,27 @@ class CashTransactionService
             ->where('ji.tenant_id', $tenantId)
             ->where('ji.account_id', $accountId)
             ->where('je.status', 'posted')
-            ->where('je.date', '<=', $asOfDate)
-            ->selectRaw('coalesce(sum(ji.debit - ji.credit), 0) as balance')
-            ->first();
+            ->where('je.date', '<=', $asOfDate);
+
+        if ($excludeJournalEntryId) {
+            $query->where('je.id', '!=', $excludeJournalEntryId);
+        }
+
+        $row = $query->selectRaw('coalesce(sum(ji.debit - ji.credit), 0) as balance')->first();
 
         return (float) ($row->balance ?? 0);
+    }
+
+    private function isSystemLinkedTransaction(string $tenantId, string $transactionId): bool
+    {
+        return DB::table('fixed_assets')
+            ->where('tenant_id', $tenantId)
+            ->where('purchase_cash_transaction_id', $transactionId)
+            ->exists()
+            || DB::table('fixed_asset_payment_logs')
+                ->where('tenant_id', $tenantId)
+                ->where('cash_transaction_id', $transactionId)
+                ->exists();
     }
 
     private function categoryLabel(string $direction, string $category): string

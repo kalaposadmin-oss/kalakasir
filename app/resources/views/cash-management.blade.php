@@ -6,6 +6,7 @@
     $cashBasePath = $cashBasePath ?? ($cashPortal === 'backoffice' ? '/backoffice/finance/cash' : '/pos/cash-in');
     $cashInUrl = $cashInUrl ?? $cashBasePath;
     $cashOutUrl = $cashOutUrl ?? ($cashPortal === 'backoffice' ? '/backoffice/finance/cash/out' : '/pos/cash-out');
+    $cashUpdateBaseUrl = $cashUpdateBaseUrl ?? ($cashPortal === 'backoffice' ? '/backoffice/finance/cash' : '/pos/cash-transactions');
     $cashBackUrl = $cashBackUrl ?? ($cashPortal === 'backoffice' ? '/backoffice/finance/summary' : pos_default_url());
     $from = (string) request()->query('from', '');
     if ($from !== '') {
@@ -162,7 +163,17 @@
 
             <div id="transaction-list" class="space-y-3">
                 @forelse ($transactionHistory as $transaction)
-                    <article class="rounded-2xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/60" data-direction="{{ $transaction['direction'] }}">
+                    <article
+                        class="rounded-2xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/60"
+                        data-id="{{ $transaction['id'] }}"
+                        data-direction="{{ $transaction['direction'] }}"
+                        data-date="{{ $transaction['transaction_date'] }}"
+                        data-account-id="{{ $transaction['account_id'] ?? '' }}"
+                        data-category="{{ $transaction['category'] }}"
+                        data-amount="{{ $transaction['amount'] }}"
+                        data-description="{{ $transaction['description'] }}"
+                        data-reference="{{ $transaction['reference'] ?? '' }}"
+                    >
                         <div class="flex items-start justify-between gap-3">
                             <div class="flex items-start gap-3 min-w-0">
                                 <span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg {{ $transaction['direction'] === 'cash-in' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600' }}">
@@ -176,6 +187,14 @@
                             <div class="text-right shrink-0">
                                 <p class="text-sm font-bold {{ $transaction['direction'] === 'cash-in' ? 'text-emerald-600' : 'text-rose-600' }}">{{ $transaction['direction'] === 'cash-in' ? '+' : '-' }}Rp {{ number_format($transaction['amount'], 0, ',', '.') }}</p>
                                 <p class="text-[11px] text-slate-400">{{ $transaction['account_label'] }}</p>
+                                @if ($transaction['can_edit'] ?? true)
+                                    <button type="button" class="btn-edit-cash mt-2 inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-primary shadow-sm ring-1 ring-primary/15 dark:bg-slate-900">
+                                        <span class="material-symbols-outlined text-sm">edit</span>
+                                        Edit
+                                    </button>
+                                @else
+                                    <span class="mt-2 inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-400 dark:bg-slate-800">Terkunci sistem</span>
+                                @endif
                             </div>
                         </div>
                     </article>
@@ -218,6 +237,9 @@
             {{-- Form --}}
             <form id="cash-form" action="{{ $cashInUrl }}" method="POST" class="space-y-4">
                 @csrf
+                <input id="form-method" type="hidden" name="_method" value="PUT" disabled />
+                <input id="form-mode" type="hidden" name="form_mode" value="{{ old('form_mode', 'create') }}" />
+                <input id="edit-transaction-id" type="hidden" name="edit_transaction_id" value="{{ old('edit_transaction_id') }}" />
                 <input type="hidden" name="direction" id="form-direction" value="cash-in" />
                 <div class="grid grid-cols-2 gap-3">
                     <label class="space-y-1">
@@ -227,14 +249,14 @@
                     </label>
                     <label class="space-y-1">
                         <span class="ml-1 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">Nominal</span>
-                        <input name="amount" type="number" step="0.01" min="0" value="{{ old('amount') }}" placeholder="0" class="w-full rounded-2xl border-slate-200 bg-white px-4 py-3 text-sm focus:border-primary focus:ring-primary dark:border-slate-800 dark:bg-slate-900" />
+                        <input id="cash-amount" name="amount" type="number" step="0.01" min="0" value="{{ old('amount') }}" placeholder="0" class="w-full rounded-2xl border-slate-200 bg-white px-4 py-3 text-sm focus:border-primary focus:ring-primary dark:border-slate-800 dark:bg-slate-900" />
                         @error('amount') <p class="text-xs text-rose-500">{{ $message }}</p> @enderror
                     </label>
                 </div>
 
                 <label class="block space-y-1">
                     <span class="ml-1 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">Akun Kas / Bank</span>
-                    <select name="account_id" class="w-full rounded-2xl border-slate-200 bg-white px-4 py-3 text-sm focus:border-primary focus:ring-primary dark:border-slate-800 dark:bg-slate-900">
+                    <select id="cash-account-id" name="account_id" class="w-full rounded-2xl border-slate-200 bg-white px-4 py-3 text-sm focus:border-primary focus:ring-primary dark:border-slate-800 dark:bg-slate-900">
                         <option value="">Pilih akun</option>
                         @foreach ($cashAccounts as $account)
                             <option value="{{ $account['value'] }}" @selected(old('account_id') === $account['value'])>{{ $account['label'] }}</option>
@@ -253,13 +275,13 @@
 
                 <label class="block space-y-1">
                     <span class="ml-1 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">Deskripsi</span>
-                    <textarea name="description" rows="2" placeholder="Contoh: Setoran modal awal untuk kas operasional" class="w-full rounded-2xl border-slate-200 bg-white px-4 py-3 text-sm focus:border-primary focus:ring-primary dark:border-slate-800 dark:bg-slate-900">{{ old('description') }}</textarea>
+                    <textarea id="cash-description" name="description" rows="2" placeholder="Contoh: Setoran modal awal untuk kas operasional" class="w-full rounded-2xl border-slate-200 bg-white px-4 py-3 text-sm focus:border-primary focus:ring-primary dark:border-slate-800 dark:bg-slate-900">{{ old('description') }}</textarea>
                     @error('description') <p class="text-xs text-rose-500">{{ $message }}</p> @enderror
                 </label>
 
                 <label class="block space-y-1">
                     <span class="ml-1 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">Referensi (Opsional)</span>
-                    <input name="reference" type="text" value="{{ old('reference') }}" placeholder="No. bukti, invoice, atau catatan singkat" class="w-full rounded-2xl border-slate-200 bg-white px-4 py-3 text-sm focus:border-primary focus:ring-primary dark:border-slate-800 dark:bg-slate-900" />
+                    <input id="cash-reference" name="reference" type="text" value="{{ old('reference') }}" placeholder="No. bukti, invoice, atau catatan singkat" class="w-full rounded-2xl border-slate-200 bg-white px-4 py-3 text-sm focus:border-primary focus:ring-primary dark:border-slate-800 dark:bg-slate-900" />
                     @error('reference') <p class="text-xs text-rose-500">{{ $message }}</p> @enderror
                 </label>
 
@@ -278,6 +300,11 @@
             const categoryOptionsOut = @json(collect($categoryOptions['cash-out'] ?? [])->values());
             const cashInUrl = @json($cashInUrl);
             const cashOutUrl = @json($cashOutUrl);
+            const cashUpdateBaseUrl = @json($cashUpdateBaseUrl);
+            const oldFormMode = @json(old('form_mode', 'create'));
+            const oldDirection = @json(old('direction', 'cash-in'));
+            const oldCategory = @json(old('category'));
+            const oldEditTransactionId = @json(old('edit_transaction_id'));
 
             // ===== Sheet elements =====
             const overlay = document.getElementById('cash-sheet-overlay');
@@ -286,10 +313,19 @@
             const modeLabel = document.getElementById('sheet-mode-label');
             const sheetTitle = document.getElementById('sheet-title');
             const form = document.getElementById('cash-form');
+            const formMethod = document.getElementById('form-method');
+            const formMode = document.getElementById('form-mode');
+            const editTransactionId = document.getElementById('edit-transaction-id');
             const directionInput = document.getElementById('form-direction');
             const categorySelect = document.getElementById('cash-category-select');
+            const transactionDate = document.getElementById('cash-transaction-date');
+            const amountInput = document.getElementById('cash-amount');
+            const accountSelect = document.getElementById('cash-account-id');
+            const descriptionInput = document.getElementById('cash-description');
+            const referenceInput = document.getElementById('cash-reference');
             const submitIcon = document.getElementById('submit-icon');
             const submitLabel = document.getElementById('submit-label');
+            let editingTransactionId = null;
 
             const openSheet = () => {
                 overlay.classList.add('active');
@@ -303,15 +339,21 @@
             backdrop.addEventListener('click', closeSheet);
             closeBtn.addEventListener('click', closeSheet);
 
-            const setDirection = (direction) => {
+            const setDirection = (direction, selectedCategory = '') => {
                 const isIn = direction === 'cash-in';
                 directionInput.value = direction;
-                form.action = isIn ? cashInUrl : cashOutUrl;
+                form.action = editingTransactionId
+                    ? `${cashUpdateBaseUrl}/${editingTransactionId}`
+                    : (isIn ? cashInUrl : cashOutUrl);
 
                 modeLabel.textContent = isIn ? 'Pemasukan Kas' : 'Pengeluaran Kas';
-                sheetTitle.textContent = isIn ? 'Kas Masuk' : 'Kas Keluar';
+                sheetTitle.textContent = editingTransactionId
+                    ? (isIn ? 'Edit Kas Masuk' : 'Edit Kas Keluar')
+                    : (isIn ? 'Kas Masuk' : 'Kas Keluar');
                 submitIcon.textContent = isIn ? 'add_card' : 'remove_shopping_cart';
-                submitLabel.textContent = isIn ? 'Simpan Kas Masuk' : 'Simpan Kas Keluar';
+                submitLabel.textContent = editingTransactionId
+                    ? (isIn ? 'Simpan Perubahan Kas Masuk' : 'Simpan Perubahan Kas Keluar')
+                    : (isIn ? 'Simpan Kas Masuk' : 'Simpan Kas Keluar');
 
                 // Populate categories
                 const options = isIn ? categoryOptionsIn : categoryOptionsOut;
@@ -322,21 +364,76 @@
                     el.textContent = opt.label;
                     categorySelect.appendChild(el);
                 });
+                categorySelect.value = selectedCategory || '';
+            };
+
+            const resetFormForCreate = (direction) => {
+                editingTransactionId = null;
+                formMode.value = 'create';
+                editTransactionId.value = '';
+                formMethod.disabled = true;
+                form.reset();
+                transactionDate.value = @json(now()->toDateString());
+                setDirection(direction);
+            };
+
+            const startEdit = (item, shouldFillFields = true) => {
+                editingTransactionId = item.id || oldEditTransactionId;
+                formMode.value = 'edit';
+                editTransactionId.value = editingTransactionId || '';
+                formMethod.disabled = false;
+                setDirection(item.direction || 'cash-in', item.category || '');
+
+                if (shouldFillFields) {
+                    transactionDate.value = item.date || '';
+                    amountInput.value = item.amount || '';
+                    accountSelect.value = item.accountId || '';
+                    descriptionInput.value = item.description || '';
+                    referenceInput.value = item.reference || '';
+                }
             };
 
             // Open buttons — directly set direction, no tab switching needed
             document.getElementById('btn-open-cash-in').addEventListener('click', () => {
-                setDirection('cash-in');
+                resetFormForCreate('cash-in');
                 openSheet();
             });
             document.getElementById('btn-open-cash-out').addEventListener('click', () => {
-                setDirection('cash-out');
+                resetFormForCreate('cash-out');
                 openSheet();
+            });
+
+            document.querySelectorAll('.btn-edit-cash').forEach(button => {
+                button.addEventListener('click', () => {
+                    const item = button.closest('article[data-id]');
+                    if (!item) return;
+                    startEdit({
+                        id: item.dataset.id,
+                        direction: item.dataset.direction,
+                        date: item.dataset.date,
+                        accountId: item.dataset.accountId,
+                        category: item.dataset.category,
+                        amount: item.dataset.amount,
+                        description: item.dataset.description,
+                        reference: item.dataset.reference,
+                    });
+                    openSheet();
+                });
             });
 
             // Auto-open sheet if there are validation errors (user was submitting)
             @if ($errors->any())
-                setDirection('{{ old("direction", "cash-in") }}');
+                if (oldFormMode === 'edit') {
+                    startEdit({
+                        id: oldEditTransactionId,
+                        direction: oldDirection,
+                        category: oldCategory,
+                    }, false);
+                } else {
+                    editingTransactionId = null;
+                    formMethod.disabled = true;
+                    setDirection(oldDirection, oldCategory || '');
+                }
                 openSheet();
             @endif
 

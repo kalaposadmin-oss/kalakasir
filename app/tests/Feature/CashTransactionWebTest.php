@@ -117,11 +117,97 @@ class CashTransactionWebTest extends TestCase
                 'description' => 'Bayar operasional tunai',
             ]);
 
-        $this->assertSame('/pos/cash-out', $this->redirectPath($response), 'status='.$response->getStatusCode().' headers='.json_encode($response->headers->all()));
+        $this->assertSame('/pos/cash-in', $this->redirectPath($response), 'status='.$response->getStatusCode().' headers='.json_encode($response->headers->all()));
         $response->assertSessionHasErrors('amount');
         $this->assertDatabaseMissing('cash_transactions', [
             'tenant_id' => $tenant->id,
             'direction' => 'cash-out',
+        ]);
+    }
+
+    public function test_cash_transaction_can_be_edited_and_rewrites_posted_journal(): void
+    {
+        [$tenant, $user] = $this->createWebActor('admin', 'cash-edit-admin@example.test');
+        app(TenantDefaultAccountingSetupService::class)->ensure($tenant->id, $user->id);
+
+        $cashAccountId = (string) DB::table('account_mappings')->where('tenant_id', $tenant->id)->value('cash_account_id');
+        $equityAccountId = (string) DB::table('chart_of_accounts')->where('tenant_id', $tenant->id)->where('code', '3101')->value('id');
+
+        $this->actingAs($user)
+            ->withSession(['auth_portal' => 'pos'])
+            ->post('http://pos.127.0.0.1.nip.io/pos/cash-in', [
+                'transaction_date' => '2026-04-18',
+                'amount' => 250000,
+                'account_id' => $cashAccountId,
+                'category' => 'other_income',
+                'description' => 'Penerimaan sebelum diedit',
+                'reference' => 'EDIT-OLD',
+            ]);
+
+        $transaction = DB::table('cash_transactions')
+            ->where('tenant_id', $tenant->id)
+            ->where('direction', 'cash-in')
+            ->first();
+
+        $response = $this->actingAs($user)
+            ->withSession(['auth_portal' => 'pos'])
+            ->put('http://pos.127.0.0.1.nip.io/pos/cash-transactions/'.$transaction->id, [
+                'direction' => 'cash-in',
+                'transaction_date' => '2026-04-19',
+                'amount' => 400000,
+                'account_id' => $cashAccountId,
+                'category' => 'capital_injection',
+                'description' => 'Setoran modal setelah diedit',
+                'reference' => 'EDIT-NEW',
+            ]);
+
+        $this->assertSame('/pos/cash-in', $this->redirectPath($response));
+
+        $this->assertDatabaseHas('cash_transactions', [
+            'id' => $transaction->id,
+            'tenant_id' => $tenant->id,
+            'transaction_date' => '2026-04-19 00:00:00',
+            'category' => 'capital_injection',
+            'amount' => 400000,
+            'description' => 'Setoran modal setelah diedit',
+            'reference' => 'EDIT-NEW',
+        ]);
+
+        $journalEntryId = (string) DB::table('cash_transactions')
+            ->where('id', $transaction->id)
+            ->value('journal_entry_id');
+
+        $this->assertDatabaseHas('journal_entries', [
+            'id' => $journalEntryId,
+            'tenant_id' => $tenant->id,
+            'reference_type' => 'cash_transaction',
+            'reference_id' => $transaction->id,
+            'date' => '2026-04-19',
+            'description' => 'Kas Masuk: Tambahan modal / setoran owner',
+            'status' => 'posted',
+        ]);
+
+        $this->assertDatabaseHas('journal_items', [
+            'tenant_id' => $tenant->id,
+            'journal_entry_id' => $journalEntryId,
+            'account_id' => $cashAccountId,
+            'debit' => 400000,
+            'credit' => 0,
+        ]);
+
+        $this->assertDatabaseHas('journal_items', [
+            'tenant_id' => $tenant->id,
+            'journal_entry_id' => $journalEntryId,
+            'account_id' => $equityAccountId,
+            'debit' => 0,
+            'credit' => 400000,
+        ]);
+
+        $this->assertDatabaseHas('audit_logs', [
+            'tenant_id' => $tenant->id,
+            'reference_type' => 'cash_transaction',
+            'reference_id' => $transaction->id,
+            'event_type' => 'cash_in_updated',
         ]);
     }
 
@@ -170,14 +256,11 @@ class CashTransactionWebTest extends TestCase
 
         $response = $this->actingAs($user)
             ->withSession(['auth_portal' => 'pos'])
-            ->get('http://pos.127.0.0.1.nip.io/pos/cash-in');
+            ->get('http://pos.127.0.0.1.nip.io/pos/cash-in?month=2026-04');
 
         $response->assertOk();
-        $response->assertSee('Riwayat lengkap');
+        $response->assertSee('Riwayat Transaksi');
         $response->assertSee('Penerimaan kas non operasional');
-        $response->assertSee('Akun kas/bank');
-        $response->assertSee('Akun lawan');
-        $response->assertSee('Dicatat oleh');
     }
 
     /**

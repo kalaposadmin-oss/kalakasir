@@ -1034,9 +1034,16 @@
                 return material?.name || 'Bahan baku';
             };
 
+            const canCreateDraftFromPreview = () => {
+                const status = state.recipePreview?.status || '';
+                const ingredients = Array.isArray(state.recipePreview?.ingredients) ? state.recipePreview.ingredients : [];
+
+                return ['preview_valid', 'stock_shortage'].includes(status)
+                    && ingredients.length > 0;
+            };
+
             const updateSubmitState = () => {
-                const canPost = state.recipePreview?.status === 'preview_valid'
-                    && state.recipePreview?.can_post === true
+                const canPost = canCreateDraftFromPreview()
                     && outputRowsAreValid();
                 el.createSubmit.disabled = !canPost;
                 el.createSubmit.classList.toggle('opacity-60', !canPost);
@@ -1289,7 +1296,7 @@
                         </div>
                         <div class="mb-2 flex items-center justify-between gap-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
                             <span>${ingredients.length} bahan • output harapan ${formatNumber(preview.expected_output_qty || 0)}</span>
-                            <span>Posting belum tersedia</span>
+                            <span>Draft bisa disimpan</span>
                         </div>
                         <div class="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-400">
                             <span class="material-symbols-outlined text-[16px]">recipe</span>
@@ -1898,7 +1905,7 @@
 
             el.createForm?.addEventListener('submit', async (event) => {
                 event.preventDefault();
-                const canSubmit = state.recipePreview?.status === 'preview_valid' && state.recipePreview?.can_post === true;
+                const canSubmit = canCreateDraftFromPreview();
                 const outputsValid = outputRowsAreValid();
                 if (!canSubmit || !outputsValid) {
                     const summary = outputPlanSummary();

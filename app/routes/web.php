@@ -233,6 +233,7 @@ Route::middleware(['canonical_portal_host:pos', 'web_access:pos,cashier|staff|wa
     // Store actions
     Route::post('/pos/cash-in', [CashManagementController::class, 'storeCashIn']);
     Route::post('/pos/cash-out', [CashManagementController::class, 'storeCashOut']);
+    Route::put('/pos/cash-transactions/{transaction}', [CashManagementController::class, 'update']);
 });
 
 Route::middleware(['canonical_portal_host:pos'])->group(function () {
@@ -481,6 +482,7 @@ Route::middleware(['canonical_portal_host:backoffice'])->group(function () {
     Route::get('/backoffice/finance/cash/out', fn () => redirect('/backoffice/finance/cash'))->middleware('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,finance.cash_transactions');
     Route::post('/backoffice/finance/cash', [CashManagementController::class, 'storeCashIn'])->middleware('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,finance.cash_transactions');
     Route::post('/backoffice/finance/cash/out', [CashManagementController::class, 'storeCashOut'])->middleware('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,finance.cash_transactions');
+    Route::put('/backoffice/finance/cash/{transaction}', [CashManagementController::class, 'update'])->middleware('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,finance.cash_transactions');
     Route::get('/backoffice/settings/chart-of-accounts/{account}', [TenantViewController::class, 'showWithRouteParam'])
         ->defaults('view', 'chart-of-accounts-detail')
         ->defaults('routeParam', 'account')

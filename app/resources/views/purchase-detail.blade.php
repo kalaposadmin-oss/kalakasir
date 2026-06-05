@@ -33,6 +33,9 @@
             .status-badge {
                 @apply px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider;
             }
+            .purchase-detail-main-has-action {
+                padding-bottom: calc(env(safe-area-inset-bottom) + 12rem) !important;
+            }
             #purchase-action-bar:not(.hidden) + #receipt-section {
                 padding-bottom: calc(env(safe-area-inset-bottom) + 7rem);
             }
@@ -154,30 +157,32 @@
         </div>
     </section>
     @if ($canManagePurchaseDetail)
-        <div id="purchase-action-bar" class="fixed bottom-0 left-1/2 z-30 hidden w-full max-w-[430px] -translate-x-1/2 bg-white/95 px-4 pt-4 backdrop-blur-xl dark:bg-slate-900/95 app-bottom-safe-footer">
-            <div id="draft-actions" class="hidden flex flex-col gap-3">
-                <button id="submit-draft" class="flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-4 font-bold text-white shadow-lg shadow-primary/30" type="button">
-                    <span class="material-symbols-outlined text-base">send</span>
-                    <span id="submit-draft-label">Proses PO</span>
-                </button>
-                <p id="submit-draft-helper" class="text-center text-xs font-medium text-slate-500 dark:text-slate-400">Setelah diproses, PO bisa dilanjutkan ke penerimaan barang.</p>
-            </div>
-            <div id="approval-actions" class="flex gap-3">
-                <button id="reject" class="flex-1 py-4 px-6 rounded-xl border-2 border-slate-200 dark:border-slate-700 font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50" type="button">Tolak</button>
-                <button id="approve" class="flex-[2] py-4 px-6 rounded-xl bg-primary text-white font-bold shadow-lg shadow-primary/30 flex items-center justify-center gap-2" type="button">
-                    <span class="material-symbols-outlined text-sm">check_circle</span>
-                    <span id="approve-label">Setujui Pembelian</span>
-                </button>
-            </div>
-            <div id="fulfillment-actions" class="hidden flex flex-col gap-3">
-                <a id="open-receiving" class="flex items-center justify-center py-4 px-6 rounded-xl bg-primary text-white font-bold shadow-lg shadow-primary/30" href="#">Terima Barang</a>
-                <button id="close-purchase" class="flex items-center justify-center gap-2 py-4 px-6 rounded-xl border-2 border-amber-200 bg-amber-50 font-bold text-amber-700 hover:bg-amber-100 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300" type="button">
-                    <span class="material-symbols-outlined text-base">event_busy</span>
-                    <span>Tidak Ada Susulan</span>
-                </button>
-            </div>
-            <div class="mt-4 flex justify-center">
-                <div class="w-32 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full"></div>
+        <div id="purchase-action-bar" class="fixed inset-x-0 bottom-0 z-30 hidden bg-white/95 px-4 pt-4 backdrop-blur-xl dark:bg-slate-900/95 lg:left-72 app-bottom-safe-footer">
+            <div class="mx-auto w-full max-w-3xl">
+                <div id="draft-actions" class="mx-auto hidden w-full max-w-md flex flex-col gap-3">
+                    <button id="submit-draft" class="flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-4 font-bold text-white shadow-lg shadow-primary/30" type="button">
+                        <span class="material-symbols-outlined text-base">send</span>
+                        <span id="submit-draft-label">Proses PO</span>
+                    </button>
+                    <p id="submit-draft-helper" class="text-center text-xs font-medium text-slate-500 dark:text-slate-400">Setelah diproses, PO bisa dilanjutkan ke penerimaan barang.</p>
+                </div>
+                <div id="approval-actions" class="flex gap-3">
+                    <button id="reject" class="flex-1 py-4 px-6 rounded-xl border-2 border-slate-200 dark:border-slate-700 font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50" type="button">Tolak</button>
+                    <button id="approve" class="flex-[2] py-4 px-6 rounded-xl bg-primary text-white font-bold shadow-lg shadow-primary/30 flex items-center justify-center gap-2" type="button">
+                        <span class="material-symbols-outlined text-sm">check_circle</span>
+                        <span id="approve-label">Setujui Pembelian</span>
+                    </button>
+                </div>
+                <div id="fulfillment-actions" class="hidden flex flex-col gap-3">
+                    <a id="open-receiving" class="flex items-center justify-center py-4 px-6 rounded-xl bg-primary text-white font-bold shadow-lg shadow-primary/30" href="#">Terima Barang</a>
+                    <button id="close-purchase" class="flex items-center justify-center gap-2 py-4 px-6 rounded-xl border-2 border-amber-200 bg-amber-50 font-bold text-amber-700 hover:bg-amber-100 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300" type="button">
+                        <span class="material-symbols-outlined text-base">event_busy</span>
+                        <span>Tidak Ada Susulan</span>
+                    </button>
+                </div>
+                <div class="mt-4 flex justify-center">
+                    <div class="w-32 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full"></div>
+                </div>
             </div>
         </div>
     @endif
@@ -380,6 +385,7 @@
                     statusDot: document.getElementById('status-dot'),
                     paymentMethodLabel: document.getElementById('payment-method-label'),
                     paymentDetailLabel: document.getElementById('payment-detail-label'),
+                    pageMain: document.querySelector('main'),
                     actionBar: document.getElementById('purchase-action-bar'),
                     approvalActions: document.getElementById('approval-actions'),
                     fulfillmentActions: document.getElementById('fulfillment-actions'),
@@ -980,6 +986,7 @@
                     el.deleteDraft?.classList.toggle('hidden', normalizedStatus !== purchaseStatusDraft);
                     el.draftNextHint?.classList.toggle('hidden', normalizedStatus !== purchaseStatusDraft);
                     el.actionBar?.classList.toggle('hidden', !showActionBar);
+                    el.pageMain?.classList.toggle('purchase-detail-main-has-action', showActionBar);
                     el.draftActions?.classList.toggle('hidden', !showDraftAction);
                     el.approvalActions?.classList.toggle('hidden', !showApproval);
                     el.fulfillmentActions?.classList.toggle('hidden', !showFulfillment);
