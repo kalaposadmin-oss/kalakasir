@@ -72,7 +72,8 @@ class ProductProductionReadinessLiveUiTest extends TestCase
         $this->assertStringContainsString('const varianceState = () => {', $productionBatchDetailContents);
         $this->assertStringContainsString('reasonIndicatesInputMistake', $productionBatchDetailContents);
         $this->assertStringContainsString('Selisih hasil terlalu besar dan kemungkinan salah input', $productionBatchDetailContents);
-        $this->assertStringContainsString('max-h-[92dvh]', $productionBatchDetailContents);
+        $this->assertStringContainsString('bottom-0 top-4', $productionBatchDetailContents);
+        $this->assertStringContainsString('lg:inset-y-8', $productionBatchDetailContents);
         $this->assertStringContainsString('overflow-y-auto overscroll-contain', $productionBatchDetailContents);
         $this->assertStringContainsString('sticky bottom-0', $productionBatchDetailContents);
     }

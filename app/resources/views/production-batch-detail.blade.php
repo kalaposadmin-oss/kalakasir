@@ -273,11 +273,11 @@
 
     <div id="batch-detail-post-modal" class="fixed inset-0 z-50 hidden">
         <div data-close="post" class="absolute inset-0 bg-slate-950/40"></div>
-        <div class="absolute inset-x-0 bottom-0 mx-auto flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-[28px] bg-white shadow-2xl dark:bg-slate-950 lg:top-1/2 lg:bottom-auto lg:max-h-[88dvh] lg:-translate-y-1/2 lg:rounded-[28px]">
-            <div class="shrink-0 px-5 pt-5">
+        <div class="absolute inset-x-0 bottom-0 top-4 mx-auto w-full max-w-2xl overflow-y-auto overscroll-contain rounded-t-[28px] bg-white shadow-2xl dark:bg-slate-950 lg:inset-y-8 lg:rounded-[28px]">
+            <div class="px-5 pt-5">
                 <div class="mx-auto mb-4 h-1.5 w-14 rounded-full bg-slate-200 dark:bg-slate-700"></div>
             </div>
-            <div class="mb-4 flex shrink-0 items-start justify-between gap-4 px-5">
+            <div class="mb-4 flex items-start justify-between gap-4 px-5">
                 <div>
                     <p class="text-[11px] font-bold uppercase tracking-widest text-slate-400">Posting Batch</p>
                     <h3 class="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">Konfirmasi Actual Yield</h3>
@@ -286,7 +286,7 @@
                     <span class="material-symbols-outlined text-base">close</span>
                 </button>
             </div>
-            <form id="batch-post-form" class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-28 space-y-3">
+            <form id="batch-post-form" class="px-5 pb-28 space-y-3">
                 <div class="grid gap-3 md:grid-cols-2">
                     <label class="block">
                         <span class="mb-1 block text-[11px] font-bold uppercase tracking-widest text-slate-400">Actual Output Qty</span>
