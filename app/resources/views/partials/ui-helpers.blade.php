@@ -667,14 +667,14 @@
                         firstIngredientIssue = `Line BOM #${index + 1}: raw material wajib dipilih.`;
                     } else if (!(lineQty > 0) && !firstIngredientIssue) {
                         firstIngredientIssue = `Line BOM #${index + 1}: qty harus lebih dari 0.`;
-                    } else if (productType !== 'raw_material' && !firstIngredientIssue) {
-                        firstIngredientIssue = `Line BOM #${index + 1}: bahan baku harus bertipe raw_material.`;
+                    } else if (!['raw_material', 'packaging'].includes(productType) && !firstIngredientIssue) {
+                        firstIngredientIssue = `Line BOM #${index + 1}: komponen harus bertipe bahan baku atau packaging. Tipe saat ini: ${productType || 'belum terbaca'}.`;
                     } else if (variantRequired && !variantId && !firstIngredientIssue) {
                         firstIngredientIssue = `Line BOM #${index + 1}: variant raw material wajib dipilih.`;
                     }
                 });
 
-                pushCheck('Validitas bahan baku', firstIngredientIssue === '', firstIngredientIssue || 'Periksa kembali line BOM yang diisi.');
+                pushCheck('Validitas bahan / packaging', firstIngredientIssue === '', firstIngredientIssue || 'Periksa kembali line BOM yang diisi.');
             }
 
             const eligible = checks.every((check) => check.passed);

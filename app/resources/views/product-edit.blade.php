@@ -197,7 +197,7 @@
                         <div class="flex items-center justify-between gap-4">
                             <div>
                                 <p class="text-sm font-bold text-slate-800">Gunakan BOM / Recipe</p>
-                                <p class="text-xs text-slate-500">Pilih bahan baku dan variant raw material secara eksplisit per line.</p>
+                                <p class="text-xs text-slate-500">Pilih bahan baku atau packaging yang akan ikut berkurang saat produksi.</p>
                             </div>
                             <label class="relative inline-flex items-center cursor-pointer">
                                 <input id="edit-enable-bom" type="checkbox" class="sr-only peer" />
@@ -644,7 +644,7 @@
                 };
 
                 const bomProductOptionsHtml = (selectedId = '') => {
-                    const options = ['<option value="">Pilih bahan baku</option>'];
+                    const options = ['<option value="">Pilih bahan baku / packaging</option>'];
 
                     rawMaterialProducts.forEach((product) => {
                         const selected = String(product.id) === String(selectedId || '') ? 'selected' : '';
@@ -967,12 +967,16 @@
 
                     el.productionReadinessChecklist.innerHTML = checks.map((check) => {
                         const passed = Boolean(check.passed);
+                        const lineMatch = String(check.reason || '').match(/Line BOM #(\d+)/);
+                        const lineNumber = lineMatch ? Number(lineMatch[1]) : 0;
+                        const focusAttr = !passed && lineNumber > 0 ? ` data-focus-bom-line="${lineNumber}"` : '';
+                        const focusClass = !passed && lineNumber > 0 ? ' cursor-pointer hover:ring-primary/40' : '';
                         return `
-                            <div class="flex items-start gap-2 rounded-xl bg-white px-3 py-2 ring-1 ${passed ? 'ring-emerald-200' : 'ring-amber-200'}">
+                            <div class="flex items-start gap-2 rounded-xl bg-white px-3 py-2 ring-1 ${passed ? 'ring-emerald-200' : 'ring-amber-200'}${focusClass}"${focusAttr}>
                                 <span class="mt-0.5 material-symbols-outlined text-[16px] ${passed ? 'text-emerald-600' : 'text-amber-600'}">${passed ? 'check_circle' : 'radio_button_unchecked'}</span>
                                 <div class="min-w-0 flex-1">
                                     <p class="text-[11px] font-semibold uppercase tracking-[0.16em] ${passed ? 'text-emerald-700' : 'text-amber-700'}">${check.label || 'Checklist'}</p>
-                                    <p class="text-[11px] ${passed ? 'text-emerald-700' : 'text-amber-800'}">${passed ? 'Sudah sesuai.' : (check.reason || 'Belum sesuai.')}</p>
+                                    <p class="text-[11px] ${passed ? 'text-emerald-700' : 'text-amber-800'}">${passed ? 'Sudah sesuai.' : (check.reason || 'Belum sesuai.')}${lineNumber > 0 ? ' Klik untuk lihat line.' : ''}</p>
                                 </div>
                             </div>
                         `;
@@ -983,6 +987,19 @@
 
                 const refreshProductionReadiness = () => {
                     renderProductionReadiness();
+                };
+
+                const focusBomLine = (lineNumber) => {
+                    const index = Math.max(0, Number(lineNumber || 0) - 1);
+                    const row = Array.from(el.bomLineList.children)[index];
+                    if (!row) {
+                        return;
+                    }
+
+                    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    row.classList.add('ring-2', 'ring-primary', 'ring-offset-2');
+                    window.setTimeout(() => row.classList.remove('ring-2', 'ring-primary', 'ring-offset-2'), 1800);
+                    row.querySelector('[data-bom-product], [data-bom-variant], [data-bom-qty]')?.focus();
                 };
 
                 const collectVariantStockLines = (product) => {
@@ -1222,14 +1239,14 @@
                         </div>
                         <p class="hidden rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-semibold text-rose-600" data-bom-duplicate-note></p>
                         <div class="space-y-1.5">
-                            <label class="text-xs font-semibold text-slate-500">Raw Material</label>
+                            <label class="text-xs font-semibold text-slate-500">Bahan / Packaging</label>
                             <select class="w-full rounded-xl border-slate-200 text-sm text-slate-900" data-bom-product>
                                 ${bomProductOptionsHtml(line.product_id || '')}
                             </select>
                             <p class="hidden text-[11px] font-semibold text-rose-600" data-bom-conflict-tip></p>
                         </div>
                         <div class="space-y-1.5 hidden" data-bom-variant-wrap>
-                            <label class="text-xs font-semibold text-slate-500">Variant Raw Material</label>
+                            <label class="text-xs font-semibold text-slate-500">Variant Bahan / Packaging</label>
                             <select class="w-full rounded-xl border-slate-200 text-sm text-slate-900" data-bom-variant>
                                 <option value="">Pilih variant</option>
                             </select>
@@ -1371,7 +1388,7 @@
                         }
 
                         if (variantRequired && !variantId) {
-                            throw new Error(`Line BOM #${index + 1}: variant raw material wajib dipilih.`);
+                            throw new Error(`Line BOM #${index + 1}: variant bahan/packaging wajib dipilih.`);
                         }
 
                         const lineKey = `${productId}|${variantRequired ? variantId : '__no_variant__'}`;
@@ -1517,6 +1534,15 @@
                 el.productionReadinessToggle?.addEventListener('click', () => {
                     readinessUiState.collapsed = !readinessUiState.collapsed;
                     applyProductionReadinessCollapseState();
+                });
+
+                el.productionReadinessChecklist?.addEventListener('click', (event) => {
+                    const target = event.target.closest('[data-focus-bom-line]');
+                    if (!target) {
+                        return;
+                    }
+
+                    focusBomLine(target.dataset.focusBomLine);
                 });
 
                 el.isActive.addEventListener('change', refreshProductionReadiness);

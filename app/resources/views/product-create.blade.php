@@ -980,7 +980,7 @@
                 };
 
                 const bomProductOptionsHtml = (selectedId = '') => {
-                    const options = ['<option value="">Pilih bahan baku</option>'];
+                    const options = ['<option value="">Pilih bahan baku / packaging</option>'];
 
                     rawMaterialProducts.forEach((product) => {
                         const selected = String(selectedId || '') === String(product.id) ? 'selected' : '';
@@ -1232,13 +1232,13 @@
                             <button class="text-xs font-semibold text-rose-500" type="button" data-bom-remove>Hapus</button>
                         </div>
                         <div class="space-y-1.5">
-                            <label class="text-xs font-semibold text-slate-500">Raw Material</label>
+                            <label class="text-xs font-semibold text-slate-500">Bahan / Packaging</label>
                             <select class="h-12 w-full rounded-xl border-slate-200 bg-white px-4 text-base text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" data-bom-product>
                                 ${bomProductOptionsHtml(line.product_id || '')}
                             </select>
                         </div>
                         <div class="space-y-1.5 hidden" data-bom-variant-wrap>
-                            <label class="text-xs font-semibold text-slate-500">Variant Raw Material</label>
+                            <label class="text-xs font-semibold text-slate-500">Variant Bahan / Packaging</label>
                             <select class="h-12 w-full rounded-xl border-slate-200 bg-white px-4 text-base text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" data-bom-variant>
                                 <option value="">Pilih variant</option>
                             </select>
@@ -1609,7 +1609,7 @@
                         }
 
                         if (variantRequired && !variantId) {
-                            throw new Error(`Line BOM #${index + 1}: variant raw material wajib dipilih.`);
+                            throw new Error(`Line BOM #${index + 1}: variant bahan/packaging wajib dipilih.`);
                         }
 
                         const lineKey = `${productId}|${variantRequired ? variantId : '__no_variant__'}`;

@@ -32,6 +32,8 @@ class ProductProductionReadinessLiveUiTest extends TestCase
         $this->assertStringContainsString('refreshProductionReadiness()', $editContents);
         $this->assertStringContainsString('el.isActive.addEventListener', $editContents);
         $this->assertStringContainsString('el.trackStock.addEventListener', $editContents);
+        $this->assertStringContainsString('data-focus-bom-line', $editContents);
+        $this->assertStringContainsString('const focusBomLine = (lineNumber) => {', $editContents);
         $this->assertStringContainsString('checks.map((check)', $editContents);
         $this->assertStringNotContainsString('checks.slice(0, 6)', $editContents);
         $this->assertStringNotContainsString("el.recipeOutputQty.value = '1';", $editContents);
@@ -41,6 +43,8 @@ class ProductProductionReadinessLiveUiTest extends TestCase
 
         $this->assertStringContainsString('const evaluateProductionBatchEligibility = (product = {}) => {', $helpersContents);
         $this->assertStringContainsString('const normalizeProductionBatchDraft = (product = {}) => {', $helpersContents);
+        $this->assertStringContainsString("!['raw_material', 'packaging'].includes(productType)", $helpersContents);
+        $this->assertStringContainsString('Validitas bahan / packaging', $helpersContents);
         $this->assertStringContainsString('window.PosUi = {', $helpersContents);
         $this->assertStringContainsString('evaluateProductionBatchEligibility,', $helpersContents);
 
