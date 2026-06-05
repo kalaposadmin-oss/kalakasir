@@ -854,7 +854,7 @@
                     const productType = getSelectedProductType();
                     const useBom = Boolean(canManageRecipe && productType === 'finished_good' && el.enableBom.checked);
                     const productionMode = useBom
-                        ? getSelectedRecipeProductionMode()
+                        ? (batchOutputEnabled() ? 'batch_production' : getSelectedRecipeProductionMode())
                         : (batchOutputEnabled() ? 'batch_production' : 'none');
                     const trackStock = productType === 'service'
                         ? false
@@ -1419,7 +1419,6 @@
                     el.enableBom.checked = isBomMode;
                     if (el.enableBatchOutput) {
                         el.enableBatchOutput.checked = isFinishedGood
-                            && !isBomMode
                             && String(product.production_mode || '') === 'batch_production';
                     }
                     updateBomEditorVisibility();
@@ -1479,11 +1478,19 @@
                     refreshProductionReadiness();
                 });
                 el.enableBatchOutput?.addEventListener('change', () => {
+                    if (el.enableBom?.checked && el.enableBatchOutput.checked && el.recipeProductionMode) {
+                        el.recipeProductionMode.value = 'batch_production';
+                    }
+
                     syncRecipeStockState();
                     updateInitialStockEditors(currentProduct);
                     refreshProductionReadiness();
                 });
                 el.recipeProductionMode?.addEventListener('change', () => {
+                    if (el.enableBom?.checked && el.enableBatchOutput) {
+                        el.enableBatchOutput.checked = getSelectedRecipeProductionMode() === 'batch_production';
+                    }
+
                     syncRecipeStockState();
                     updateInitialStockEditors(currentProduct);
                     refreshProductionReadiness();
@@ -1671,7 +1678,7 @@
                                 return;
                             }
 
-                            const productionMode = getSelectedRecipeProductionMode();
+                            const productionMode = batchOutputEnabled() ? 'batch_production' : getSelectedRecipeProductionMode();
                             payload.recipe_output_qty = Number(el.recipeOutputQty?.value || 0);
                             if (!(payload.recipe_output_qty > 0)) {
                                 showError('Hasil standar per 1 resep wajib lebih dari 0.');

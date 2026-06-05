@@ -845,10 +845,20 @@
                 const products = state.bootstrap.products || [];
                 return products
                     .filter((product) => {
+                        const eligibility = window.PosUi.getProductionBatchEligibility(product);
+                        const summary = eligibility?.summary || {};
                         const bomItems = Array.isArray(product.bom_items) ? product.bom_items : [];
+                        const bomLineCount = bomItems.length || Number(summary.bom_line_count ?? summary.bom_count ?? 0);
+                        const recipeOutputQty = Number(
+                            product.recipe_output_qty
+                            ?? summary.recipe_output_qty
+                            ?? product.production_batch_eligibility?.summary?.recipe_output_qty
+                            ?? 0
+                        );
+
                         return window.PosUi.isProductionBatchEligibleProduct(product)
-                            && bomItems.length > 0
-                            && Number(product.recipe_output_qty || 0) > 0;
+                            && bomLineCount > 0
+                            && recipeOutputQty > 0;
                     })
                     .map((product) => ({
                         ...product,
