@@ -938,6 +938,51 @@
                 return { recipeCount, usage, remaining };
             };
 
+            const duplicateOutputProductIds = () => {
+                const seen = new Set();
+                const duplicates = new Set();
+
+                state.outputRows.forEach((row) => {
+                    const productId = String(row.product_id || '');
+                    if (!productId) {
+                        return;
+                    }
+
+                    if (seen.has(productId)) {
+                        duplicates.add(productId);
+                        return;
+                    }
+
+                    seen.add(productId);
+                });
+
+                return duplicates;
+            };
+
+            const autoAllocateOutputRecipeFactors = (syncDom = false) => {
+                const recipeCount = Number(el.createRecipeVersion?.value || 0);
+                const totalQty = state.outputRows.reduce((sum, row) => sum + Number(row.planned_qty || 0), 0);
+                const factor = recipeCount > 0 && totalQty > 0
+                    ? normalizeQtyValue(recipeCount / totalQty)
+                    : 0;
+
+                state.outputRows = state.outputRows.map((row) => ({
+                    ...row,
+                    recipe_factor: factor || row.recipe_factor,
+                }));
+
+                if (syncDom) {
+                    el.outputRows?.querySelectorAll('[data-output-row]').forEach((node, index) => {
+                        const factorInput = node.querySelector('[data-output-field="recipe_factor"]');
+                        if (factorInput && state.outputRows[index]) {
+                            factorInput.value = state.outputRows[index].recipe_factor || '';
+                        }
+                    });
+                }
+
+                updateOutputSummary();
+            };
+
             const updateOutputSummary = () => {
                 if (!el.outputSummary) {
                     return;
@@ -945,8 +990,11 @@
 
                 const summary = outputPlanSummary();
                 const over = summary.remaining < -0.0001;
-                el.outputSummary.className = `mt-3 rounded-2xl px-3 py-3 text-xs font-semibold ${over ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200' : 'bg-slate-50 text-slate-600'}`;
-                el.outputSummary.textContent = `Resep dibuat ${formatNumber(summary.recipeCount)} - dipakai output ${formatNumber(summary.usage)} - sisa ${formatNumber(Math.max(0, summary.remaining))}`;
+                const hasDuplicate = duplicateOutputProductIds().size > 0;
+                el.outputSummary.className = `mt-3 rounded-2xl px-3 py-3 text-xs font-semibold ${over || hasDuplicate ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200' : 'bg-slate-50 text-slate-600'}`;
+                el.outputSummary.textContent = hasDuplicate
+                    ? 'Produk hasil duplikat. Gabungkan qty pada satu baris atau pilih produk jadi yang berbeda.'
+                    : `Resep dibuat ${formatNumber(summary.recipeCount)} - dipakai output ${formatNumber(summary.usage)} - sisa ${formatNumber(Math.max(0, summary.remaining))}`;
             };
 
             const renderOutputRows = () => {
@@ -983,7 +1031,7 @@
                             </label>
                             <label class="block">
                                 <span class="mb-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Porsi Resep/Unit</span>
-                                <input class="production-filter-block w-full rounded-2xl px-3 py-2.5 text-sm font-medium text-slate-800" min="0.0001" step="0.0001" type="number" value="${row.recipe_factor || ''}" data-output-field="recipe_factor" />
+                                <input class="production-filter-block w-full rounded-2xl px-3 py-2.5 text-sm font-medium text-slate-500" min="0.0001" step="0.0001" type="number" value="${row.recipe_factor || ''}" data-output-field="recipe_factor" readonly />
                             </label>
                         </div>
                     </div>
@@ -1907,6 +1955,7 @@
                 syncCreateExpectedOutput();
                 collectOutputRows();
                 syncDefaultOutputRowFromPlan();
+                autoAllocateOutputRecipeFactors();
                 renderOutputRows();
                 updateSubmitState();
                 if (el.createProduct.value && el.createLocation.value) {
@@ -1939,19 +1988,22 @@
                 state.outputRows.push({
                     id: outputRowId(),
                     product_id: '',
-                    planned_qty: 1,
-                    recipe_factor: 1,
+                    planned_qty: '',
+                    recipe_factor: '',
                 });
+                autoAllocateOutputRecipeFactors();
                 renderOutputRows();
             });
 
             el.outputRows?.addEventListener('input', () => {
                 collectOutputRows();
+                autoAllocateOutputRecipeFactors(true);
                 updateSubmitState();
             });
 
             el.outputRows?.addEventListener('change', () => {
                 collectOutputRows();
+                autoAllocateOutputRecipeFactors(true);
                 updateSubmitState();
             });
 
@@ -1963,6 +2015,7 @@
 
                 collectOutputRows();
                 state.outputRows = state.outputRows.filter((row) => row.id !== trigger.dataset.outputRemove);
+                autoAllocateOutputRecipeFactors();
                 renderOutputRows();
             });
 

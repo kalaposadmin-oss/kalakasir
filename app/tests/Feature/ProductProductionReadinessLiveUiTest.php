@@ -51,5 +51,9 @@ class ProductProductionReadinessLiveUiTest extends TestCase
         $this->assertStringContainsString('summary.bom_line_count ?? summary.bom_count', $productionBatchContents);
         $this->assertStringContainsString('product.production_batch_eligibility?.summary?.recipe_output_qty', $productionBatchContents);
         $this->assertStringNotContainsString('&& bomItems.length > 0', $productionBatchContents);
+        $this->assertStringContainsString('const autoAllocateOutputRecipeFactors = (syncDom = false) => {', $productionBatchContents);
+        $this->assertStringContainsString('recipeCount / totalQty', $productionBatchContents);
+        $this->assertStringContainsString('data-output-field="recipe_factor" readonly', $productionBatchContents);
+        $this->assertStringContainsString('Produk hasil duplikat. Gabungkan qty pada satu baris', $productionBatchContents);
     }
 }
