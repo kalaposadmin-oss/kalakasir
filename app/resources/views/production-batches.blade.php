@@ -756,14 +756,17 @@
                 return (state.bootstrap.products || []).find((product) => String(product.id || '') === productId) || null;
             };
 
+            const productRecipeOutputQty = (product) => normalizeQtyValue(
+                product?.recipe_output_qty
+                ?? product?.production_batch_eligibility?.recipe_output_qty
+                ?? product?.production_batch_eligibility?.summary?.recipe_output_qty
+                ?? 0
+            );
+
             const syncCreateExpectedOutput = () => {
                 const product = getCreateProductDraft();
                 const recipeCount = Math.max(0, Number(el.createRecipeVersion?.value || 0));
-                const recipeOutputQty = normalizeQtyValue(
-                    product?.recipe_output_qty
-                    ?? product?.production_batch_eligibility?.recipe_output_qty
-                    ?? 0
-                );
+                const recipeOutputQty = productRecipeOutputQty(product);
                 const expectedOutputQty = recipeCount > 0 && recipeOutputQty > 0
                     ? normalizeQtyValue(recipeCount * recipeOutputQty)
                     : 0;
@@ -959,16 +962,21 @@
                 return duplicates;
             };
 
-            const autoAllocateOutputRecipeFactors = (syncDom = false) => {
-                const recipeCount = Number(el.createRecipeVersion?.value || 0);
-                const totalQty = state.outputRows.reduce((sum, row) => sum + Number(row.planned_qty || 0), 0);
-                const factor = recipeCount > 0 && totalQty > 0
-                    ? normalizeQtyValue(recipeCount / totalQty)
-                    : 0;
+            const outputProductDraft = (productId) => (state.bootstrap.products || [])
+                .find((product) => String(product.id || '') === String(productId || '')) || null;
 
+            const outputRecipeFactorForRow = (row) => {
+                const recipeProduct = getCreateProductDraft();
+                const outputProduct = outputProductDraft(row.product_id);
+                const standardOutputQty = productRecipeOutputQty(outputProduct) || productRecipeOutputQty(recipeProduct);
+
+                return standardOutputQty > 0 ? normalizeQtyValue(1 / standardOutputQty) : 0;
+            };
+
+            const autoAllocateOutputRecipeFactors = (syncDom = false) => {
                 state.outputRows = state.outputRows.map((row) => ({
                     ...row,
-                    recipe_factor: factor || row.recipe_factor,
+                    recipe_factor: outputRecipeFactorForRow(row) || row.recipe_factor,
                 }));
 
                 if (syncDom) {
