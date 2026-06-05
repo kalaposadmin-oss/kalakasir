@@ -104,7 +104,7 @@ class ProductionBatchService
                         'actual_qty' => null,
                         'uom' => null,
                         'recipe_factor' => $outputLine['recipe_factor'] !== null
-                            ? Decimal::float($outputLine['recipe_factor'], Decimal::QTY_SCALE)
+                            ? Decimal::float($outputLine['recipe_factor'], Decimal::RECIPE_FACTOR_SCALE)
                             : null,
                         'unit_cost_snapshot' => 0,
                         'created_at' => $now,
@@ -293,7 +293,7 @@ class ProductionBatchService
                         'actual_qty' => null,
                         'uom' => null,
                         'recipe_factor' => $outputLine['recipe_factor'] !== null
-                            ? Decimal::float($outputLine['recipe_factor'], Decimal::QTY_SCALE)
+                            ? Decimal::float($outputLine['recipe_factor'], Decimal::RECIPE_FACTOR_SCALE)
                             : null,
                         'unit_cost_snapshot' => 0,
                         'created_at' => $now,
@@ -590,7 +590,7 @@ class ProductionBatchService
                     foreach ($outputs as $output) {
                         $outputKey = $this->itemKey((string) $output->product_id, $output->product_variant_id ? (string) $output->product_variant_id : null);
                         $lineActualQty = Decimal::qty($actualOutputMap[$outputKey] ?? 0);
-                        $lineFactor = Decimal::qty($output->recipe_factor ?? 0);
+                        $lineFactor = Decimal::recipeFactor($output->recipe_factor ?? 0);
                         $lineAllocationUnits = Decimal::compare($lineFactor, '0') > 0
                             ? Decimal::multiply($lineActualQty, $lineFactor, Decimal::QTY_SCALE)
                             : $lineActualQty;
@@ -916,7 +916,7 @@ class ProductionBatchService
             $productVariantId = $this->resolveVariantId($tenantId, $productId, $productVariantId);
 
             $plannedQty = Decimal::qty($output['planned_qty'] ?? $output['qty'] ?? 0);
-            $recipeFactor = Decimal::qty($output['recipe_factor'] ?? 0);
+            $recipeFactor = Decimal::recipeFactor($output['recipe_factor'] ?? 0);
 
             if (Decimal::compare($plannedQty, '0') <= 0) {
                 throw ValidationException::withMessages([
@@ -1018,7 +1018,7 @@ class ProductionBatchService
         foreach ($outputs as $output) {
             $key = $this->itemKey((string) $output->product_id, $output->product_variant_id ? (string) $output->product_variant_id : null);
             $qty = Decimal::qty($actualOutputMap[$key] ?? 0);
-            $factor = Decimal::qty($output->recipe_factor ?? 0);
+            $factor = Decimal::recipeFactor($output->recipe_factor ?? 0);
             $allocationUnits = Decimal::compare($factor, '0') > 0
                 ? Decimal::multiply($qty, $factor, Decimal::QTY_SCALE)
                 : $qty;

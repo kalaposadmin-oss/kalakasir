@@ -548,6 +548,14 @@
 
                 return Number(numericValue.toFixed(4));
             };
+            const normalizeFactorValue = (value) => {
+                const numericValue = Number(value || 0);
+                if (!Number.isFinite(numericValue)) {
+                    return 0;
+                }
+
+                return Number(numericValue.toFixed(8));
+            };
             const formatDate = (value) => {
                 if (!value) return '-';
                 return new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(value));
@@ -970,7 +978,17 @@
                 const outputProduct = outputProductDraft(row.product_id);
                 const standardOutputQty = productRecipeOutputQty(outputProduct) || productRecipeOutputQty(recipeProduct);
 
-                return standardOutputQty > 0 ? normalizeQtyValue(1 / standardOutputQty) : 0;
+                return standardOutputQty > 0 ? normalizeFactorValue(1 / standardOutputQty) : 0;
+            };
+
+            const outputRecipeUsageForRow = (row) => {
+                const recipeProduct = getCreateProductDraft();
+                const outputProduct = outputProductDraft(row.product_id);
+                const standardOutputQty = productRecipeOutputQty(outputProduct) || productRecipeOutputQty(recipeProduct);
+
+                return standardOutputQty > 0
+                    ? normalizeQtyValue(Number(row.planned_qty || 0) / standardOutputQty)
+                    : normalizeQtyValue(Number(row.planned_qty || 0) * Number(row.recipe_factor || 0));
             };
 
             const autoAllocateOutputRecipeFactors = (syncDom = false) => {
@@ -984,6 +1002,11 @@
                         const factorInput = node.querySelector('[data-output-field="recipe_factor"]');
                         if (factorInput && state.outputRows[index]) {
                             factorInput.value = state.outputRows[index].recipe_factor || '';
+                        }
+
+                        const usageInput = node.querySelector('[data-output-field="recipe_usage_display"]');
+                        if (usageInput && state.outputRows[index]) {
+                            usageInput.value = outputRecipeUsageForRow(state.outputRows[index]) || '';
                         }
                     });
                 }
@@ -1038,8 +1061,9 @@
                                 <input class="production-filter-block w-full rounded-2xl px-3 py-2.5 text-sm font-medium text-slate-800" min="0.0001" step="0.0001" type="number" value="${row.planned_qty || ''}" data-output-field="planned_qty" />
                             </label>
                             <label class="block">
-                                <span class="mb-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Porsi Resep/Unit</span>
-                                <input class="production-filter-block w-full rounded-2xl px-3 py-2.5 text-sm font-medium text-slate-500" min="0.0001" step="0.0001" type="number" value="${row.recipe_factor || ''}" data-output-field="recipe_factor" readonly />
+                                <span class="mb-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Porsi Resep</span>
+                                <input type="hidden" value="${row.recipe_factor || ''}" data-output-field="recipe_factor" />
+                                <input class="production-filter-block w-full rounded-2xl px-3 py-2.5 text-sm font-medium text-slate-500" min="0.0001" step="0.0001" type="number" value="${outputRecipeUsageForRow(row) || ''}" data-output-field="recipe_usage_display" readonly />
                             </label>
                         </div>
                     </div>

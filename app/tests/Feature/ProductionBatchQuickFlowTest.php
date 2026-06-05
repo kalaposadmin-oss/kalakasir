@@ -509,6 +509,69 @@ class ProductionBatchQuickFlowTest extends TestCase
         ]);
     }
 
+    public function test_multi_output_batch_accepts_fractional_brownies_recipe_factor_without_rounding_overage(): void
+    {
+        [$tenant] = $this->bootApiActor('admin', 'admin+production-brownies-fraction@example.test');
+
+        $fixture = $this->seedFixture($tenant, rawMaterialQty: 100);
+        $boxLargeId = $this->insertProduct($tenant, [
+            'sku' => 'BR-10X30-'.Str::upper(Str::random(6)),
+            'name' => 'Brownies Box 10x30 isi 27 Pcs',
+            'product_mode' => 'default',
+            'production_mode' => Product::PRODUCTION_MODE_NONE,
+            'item_type' => 'finished_good',
+            'track_stock' => true,
+            'price' => 75000,
+        ]);
+        $boxSmallId = $this->insertProduct($tenant, [
+            'sku' => 'BR-10X10-'.Str::upper(Str::random(6)),
+            'name' => 'Brownies Box 10x10 isi 9 Pcs',
+            'product_mode' => 'default',
+            'production_mode' => Product::PRODUCTION_MODE_NONE,
+            'item_type' => 'finished_good',
+            'track_stock' => true,
+            'price' => 30000,
+        ]);
+        $boxMediumId = $this->insertProduct($tenant, [
+            'sku' => 'BR-10X20-'.Str::upper(Str::random(6)),
+            'name' => 'Brownies Box 10x20 isi 18 Pcs',
+            'product_mode' => 'default',
+            'production_mode' => Product::PRODUCTION_MODE_NONE,
+            'item_type' => 'finished_good',
+            'track_stock' => true,
+            'price' => 55000,
+        ]);
+
+        $response = $this->postJson('/api/v1/production-batches', [
+            'branch_id' => $fixture['branch_id'],
+            'location_id' => $fixture['location_id'],
+            'product_id' => $fixture['finished_good_id'],
+            'transaction_date' => '2026-02-27',
+            'recipe_count' => 3,
+            'outputs' => [
+                [
+                    'product_id' => $boxLargeId,
+                    'planned_qty' => 27,
+                    'recipe_factor' => 0.05555556,
+                ],
+                [
+                    'product_id' => $boxSmallId,
+                    'planned_qty' => 9,
+                    'recipe_factor' => 0.05555556,
+                ],
+                [
+                    'product_id' => $boxMediumId,
+                    'planned_qty' => 18,
+                    'recipe_factor' => 0.05555556,
+                ],
+            ],
+        ], $this->tenantHeaders($tenant->id));
+
+        $response->assertCreated()
+            ->assertJsonPath('recipe_count', 3)
+            ->assertJsonPath('expected_output_qty', 54);
+    }
+
     public function test_post_batch_is_idempotent_for_same_key(): void
     {
         [$tenant] = $this->bootApiActor('admin', 'admin+production-idempotent@example.test');

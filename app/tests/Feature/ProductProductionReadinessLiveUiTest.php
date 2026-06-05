@@ -54,8 +54,12 @@ class ProductProductionReadinessLiveUiTest extends TestCase
         $this->assertStringContainsString('const autoAllocateOutputRecipeFactors = (syncDom = false) => {', $productionBatchContents);
         $this->assertStringContainsString('const outputRecipeFactorForRow = (row) => {', $productionBatchContents);
         $this->assertStringContainsString('productRecipeOutputQty(outputProduct) || productRecipeOutputQty(recipeProduct)', $productionBatchContents);
-        $this->assertStringContainsString('normalizeQtyValue(1 / standardOutputQty)', $productionBatchContents);
-        $this->assertStringContainsString('data-output-field="recipe_factor" readonly', $productionBatchContents);
+        $this->assertStringContainsString('const normalizeFactorValue = (value) => {', $productionBatchContents);
+        $this->assertStringContainsString('normalizeFactorValue(1 / standardOutputQty)', $productionBatchContents);
+        $this->assertStringContainsString('const outputRecipeUsageForRow = (row) => {', $productionBatchContents);
+        $this->assertStringContainsString('Number(row.planned_qty || 0) / standardOutputQty', $productionBatchContents);
+        $this->assertStringContainsString('data-output-field="recipe_usage_display" readonly', $productionBatchContents);
+        $this->assertStringContainsString('type="hidden" value="${row.recipe_factor || \'\'}" data-output-field="recipe_factor"', $productionBatchContents);
         $this->assertStringContainsString('Produk hasil duplikat. Gabungkan qty pada satu baris', $productionBatchContents);
     }
 }

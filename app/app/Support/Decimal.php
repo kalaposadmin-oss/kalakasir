@@ -11,6 +11,8 @@ final class Decimal
 
     public const QTY_SCALE = 4;
 
+    public const RECIPE_FACTOR_SCALE = 8;
+
     public const COST_SCALE = 6;
 
     public const RATE_SCALE = 8;
@@ -23,6 +25,11 @@ final class Decimal
     public static function qty(mixed $value): string
     {
         return self::scale($value, self::QTY_SCALE);
+    }
+
+    public static function recipeFactor(mixed $value): string
+    {
+        return self::scale($value, self::RECIPE_FACTOR_SCALE);
     }
 
     public static function snappedQty(mixed $value, float $wholeTolerance = 0.0005): string
