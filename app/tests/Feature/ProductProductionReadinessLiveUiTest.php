@@ -60,6 +60,10 @@ class ProductProductionReadinessLiveUiTest extends TestCase
         $this->assertStringContainsString('Number(row.planned_qty || 0) / standardOutputQty', $productionBatchContents);
         $this->assertStringContainsString('data-output-field="recipe_usage_display" readonly', $productionBatchContents);
         $this->assertStringContainsString('type="hidden" value="${row.recipe_factor || \'\'}" data-output-field="recipe_factor"', $productionBatchContents);
+        $this->assertStringContainsString('const outputAdvancedIsActive = () => {', $productionBatchContents);
+        $this->assertStringContainsString('if (!outputAdvancedIsActive()) {', $productionBatchContents);
+        $this->assertStringContainsString('const includeAdvancedOutputs = outputAdvancedIsActive();', $productionBatchContents);
+        $this->assertStringContainsString('if (includeAdvancedOutputs) {', $productionBatchContents);
         $this->assertStringContainsString('Produk hasil duplikat. Gabungkan qty pada satu baris', $productionBatchContents);
     }
 }

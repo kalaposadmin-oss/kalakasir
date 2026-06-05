@@ -492,6 +492,7 @@
                 createEligibilityList: document.getElementById('production-create-eligibility-list'),
                 outputAdd: document.getElementById('production-output-add'),
                 outputRows: document.getElementById('production-output-rows'),
+                outputAdvanced: document.getElementById('production-output-advanced'),
                 outputSummary: document.getElementById('production-output-summary'),
                 createSubmit: document.getElementById('production-create-submit'),
                 exportProblematic: document.getElementById('production-batch-export-problematic'),
@@ -949,6 +950,24 @@
                 return { recipeCount, usage, remaining };
             };
 
+            const outputAdvancedIsActive = () => {
+                const recipeProductId = String(el.createProduct?.value || '');
+
+                if (state.outputRows.length > 1) {
+                    return true;
+                }
+
+                if (el.outputAdvanced?.open) {
+                    return true;
+                }
+
+                const firstRow = state.outputRows[0];
+
+                return !!firstRow
+                    && recipeProductId !== ''
+                    && String(firstRow.product_id || '') !== recipeProductId;
+            };
+
             const duplicateOutputProductIds = () => {
                 const seen = new Set();
                 const duplicates = new Set();
@@ -1094,6 +1113,14 @@
             };
 
             const outputRowsAreValid = () => {
+                if (!outputAdvancedIsActive()) {
+                    const recipePlan = syncCreateExpectedOutput();
+
+                    return !!el.createProduct?.value
+                        && recipePlan.recipe_count > 0
+                        && recipePlan.expected_output_qty > 0;
+                }
+
                 const rows = collectOutputRows();
                 const summary = outputPlanSummary();
                 const seen = new Set();
@@ -2078,6 +2105,7 @@
                 el.createSubmit.textContent = 'Menyimpan...';
                 const recipePlan = syncCreateExpectedOutput();
                 const outputRows = collectOutputRows();
+                const includeAdvancedOutputs = outputAdvancedIsActive();
 
                 const payload = {
                     branch_id: el.createBranch.value || null,
@@ -2085,14 +2113,17 @@
                     product_id: el.createProduct.value || null,
                     transaction_date: el.createDate.value || null,
                     recipe_count: Number(el.createRecipeVersion.value || 0),
-                    outputs: outputRows.map((row) => ({
-                        product_id: row.product_id,
-                        planned_qty: Number(row.planned_qty || 0),
-                        recipe_factor: Number(row.recipe_factor || 0),
-                    })),
                     reference_no: (el.createReference.value || '').trim() || null,
                     notes: (el.createNotes.value || '').trim() || null,
                 };
+
+                if (includeAdvancedOutputs) {
+                    payload.outputs = outputRows.map((row) => ({
+                        product_id: row.product_id,
+                        planned_qty: Number(row.planned_qty || 0),
+                        recipe_factor: Number(row.recipe_factor || 0),
+                    }));
+                }
 
                 try {
                     const response = await fetch('/api/v1/production-batches', {
