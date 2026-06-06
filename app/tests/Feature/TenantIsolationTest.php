@@ -202,6 +202,68 @@ class TenantIsolationTest extends TestCase
             ->assertJsonPath('products.0.name', 'Produk Tenant Domain Kosong');
     }
 
+    public function test_product_update_syncs_price_tiers_for_existing_product(): void
+    {
+        [$tenant, $user] = $this->bootApiActor('admin', 'admin+product-tier-update@example.test');
+        $this->actingAs($user, 'sanctum');
+
+        $productId = $this->insertProductForTenant($tenant->id, [
+            'sku' => 'MINI-COOKIES',
+            'name' => 'Mini Cookies',
+            'price' => 1700,
+        ]);
+
+        DB::table('product_price_tiers')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $tenant->id,
+            'product_id' => $productId,
+            'label' => 'Tier Lama',
+            'min_qty' => 10,
+            'price' => 1500,
+            'created_at' => now('UTC'),
+            'updated_at' => now('UTC'),
+        ]);
+
+        $this->putJson('/api/v1/products/'.$productId, [
+            'name' => 'Mini Cookies',
+            'sku' => 'MINI-COOKIES',
+            'price' => 1700,
+            'hpp_average' => 900,
+            'item_type' => 'finished_good',
+            'product_mode' => 'default',
+            'production_mode' => 'none',
+            'track_stock' => true,
+            'is_active' => true,
+            'unit' => 'pcs',
+            'bom_items' => [],
+            'price_tiers' => [
+                [
+                    'label' => 'Beli 3',
+                    'min_qty' => 3,
+                    'price' => 1666.67,
+                ],
+            ],
+        ], $this->tenantHeaders($tenant->id))
+            ->assertOk();
+
+        $this->assertDatabaseMissing('product_price_tiers', [
+            'tenant_id' => $tenant->id,
+            'product_id' => $productId,
+            'label' => 'Tier Lama',
+        ]);
+        $this->assertDatabaseHas('product_price_tiers', [
+            'tenant_id' => $tenant->id,
+            'product_id' => $productId,
+            'label' => 'Beli 3',
+            'min_qty' => 3,
+        ]);
+
+        $this->getJson('/api/v1/products/'.$productId, $this->tenantHeaders($tenant->id))
+            ->assertOk()
+            ->assertJsonPath('product.price_tiers.0.label', 'Beli 3')
+            ->assertJsonPath('product.price_tiers.0.min_qty', 3);
+    }
+
     public function test_products_api_prioritizes_current_tenant_id_over_user_tenant_id(): void
     {
         [$tenantA, $user] = $this->bootApiActor('Admin', 'admin+current-tenant-products@example.test');

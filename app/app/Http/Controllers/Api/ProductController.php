@@ -402,7 +402,7 @@ class ProductController extends Controller
             ->where('tenant_id', $tenantId)
             ->when($productIds !== [], fn ($query) => $query->whereIn('product_id', $productIds))
             ->orderBy('min_qty')
-            ->get(['product_id', 'min_qty', 'price']);
+            ->get(['product_id', 'label', 'min_qty', 'price']);
         $tiersByProduct = $tierRows->groupBy('product_id');
 
         $stockByProduct = collect();
@@ -433,6 +433,7 @@ class ProductController extends Controller
                 'price_tiers' => ($tiersByProduct[$product->id] ?? collect())
                     ->map(fn ($tier) => [
                         'product_id' => $tier->product_id,
+                        'label' => $tier->label,
                         'min_qty' => (int) $tier->min_qty,
                         'price' => (float) $tier->price,
                     ])
@@ -694,6 +695,20 @@ class ProductController extends Controller
             })
             ->values();
 
+        $priceTiers = ProductPriceTier::query()
+            ->where('tenant_id', $tenantId)
+            ->where('product_id', $product)
+            ->orderBy('min_qty')
+            ->get(['id', 'label', 'min_qty', 'max_qty', 'price'])
+            ->map(fn ($tier) => [
+                'id' => $tier->id,
+                'label' => $tier->label,
+                'min_qty' => (int) $tier->min_qty,
+                'max_qty' => $tier->max_qty !== null ? (int) $tier->max_qty : null,
+                'price' => (float) $tier->price,
+            ])
+            ->values();
+
         $productPayload = $productRow->toArray();
         $productPayload['bom_items'] = $bomItems;
         $productPayload['recipe_output_qty'] = $productRow->recipe_output_qty !== null
@@ -701,6 +716,7 @@ class ProductController extends Controller
             : null;
         $productPayload['recipe_cost_detail'] = $this->buildRecipeCostDetailsForProducts($tenantId, collect([$productRow]))[(string) $productRow->id] ?? null;
         $productPayload['product_variants'] = $productVariants;
+        $productPayload['price_tiers'] = $priceTiers;
         $productPayload['has_variants'] = $productVariants->isNotEmpty();
         $productPayload['production_batch_eligibility'] = app(ProductionEligibilityService::class)
             ->summarizeBatchEligibility($tenantId, $productPayload);
@@ -792,6 +808,10 @@ class ProductController extends Controller
                 'variants.*.name' => ['required_with:variants', 'string', 'max:150'],
                 'variants.*.attributes' => ['nullable', 'array'],
                 'variants.*.price_override' => ['nullable', 'numeric', 'min:0'],
+                'price_tiers' => ['nullable', 'array'],
+                'price_tiers.*.label' => ['required_with:price_tiers', 'string', 'max:50'],
+                'price_tiers.*.min_qty' => ['required_with:price_tiers', 'integer', 'min:1'],
+                'price_tiers.*.price' => ['required_with:price_tiers', 'numeric', 'min:0'],
                 'bom_items' => ['nullable', 'array'],
                 'bom_items.*.product_id' => ['required', 'uuid'],
                 'bom_items.*.product_variant_id' => ['nullable', 'uuid', Rule::exists('product_variants', 'id')->where('tenant_id', $tenantId)],
@@ -873,6 +893,32 @@ class ProductController extends Controller
                 $persistedVariants = $variantPayload !== null
                     ? $this->syncProductVariants($tenantId, (string) $productRow->id, $variantPayload, $now)
                     : $this->activeProductVariants($tenantId, (string) $productRow->id);
+
+                if (array_key_exists('price_tiers', $payload)) {
+                    ProductPriceTier::query()
+                        ->where('tenant_id', $tenantId)
+                        ->where('product_id', $productRow->id)
+                        ->delete();
+
+                    if (! empty($payload['price_tiers'])) {
+                        $tiers = [];
+                        foreach ($payload['price_tiers'] as $tier) {
+                            $tiers[] = [
+                                'id' => (string) Str::uuid(),
+                                'tenant_id' => $tenantId,
+                                'product_id' => $productRow->id,
+                                'label' => $tier['label'],
+                                'min_qty' => (int) $tier['min_qty'],
+                                'max_qty' => null,
+                                'price' => (float) $tier['price'],
+                                'created_at' => $now,
+                                'updated_at' => $now,
+                            ];
+                        }
+
+                        ProductPriceTier::query()->insert($tiers);
+                    }
+                }
 
                 $initialStockReceipts = $this->normalizeInitialStockReceipts(
                     tenantId: $tenantId,

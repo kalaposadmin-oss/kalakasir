@@ -194,6 +194,8 @@ Route::prefix('v1')
         Route::patch('production-batches/{batch}', [ProductionBatchController::class, 'update'])->middleware(['role:warehouse,supervisor,admin,owner,superadmin', 'feature_gate:inventory.production_batches']);
         Route::post('production-batches/{batch}/post', [ProductionBatchController::class, 'post'])->middleware(['role:warehouse,supervisor,admin,owner,superadmin', 'feature_gate:inventory.production_batches']);
         Route::post('production-batches/{batch}/cancel', [ProductionBatchController::class, 'cancel'])->middleware(['role:warehouse,supervisor,admin,owner,superadmin', 'feature_gate:inventory.production_batches']);
+        Route::post('production-batches/{batch}/correct-date', [ProductionBatchController::class, 'correctDate'])->middleware(['role:admin,owner,superadmin', 'feature_gate:inventory.production_batches']);
+        Route::post('production-batches/{batch}/void-posting', [ProductionBatchController::class, 'voidPosted'])->middleware(['role:admin,owner,superadmin', 'feature_gate:inventory.production_batches']);
         Route::post('refunds', [RefundController::class, 'store'])->middleware('role:cashier,supervisor,admin,owner');
         Route::patch('subscription/plan', [SubscriptionController::class, 'updatePlan'])->middleware(['role:admin,owner,superadmin', 'feature_gate:settings.subscription_billing']);
         Route::post('subscription/invoices/{invoice}/mark-paid', [SubscriptionInvoiceController::class, 'markPaid'])->middleware(['role:admin,owner,superadmin', 'feature_gate:settings.subscription_billing']);

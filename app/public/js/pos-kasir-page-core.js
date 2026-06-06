@@ -241,6 +241,20 @@ if (!window.__posKasirPageInitialized) {
             return price;
         };
 
+        const activePriceTier = (product, qty) => {
+            const tiers = Array.isArray(product?.price_tiers) ? product.price_tiers : [];
+            const qtyValue = Number(qty || 0);
+            return tiers.reduce((active, tier) => {
+                const minQty = Number(tier.min_qty || 0);
+                const tierPrice = Number(tier.price || 0);
+                if (qtyValue >= minQty && tierPrice > 0 && (!active || minQty >= Number(active.min_qty || 0))) {
+                    return tier;
+                }
+
+                return active;
+            }, null);
+        };
+
         const getProductInitials = (name) => {
             const words = String(name || '')
                 .trim()
@@ -642,6 +656,11 @@ if (!window.__posKasirPageInitialized) {
                 card.type = 'button';
                 const isOut = product.track_stock && stock !== null && stock <= 0;
                 const unitPrice = resolveUnitPrice(product, 1);
+                const tiers = Array.isArray(product.price_tiers) ? product.price_tiers : [];
+                const firstTier = tiers.find((tier) => Number(tier.min_qty || 0) > 1) || activePriceTier(product, 1);
+                const tierHint = firstTier
+                    ? `<p class="mt-0.5 text-[10px] font-semibold text-emerald-600">${firstTier.label || `Min ${firstTier.min_qty}`} ${formatCurrency(firstTier.price || 0)}</p>`
+                    : '';
                 const metaLine = getProductMeta(product);
                 const stockText = getProductStockText(product, stock, isOut);
                 const isListMode = state.productViewMode === 'list';
@@ -658,6 +677,7 @@ if (!window.__posKasirPageInitialized) {
                             </div>
                             <div class="shrink-0 text-right">
                                 <p class="text-sm font-black text-slate-900">${formatCurrency(unitPrice)}</p>
+                                ${tierHint}
                                 <p class="mt-1 text-[10px] font-semibold ${isOut ? 'text-rose-600' : 'text-slate-400'}">${stockText}</p>
                             </div>
                         </div>
@@ -689,6 +709,7 @@ if (!window.__posKasirPageInitialized) {
                         <div class="mt-3 flex items-end justify-between gap-3">
                             <div>
                                 <p class="text-sm font-black text-slate-900">${formatCurrency(unitPrice)}</p>
+                                ${tierHint}
                                 <p class="mt-1 text-[10px] font-semibold ${isOut ? 'text-rose-600' : 'text-slate-400'}">${stockText}</p>
                             </div>
                             <span class="inline-flex items-center gap-1 rounded-full ${isOut ? 'bg-slate-100 text-slate-400' : 'bg-slate-100 text-slate-700'} px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em]">
@@ -936,6 +957,10 @@ if (!window.__posKasirPageInitialized) {
                     const itemDiscountSummary = summarizeDiscount(itemDiscount);
                     const itemNote = String(item.note || '').trim();
                     const isDiscountEditorOpen = state.activeItemDiscountEditor === item.product.id;
+                    const tier = activePriceTier(item.product, item.qty);
+                    const tierBadge = tier
+                        ? `<p class="mt-1 inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">${tier.label || `Min ${tier.min_qty}`} aktif</p>`
+                        : '';
                     const row = document.createElement('div');
                     row.className = 'rounded-2xl bg-slate-50 dark:bg-slate-800/50 p-3 border border-slate-100 dark:border-slate-700';
                     row.innerHTML = `
@@ -944,6 +969,7 @@ if (!window.__posKasirPageInitialized) {
                             <div class="min-w-0 flex-1">
                                 <h4 class="text-sm font-bold text-slate-800 dark:text-slate-100">${item.product.name}</h4>
                                 <p class="text-[11px] text-slate-500">${formatCurrency(item.unit_price)}</p>
+                                ${tierBadge}
                                 ${itemNote ? `<p class="mt-1 line-clamp-2 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-medium text-amber-800">Catatan: ${escapeHtml(itemNote)}</p>` : ''}
                                 <div class="mt-2 flex flex-wrap items-center gap-2">
                                     <button class="item-discount-toggle inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700" data-id="${item.product.id}" type="button">

@@ -13,6 +13,7 @@ class ProductProductionReadinessLiveUiTest extends TestCase
         $helpersContents = file_get_contents(resource_path('views/partials/ui-helpers.blade.php'));
         $productionBatchContents = file_get_contents(resource_path('views/production-batches.blade.php'));
         $productionBatchDetailContents = file_get_contents(resource_path('views/production-batch-detail.blade.php'));
+        $posKasirCoreContents = file_get_contents(public_path('js/pos-kasir-page-core.js'));
 
         $this->assertStringContainsString('id="is-active"', $createContents);
         $this->assertStringContainsString('id="production-readiness"', $createContents);
@@ -41,6 +42,10 @@ class ProductProductionReadinessLiveUiTest extends TestCase
         $this->assertStringContainsString("el.recipeProductionMode.value = 'batch_production';", $editContents);
         $this->assertStringContainsString("el.enableBatchOutput.checked = getSelectedRecipeProductionMode() === 'batch_production';", $editContents);
         $this->assertStringContainsString("const productionMode = batchOutputEnabled() ? 'batch_production' : getSelectedRecipeProductionMode();", $editContents);
+        $this->assertStringContainsString('id="edit-enable-tiers"', $editContents);
+        $this->assertStringContainsString('id="edit-tier-list"', $editContents);
+        $this->assertStringContainsString('const collectTiers = () => {', $editContents);
+        $this->assertStringContainsString('payload.price_tiers = collectTiers();', $editContents);
 
         $this->assertStringContainsString('const evaluateProductionBatchEligibility = (product = {}) => {', $helpersContents);
         $this->assertStringContainsString('const normalizeProductionBatchDraft = (product = {}) => {', $helpersContents);
@@ -76,5 +81,14 @@ class ProductProductionReadinessLiveUiTest extends TestCase
         $this->assertStringContainsString('lg:inset-y-8', $productionBatchDetailContents);
         $this->assertStringContainsString('overflow-y-auto overscroll-contain', $productionBatchDetailContents);
         $this->assertStringContainsString('sticky bottom-0', $productionBatchDetailContents);
+        $this->assertStringContainsString('batch-detail-posted-actions', $productionBatchDetailContents);
+        $this->assertStringContainsString('batch-detail-correct-date-modal', $productionBatchDetailContents);
+        $this->assertStringContainsString('batch-detail-void-posting-modal', $productionBatchDetailContents);
+        $this->assertStringContainsString('/correct-date', $productionBatchDetailContents);
+        $this->assertStringContainsString('/void-posting', $productionBatchDetailContents);
+
+        $this->assertStringContainsString('const resolveUnitPrice = (product, qty) => {', $posKasirCoreContents);
+        $this->assertStringContainsString('const activePriceTier = (product, qty) => {', $posKasirCoreContents);
+        $this->assertStringContainsString('price_tiers', $posKasirCoreContents);
     }
 }

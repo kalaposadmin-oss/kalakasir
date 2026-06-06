@@ -459,6 +459,106 @@ class ProductionBatchQuickFlowTest extends TestCase
         ]);
     }
 
+    public function test_admin_can_correct_posted_batch_transaction_date_with_audit(): void
+    {
+        [$tenant] = $this->bootApiActor('admin', 'admin+production-correct-date@example.test');
+
+        $fixture = $this->seedFixture($tenant);
+        $batchId = $this->createDraftBatch($tenant->id, $fixture, expectedOutputQty: 10, recipeVersion: 3);
+
+        $this->postJson('/api/v1/production-batches/'.$batchId.'/post', [
+            'actual_output_qty' => 10,
+            'inputs' => [
+                [
+                    'product_id' => $fixture['raw_material_id'],
+                    'actual_qty' => 20,
+                ],
+            ],
+        ], $this->tenantHeadersWithIdempotency($tenant->id, 'prod-post-correct-date'))
+            ->assertOk();
+
+        $this->postJson('/api/v1/production-batches/'.$batchId.'/correct-date', [
+            'transaction_date' => '2026-02-26',
+            'reason' => 'Tanggal produksi salah input.',
+        ], $this->tenantHeaders($tenant->id))
+            ->assertOk()
+            ->assertJsonPath('changed', true)
+            ->assertJsonPath('transaction_date', '2026-02-26');
+
+        $this->assertDatabaseHas('production_batches', [
+            'id' => $batchId,
+            'tenant_id' => $tenant->id,
+            'status' => 'posted',
+            'transaction_date' => '2026-02-26',
+        ]);
+
+        $this->assertDatabaseHas('audit_logs', [
+            'tenant_id' => $tenant->id,
+            'event_type' => 'production_batch.transaction_date_corrected',
+            'reference_type' => 'production_batch',
+            'reference_id' => $batchId,
+        ]);
+    }
+
+    public function test_admin_can_void_posted_batch_and_reverse_inventory(): void
+    {
+        [$tenant] = $this->bootApiActor('admin', 'admin+production-void-posting@example.test');
+
+        $fixture = $this->seedFixture($tenant);
+        $batchId = $this->createDraftBatch($tenant->id, $fixture, expectedOutputQty: 10, recipeVersion: 3);
+
+        $this->postJson('/api/v1/production-batches/'.$batchId.'/post', [
+            'actual_output_qty' => 10,
+            'inputs' => [
+                [
+                    'product_id' => $fixture['raw_material_id'],
+                    'actual_qty' => 20,
+                ],
+            ],
+        ], $this->tenantHeadersWithIdempotency($tenant->id, 'prod-post-void-posting'))
+            ->assertOk();
+
+        $this->postJson('/api/v1/production-batches/'.$batchId.'/void-posting', [
+            'reason' => 'Jumlah resep salah input.',
+        ], $this->tenantHeaders($tenant->id))
+            ->assertOk()
+            ->assertJsonPath('voided', true)
+            ->assertJsonPath('status', 'cancelled');
+
+        $this->assertDatabaseHas('production_batches', [
+            'id' => $batchId,
+            'tenant_id' => $tenant->id,
+            'status' => 'cancelled',
+            'cancel_reason' => 'Void posting: Jumlah resep salah input.',
+        ]);
+        $this->assertDatabaseHas('inventory_balances', [
+            'tenant_id' => $tenant->id,
+            'location_id' => $fixture['location_id'],
+            'product_id' => $fixture['raw_material_id'],
+            'qty_on_hand' => 100.00,
+        ]);
+        $this->assertDatabaseHas('inventory_balances', [
+            'tenant_id' => $tenant->id,
+            'location_id' => $fixture['location_id'],
+            'product_id' => $fixture['finished_good_id'],
+            'qty_on_hand' => 0.00,
+        ]);
+        $this->assertDatabaseHas('stock_ledger', [
+            'tenant_id' => $tenant->id,
+            'reference_type' => 'production_batch_void',
+            'reference_id' => $batchId,
+            'product_id' => $fixture['raw_material_id'],
+            'qty_in' => 20.00,
+        ]);
+        $this->assertDatabaseHas('stock_ledger', [
+            'tenant_id' => $tenant->id,
+            'reference_type' => 'production_batch_void',
+            'reference_id' => $batchId,
+            'product_id' => $fixture['finished_good_id'],
+            'qty_out' => 10.00,
+        ]);
+    }
+
     public function test_multi_output_batch_allocates_stock_and_cost_by_recipe_factor(): void
     {
         [$tenant] = $this->bootApiActor('admin', 'admin+production-multi-output@example.test');

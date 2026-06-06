@@ -716,6 +716,268 @@ class ProductionBatchService
         ];
     }
 
+    public function correctPostedTransactionDate(string $batchId, array $payload, ?string $userId): array
+    {
+        $tenantId = TenantContext::id();
+        if (! $tenantId) {
+            throw new RuntimeException('Tenant tidak ditemukan.');
+        }
+
+        $reason = trim((string) Arr::get($payload, 'reason', ''));
+        if (mb_strlen($reason) < 10) {
+            throw ValidationException::withMessages([
+                'reason' => 'Alasan koreksi tanggal wajib diisi minimal 10 karakter.',
+            ]);
+        }
+
+        $transactionDate = (new TransactionDateService())
+            ->resolve(Arr::get($payload, 'transaction_date'));
+
+        return app(DatabaseTransactionService::class)->run(function () use ($batchId, $tenantId, $userId, $transactionDate, $reason): array {
+            $batch = ProductionBatch::query()
+                ->where('tenant_id', $tenantId)
+                ->where('id', $batchId)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($batch->status !== ProductionBatch::STATUS_POSTED) {
+                throw ValidationException::withMessages([
+                    'batch' => 'Koreksi tanggal hanya bisa untuk batch yang sudah diposting.',
+                ]);
+            }
+
+            $oldDate = optional($batch->transaction_date)?->format('Y-m-d');
+            $newDate = $transactionDate->toDateString();
+
+            (new LockPeriodService())->ensureNotLocked($transactionDate, $tenantId);
+            if ($oldDate) {
+                (new LockPeriodService())->ensureNotLocked(CarbonImmutable::parse($oldDate), $tenantId);
+            }
+
+            if ($oldDate === $newDate) {
+                return [
+                    'batch_id' => (string) $batch->id,
+                    'status' => (string) $batch->status,
+                    'transaction_date' => $newDate,
+                    'changed' => false,
+                ];
+            }
+
+            $batch->transaction_date = $newDate;
+            $batch->updated_at = CarbonImmutable::now('UTC');
+            $batch->save();
+
+            $this->logBatchAudit(
+                event: 'production_batch.transaction_date_corrected',
+                tenantId: $tenantId,
+                actorId: $userId,
+                batchId: (string) $batch->id,
+                payload: [
+                    'before' => ['transaction_date' => $oldDate],
+                    'after' => ['transaction_date' => $newDate],
+                    'reason' => $reason,
+                ],
+                occurredAt: CarbonImmutable::now('UTC')
+            );
+
+            return [
+                'batch_id' => (string) $batch->id,
+                'status' => (string) $batch->status,
+                'transaction_date' => $newDate,
+                'changed' => true,
+            ];
+        });
+    }
+
+    public function voidPostedBatch(string $batchId, array $payload, ?string $userId): array
+    {
+        $tenantId = TenantContext::id();
+        if (! $tenantId) {
+            throw new RuntimeException('Tenant tidak ditemukan.');
+        }
+
+        $reason = trim((string) Arr::get($payload, 'reason', ''));
+        if (mb_strlen($reason) < 10) {
+            throw ValidationException::withMessages([
+                'reason' => 'Alasan void posting wajib diisi minimal 10 karakter.',
+            ]);
+        }
+
+        return app(DatabaseTransactionService::class)->run(function () use ($batchId, $tenantId, $userId, $reason): array {
+            $now = CarbonImmutable::now('UTC');
+            $valuationService = app(InventoryValuationService::class);
+
+            $batch = ProductionBatch::query()
+                ->where('tenant_id', $tenantId)
+                ->where('id', $batchId)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($batch->status !== ProductionBatch::STATUS_POSTED) {
+                throw ValidationException::withMessages([
+                    'batch' => 'Void posting hanya bisa untuk batch yang sudah diposting.',
+                ]);
+            }
+
+            (new LockPeriodService())->ensureNotLocked(CarbonImmutable::parse((string) $batch->transaction_date), $tenantId);
+
+            $items = ProductionBatchItem::query()
+                ->where('tenant_id', $tenantId)
+                ->where('production_batch_id', $batch->id)
+                ->lockForUpdate()
+                ->get();
+            $inputs = $items->where('line_type', 'input')->values();
+            $outputs = $items->where('line_type', 'output')->values();
+            $ledgerRows = [];
+
+            $this->lockInventoryRows($tenantId, (string) $batch->location_id, $inputs, $outputs);
+
+            foreach ($outputs as $output) {
+                $qty = Decimal::qty($output->actual_qty ?? 0);
+                if (Decimal::compare($qty, '0') <= 0) {
+                    continue;
+                }
+
+                $variantId = $output->product_variant_id ? (string) $output->product_variant_id : null;
+                $affected = $this->decrementInventory(
+                    $tenantId,
+                    (string) $output->product_id,
+                    $variantId,
+                    (string) $batch->location_id,
+                    Decimal::float($qty, Decimal::QTY_SCALE)
+                );
+
+                if ($affected === 0) {
+                    throw ValidationException::withMessages([
+                        'batch' => 'Stok produk jadi tidak cukup untuk void posting. Produk hasil batch kemungkinan sudah terjual atau terpakai.',
+                    ]);
+                }
+
+                $valuation = $valuationService->issue(
+                    tenantId: $tenantId,
+                    productId: (string) $output->product_id,
+                    productVariantId: $variantId,
+                    locationId: (string) $batch->location_id,
+                    qty: Decimal::float($qty, Decimal::QTY_SCALE),
+                    referenceType: 'production_batch_void',
+                    referenceId: (string) $batch->id,
+                    referenceItemId: (string) $output->id,
+                    at: $now
+                );
+
+                $balanceAfter = Decimal::qty($this->inventoryBalanceQuery(
+                    tenantId: $tenantId,
+                    productId: (string) $output->product_id,
+                    productVariantId: $variantId,
+                    locationId: (string) $batch->location_id,
+                )->value('qty_on_hand'));
+
+                $ledgerRows[] = [
+                    'id' => (string) Str::uuid(),
+                    'tenant_id' => $tenantId,
+                    'product_id' => $output->product_id,
+                    'product_variant_id' => $variantId,
+                    'location_id' => $batch->location_id,
+                    'reference_type' => 'production_batch_void',
+                    'reference_id' => $batch->id,
+                    'reference_item_id' => $output->id,
+                    'qty_in' => 0,
+                    'qty_out' => Decimal::float($qty, Decimal::QTY_SCALE),
+                    'balance_after' => Decimal::float($balanceAfter, Decimal::QTY_SCALE),
+                    'unit_cost' => Decimal::float($valuation['unit_cost'] ?? 0, Decimal::COST_SCALE),
+                    'total_cost' => Decimal::float($valuation['total_cost'] ?? 0, Decimal::COST_SCALE),
+                    'created_at' => $now,
+                    'created_by' => $userId,
+                ];
+            }
+
+            foreach ($inputs as $input) {
+                $qty = Decimal::qty($input->actual_qty ?? 0);
+                if (Decimal::compare($qty, '0') <= 0) {
+                    continue;
+                }
+
+                $variantId = $input->product_variant_id ? (string) $input->product_variant_id : null;
+                $this->incrementInventory(
+                    $tenantId,
+                    (string) $input->product_id,
+                    $variantId,
+                    (string) $batch->location_id,
+                    Decimal::float($qty, Decimal::QTY_SCALE)
+                );
+
+                $balanceAfter = Decimal::qty($this->inventoryBalanceQuery(
+                    tenantId: $tenantId,
+                    productId: (string) $input->product_id,
+                    productVariantId: $variantId,
+                    locationId: (string) $batch->location_id,
+                )->value('qty_on_hand'));
+                $unitCost = Decimal::cost($input->unit_cost_snapshot ?? 0);
+                $totalCost = Decimal::multiply($qty, $unitCost, Decimal::COST_SCALE);
+
+                $ledgerRows[] = [
+                    'id' => (string) Str::uuid(),
+                    'tenant_id' => $tenantId,
+                    'product_id' => $input->product_id,
+                    'product_variant_id' => $variantId,
+                    'location_id' => $batch->location_id,
+                    'reference_type' => 'production_batch_void',
+                    'reference_id' => $batch->id,
+                    'reference_item_id' => $input->id,
+                    'qty_in' => Decimal::float($qty, Decimal::QTY_SCALE),
+                    'qty_out' => 0,
+                    'balance_after' => Decimal::float($balanceAfter, Decimal::QTY_SCALE),
+                    'unit_cost' => Decimal::float($unitCost, Decimal::COST_SCALE),
+                    'total_cost' => Decimal::float($totalCost, Decimal::COST_SCALE),
+                    'created_at' => $now,
+                    'created_by' => $userId,
+                ];
+            }
+
+            $valuationService->reverseIssue(
+                tenantId: $tenantId,
+                referenceType: 'production_batch',
+                referenceId: (string) $batch->id,
+                at: $now,
+                newSourceType: 'production_batch_void',
+                newSourceId: (string) $batch->id
+            );
+
+            if ($ledgerRows !== []) {
+                StockLedger::query()->insert($ledgerRows);
+            }
+
+            $batch->status = ProductionBatch::STATUS_CANCELLED;
+            $batch->cancel_reason = 'Void posting: '.$reason;
+            $batch->cancelled_by = $userId;
+            $batch->cancelled_at = $now;
+            $batch->updated_at = $now;
+            $batch->save();
+
+            $this->logBatchAudit(
+                event: 'production_batch.post_voided',
+                tenantId: $tenantId,
+                actorId: $userId,
+                batchId: (string) $batch->id,
+                payload: [
+                    'reason' => $reason,
+                    'input_count' => $inputs->count(),
+                    'output_count' => $outputs->count(),
+                    'actual_output_qty' => (float) ($batch->actual_output_qty ?? 0),
+                    'transaction_date' => optional($batch->transaction_date)?->format('Y-m-d'),
+                ],
+                occurredAt: $now
+            );
+
+            return [
+                'batch_id' => (string) $batch->id,
+                'status' => (string) $batch->status,
+                'cancel_reason' => $batch->cancel_reason,
+                'voided' => true,
+            ];
+        });
+    }
+
     private function loadLocation(string $tenantId, string $branchId, string $locationId): Location
     {
         return app(ProductionEligibilityService::class)->loadLocation($tenantId, $branchId, $locationId);

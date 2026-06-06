@@ -75,6 +75,23 @@
                             <input id="edit-price" class="w-full px-4 py-3 rounded-lg border-slate-200 focus:ring-primary focus:border-primary font-mono" type="number" value="" />
                         </div>
                     </div>
+                    <div class="rounded-xl border border-slate-100 bg-slate-50/60 p-4 space-y-3" id="edit-price-tiers">
+                        <div class="flex items-center justify-between gap-4">
+                            <div>
+                                <p class="text-sm font-bold text-slate-800">Harga Bertingkat</p>
+                                <p class="text-xs text-slate-500">Contoh: Mini Cookies min 3 pakai harga per pcs 1666.67 agar total 3 pcs menjadi 5000.</p>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input id="edit-enable-tiers" type="checkbox" class="sr-only peer" />
+                                <div class="w-11 h-6 rounded-full bg-slate-200 peer-checked:bg-primary"></div>
+                                <div class="absolute left-1 top-1 size-4 rounded-full bg-white transition-transform peer-checked:translate-x-5"></div>
+                            </label>
+                        </div>
+                        <div class="space-y-3">
+                            <button id="edit-add-tier" class="h-11 w-full rounded-xl bg-primary/10 px-4 text-sm font-semibold text-primary transition-colors hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-50" type="button">Tambah Level Harga</button>
+                            <div id="edit-tier-list" class="hidden space-y-3"></div>
+                        </div>
+                    </div>
                     <div class="space-y-1.5">
                         <label class="text-xs font-bold text-slate-500 uppercase">Kategori</label>
                         <select id="edit-category" class="w-full px-4 py-3 rounded-lg border-slate-200 focus:ring-primary focus:border-primary appearance-none"></select>
@@ -259,6 +276,9 @@
                     editName: document.getElementById('edit-name'),
                     editSku: document.getElementById('edit-sku'),
                     editPrice: document.getElementById('edit-price'),
+                    enableTiers: document.getElementById('edit-enable-tiers'),
+                    addTier: document.getElementById('edit-add-tier'),
+                    tierList: document.getElementById('edit-tier-list'),
                     editCategory: document.getElementById('edit-category'),
                     editSupplier: document.getElementById('edit-supplier'),
                     editType: document.getElementById('edit-type'),
@@ -497,6 +517,100 @@
                     }
                     el.error.textContent = message;
                     el.error.classList.remove('hidden');
+                };
+
+                const escapeAttr = (value) => String(value ?? '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
+
+                const buildTierRow = (tier = {}) => {
+                    const row = document.createElement('div');
+                    row.className = 'rounded-xl border border-slate-100 bg-white p-3 space-y-3';
+                    row.dataset.tierRow = 'true';
+                    row.innerHTML = `
+                        <div class="flex items-center justify-between gap-3">
+                            <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Level Harga</p>
+                            <button class="text-xs font-semibold text-rose-500" type="button" data-tier-remove>Hapus</button>
+                        </div>
+                        <input class="h-12 w-full rounded-xl border-slate-200 bg-white px-4 text-sm text-slate-900" placeholder="Nama level, contoh: Beli 3" value="${escapeAttr(tier.label || '')}" data-tier-label />
+                        <div class="grid grid-cols-2 gap-3">
+                            <input class="h-12 w-full rounded-xl border-slate-200 bg-white px-4 text-sm text-slate-900" placeholder="Minimal qty" type="number" min="1" step="1" value="${escapeAttr(tier.min_qty ?? '')}" data-tier-min />
+                            <input class="h-12 w-full rounded-xl border-slate-200 bg-white px-4 text-sm text-slate-900" placeholder="Harga per pcs" type="number" min="0" step="0.01" value="${escapeAttr(tier.price ?? '')}" data-tier-price />
+                        </div>
+                    `;
+                    return row;
+                };
+
+                const syncTierControls = () => {
+                    const enabled = Boolean(el.enableTiers?.checked);
+                    el.tierList?.classList.toggle('hidden', !enabled);
+                    if (el.addTier) {
+                        el.addTier.disabled = !enabled;
+                    }
+
+                    if (!enabled) {
+                        el.tierList.innerHTML = '';
+                    } else if (!el.tierList.children.length) {
+                        el.tierList.appendChild(buildTierRow({ label: 'Beli 3', min_qty: 3, price: '' }));
+                    }
+                };
+
+                const collectTiers = () => {
+                    if (!el.enableTiers?.checked) {
+                        return [];
+                    }
+
+                    const tiers = [];
+                    el.tierList.querySelectorAll('[data-tier-row]').forEach((row) => {
+                        const label = row.querySelector('[data-tier-label]')?.value?.trim();
+                        const minQty = Number(row.querySelector('[data-tier-min]')?.value || 0);
+                        const price = Number(row.querySelector('[data-tier-price]')?.value || 0);
+                        if (!label && minQty <= 0 && price <= 0) {
+                            return;
+                        }
+
+                        tiers.push({ label, min_qty: minQty, price });
+                    });
+
+                    return tiers.sort((a, b) => a.min_qty - b.min_qty);
+                };
+
+                const validateTiers = () => {
+                    if (!el.enableTiers?.checked) {
+                        return true;
+                    }
+
+                    const tiers = collectTiers();
+                    if (!tiers.length) {
+                        showError('Tambahkan minimal satu level harga bertingkat atau matikan toggle harga bertingkat.');
+                        return false;
+                    }
+
+                    const seen = new Set();
+                    for (const tier of tiers) {
+                        if (!tier.label || !(tier.min_qty >= 1) || !(tier.price > 0)) {
+                            showError('Setiap level harga bertingkat wajib punya nama, minimal qty, dan harga per pcs lebih dari 0.');
+                            return false;
+                        }
+
+                        if (seen.has(tier.min_qty)) {
+                            showError('Minimal qty harga bertingkat tidak boleh sama. Gabungkan level dengan qty yang sama.');
+                            return false;
+                        }
+                        seen.add(tier.min_qty);
+                    }
+
+                    return true;
+                };
+
+                const renderPriceTiers = (tiers = []) => {
+                    const normalized = Array.isArray(tiers) ? tiers : [];
+                    el.tierList.innerHTML = '';
+                    el.enableTiers.checked = normalized.length > 0;
+                    normalized.forEach((tier) => el.tierList.appendChild(buildTierRow(tier)));
+                    syncTierControls();
                 };
 
                 const goBack = () => {
@@ -1420,6 +1534,7 @@
                     el.editName.value = product.name || '';
                     el.editSku.value = product.sku || '';
                     el.editPrice.value = product.price || 0;
+                    renderPriceTiers(product.price_tiers || []);
                     renderCategoryOptions([], product.category_id || '', product.category_name || '');
                     renderSupplierOptions([], product.supplier_id || '', product.supplier_name || '');
                     el.editType.value = String(product.item_type || 'finished_good');
@@ -1481,6 +1596,20 @@
                 el.stockPlus.addEventListener('click', () => {
                     const value = Number(el.stock.value || 0) + 1;
                     el.stock.value = value;
+                });
+
+                el.enableTiers?.addEventListener('change', syncTierControls);
+                el.addTier?.addEventListener('click', () => {
+                    el.tierList.appendChild(buildTierRow());
+                    syncTierControls();
+                });
+                el.tierList?.addEventListener('click', (event) => {
+                    const remove = event.target.closest('[data-tier-remove]');
+                    if (!remove) {
+                        return;
+                    }
+
+                    remove.closest('[data-tier-row]')?.remove();
                 });
 
                 el.enableBom.addEventListener('change', () => {
@@ -1664,8 +1793,14 @@
                         return;
                     }
 
+                    if (!validateTiers()) {
+                        return;
+                    }
+                    payload.price_tiers = collectTiers();
+
                     if (!isSellableType(productType)) {
                         payload.price = Math.max(0, Number(payload.price || 0));
+                        payload.price_tiers = [];
                     }
 
                     if (productType !== 'service') {

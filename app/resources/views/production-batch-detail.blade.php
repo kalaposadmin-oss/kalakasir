@@ -30,6 +30,7 @@
         && app(\App\Services\SubscriptionService::class)->canAccessFeature($productionBatchDetailTenant, 'settings.observability');
     $productionBatchDetailObservabilityBaseUrl = $productionBatchDetailCanViewObservability ? '/backoffice/settings/observability' : null;
     $productionBatchDetailCanResolveAnomaly = in_array($productionBatchDetailRole, ['admin', 'owner'], true);
+    $productionBatchDetailCanCorrectPosted = in_array($productionBatchDetailRole, ['admin', 'owner', 'superadmin'], true);
     $productionBatchVariancePctThreshold = max(0, (float) config('services.anomaly.production_batch_yield_variance_pct_threshold', 10));
     $productionBatchVarianceQtyThreshold = max(0, (float) config('services.anomaly.production_batch_yield_variance_qty_threshold', 1));
     $productionBatchDetailUiMode = $productionBatchPortalPrefix === '/pos' ? 'pos' : 'backoffice';
@@ -130,6 +131,12 @@
                 <button id="batch-detail-post-open" class="rounded-full bg-emerald-500 px-4 py-2 text-sm font-bold text-white" type="button">Post Batch</button>
                 <button id="batch-detail-cancel-open" class="rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-bold text-rose-600" type="button">Batalkan Draft</button>
             </div>
+            @if ($productionBatchDetailCanCorrectPosted)
+                <div id="batch-detail-posted-actions" class="mt-5 hidden flex-wrap gap-3 border-t border-slate-100 pt-4 dark:border-slate-800">
+                    <button id="batch-detail-correct-date-open" class="rounded-full border border-sky-200 bg-sky-50 px-4 py-2 text-sm font-bold text-sky-700" type="button">Koreksi Tanggal</button>
+                    <button id="batch-detail-void-posting-open" class="rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-bold text-rose-600" type="button">Void Posting</button>
+                </div>
+            @endif
         </section>
 
         <section data-batch-panel="alerts" id="batch-detail-anomaly-banner" class="rounded-3xl border border-emerald-200 bg-emerald-50 px-5 py-5 text-emerald-800 shadow-sm ring-1 ring-emerald-100/80">
@@ -342,6 +349,48 @@
         </div>
     </div>
 
+    <div id="batch-detail-correct-date-modal" class="fixed inset-0 z-50 hidden">
+        <div data-close="correct-date" class="absolute inset-0 bg-slate-950/40"></div>
+        <div class="absolute inset-x-0 bottom-0 mx-auto w-full max-w-lg rounded-t-[28px] bg-white p-5 shadow-2xl dark:bg-slate-950 lg:top-1/2 lg:bottom-auto lg:-translate-y-1/2 lg:rounded-[28px]">
+            <div class="mx-auto mb-4 h-1.5 w-14 rounded-full bg-slate-200 dark:bg-slate-700"></div>
+            <p class="text-[11px] font-bold uppercase tracking-widest text-slate-400">Koreksi Tanggal</p>
+            <h3 class="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">Ubah tanggal transaksi batch</h3>
+            <p class="mt-2 text-sm text-slate-500">Aksi ini hanya mengubah tanggal batch posted, tidak mengubah stok, HPP, atau qty produksi.</p>
+            <label class="mt-4 block">
+                <span class="mb-1 block text-[11px] font-bold uppercase tracking-widest text-slate-400">Tanggal Baru</span>
+                <input id="batch-correct-date-value" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium dark:border-slate-700 dark:bg-slate-900" type="date" />
+            </label>
+            <label class="mt-3 block">
+                <span class="mb-1 block text-[11px] font-bold uppercase tracking-widest text-slate-400">Alasan</span>
+                <textarea id="batch-correct-date-reason" class="min-h-[96px] w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium dark:border-slate-700 dark:bg-slate-900" maxlength="2000" placeholder="Contoh: tanggal produksi salah input saat posting."></textarea>
+            </label>
+            <div id="batch-correct-date-feedback" class="mt-4 hidden rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600"></div>
+            <div class="mt-5 flex justify-end gap-3">
+                <button data-close="correct-date" class="rounded-full border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600 dark:border-slate-700 dark:text-slate-300" type="button">Batal</button>
+                <button id="batch-correct-date-submit" class="rounded-full bg-sky-600 px-5 py-2.5 text-sm font-bold text-white" type="button">Simpan Koreksi</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="batch-detail-void-posting-modal" class="fixed inset-0 z-50 hidden">
+        <div data-close="void-posting" class="absolute inset-0 bg-slate-950/40"></div>
+        <div class="absolute inset-x-0 bottom-0 mx-auto w-full max-w-lg rounded-t-[28px] bg-white p-5 shadow-2xl dark:bg-slate-950 lg:top-1/2 lg:bottom-auto lg:-translate-y-1/2 lg:rounded-[28px]">
+            <div class="mx-auto mb-4 h-1.5 w-14 rounded-full bg-slate-200 dark:bg-slate-700"></div>
+            <p class="text-[11px] font-bold uppercase tracking-widest text-rose-500">Void Posting</p>
+            <h3 class="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">Balikkan stok dari batch posted</h3>
+            <p class="mt-2 text-sm text-slate-500">Aksi ini membuat ledger reversal, mengembalikan bahan baku, dan mengeluarkan produk jadi. Void ditolak bila stok produk jadi sudah tidak cukup.</p>
+            <label class="mt-4 block">
+                <span class="mb-1 block text-[11px] font-bold uppercase tracking-widest text-slate-400">Alasan Void</span>
+                <textarea id="batch-void-posting-reason" class="min-h-[96px] w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium dark:border-slate-700 dark:bg-slate-900" maxlength="2000" placeholder="Contoh: jumlah resep salah input dan perlu dibuat ulang."></textarea>
+            </label>
+            <div id="batch-void-posting-feedback" class="mt-4 hidden rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600"></div>
+            <div class="mt-5 flex justify-end gap-3">
+                <button data-close="void-posting" class="rounded-full border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600 dark:border-slate-700 dark:text-slate-300" type="button">Batal</button>
+                <button id="batch-void-posting-submit" class="rounded-full bg-rose-600 px-5 py-2.5 text-sm font-bold text-white" type="button">Void Posting</button>
+            </div>
+        </div>
+    </div>
+
     <div id="batch-detail-resolve-modal" class="fixed inset-0 z-50 hidden">
         <div data-close="resolve" class="absolute inset-0 bg-slate-950/40"></div>
         <div class="absolute inset-x-0 bottom-0 mx-auto w-full max-w-lg rounded-t-[28px] bg-white p-5 shadow-2xl dark:bg-slate-950 lg:top-1/2 lg:bottom-auto lg:-translate-y-1/2 lg:rounded-[28px]">
@@ -377,6 +426,7 @@
             const canViewObservability = Boolean(@json($productionBatchDetailCanViewObservability));
             const observabilityBaseUrl = @json($productionBatchDetailObservabilityBaseUrl);
             const canResolveAnomaly = Boolean(@json($productionBatchDetailCanResolveAnomaly));
+            const canCorrectPosted = Boolean(@json($productionBatchDetailCanCorrectPosted));
             const varianceThresholds = {
                 qty: Number(@json($productionBatchVarianceQtyThreshold)),
                 pct: Number(@json($productionBatchVariancePctThreshold)),
@@ -412,12 +462,17 @@
                 cancelReason: document.getElementById('batch-detail-cancel-reason'),
                 postedAt: document.getElementById('batch-detail-posted-at'),
                 actions: document.getElementById('batch-detail-actions'),
+                postedActions: document.getElementById('batch-detail-posted-actions'),
                 editOpen: document.getElementById('batch-detail-edit-open'),
                 postOpen: document.getElementById('batch-detail-post-open'),
                 cancelOpen: document.getElementById('batch-detail-cancel-open'),
+                correctDateOpen: document.getElementById('batch-detail-correct-date-open'),
+                voidPostingOpen: document.getElementById('batch-detail-void-posting-open'),
                 editModal: document.getElementById('batch-detail-edit-modal'),
                 postModal: document.getElementById('batch-detail-post-modal'),
                 cancelModal: document.getElementById('batch-detail-cancel-modal'),
+                correctDateModal: document.getElementById('batch-detail-correct-date-modal'),
+                voidPostingModal: document.getElementById('batch-detail-void-posting-modal'),
                 editForm: document.getElementById('batch-detail-edit-form'),
                 editDate: document.getElementById('batch-edit-date'),
                 editOutput: document.getElementById('batch-edit-output'),
@@ -443,6 +498,13 @@
                 resolveNote: document.getElementById('batch-resolve-note'),
                 resolveFeedback: document.getElementById('batch-resolve-feedback'),
                 resolveSubmit: document.getElementById('batch-resolve-submit'),
+                correctDateValue: document.getElementById('batch-correct-date-value'),
+                correctDateReason: document.getElementById('batch-correct-date-reason'),
+                correctDateFeedback: document.getElementById('batch-correct-date-feedback'),
+                correctDateSubmit: document.getElementById('batch-correct-date-submit'),
+                voidPostingReason: document.getElementById('batch-void-posting-reason'),
+                voidPostingFeedback: document.getElementById('batch-void-posting-feedback'),
+                voidPostingSubmit: document.getElementById('batch-void-posting-submit'),
             };
 
             const state = {
@@ -749,6 +811,8 @@
                     post: el.postModal,
                     cancel: el.cancelModal,
                     resolve: el.resolveModal,
+                    'correct-date': el.correctDateModal,
+                    'void-posting': el.voidPostingModal,
                 }[key];
 
                 modal?.classList.toggle('hidden', !open);
@@ -756,6 +820,8 @@
                     if (key === 'edit') setFeedback(el.editFeedback, '');
                     if (key === 'post') setFeedback(el.postFeedback, '');
                     if (key === 'cancel') setFeedback(el.cancelFeedback, '');
+                    if (key === 'correct-date') setFeedback(el.correctDateFeedback, '');
+                    if (key === 'void-posting') setFeedback(el.voidPostingFeedback, '');
                     if (key === 'resolve') {
                         setFeedback(el.resolveFeedback, '');
                         state.selectedAnomalyId = null;
@@ -890,6 +956,7 @@
                 el.cancelReason.textContent = batch.cancel_reason || '-';
                 el.postedAt.textContent = batch.posted_at ? formatDate(batch.posted_at, true) : '-';
                 el.actions.classList.toggle('hidden', batch.status !== 'draft');
+                el.postedActions?.classList.toggle('hidden', !(canCorrectPosted && batch.status === 'posted'));
                 renderAnomalySummary(detail);
                 renderAnomalyHistory(detail);
 
@@ -902,6 +969,9 @@
                 el.postOutput.value = batch.expected_output_qty || '';
                 el.postVarianceReason.value = batch.variance_reason || '';
                 el.cancelReasonInput.value = batch.cancel_reason || '';
+                if (el.correctDateValue) el.correctDateValue.value = batch.transaction_date || '';
+                if (el.correctDateReason) el.correctDateReason.value = '';
+                if (el.voidPostingReason) el.voidPostingReason.value = '';
                 el.postOutputs.innerHTML = '';
                 outputs.forEach((line) => {
                     const row = document.createElement('label');
@@ -964,6 +1034,8 @@
                 [el.editOpen, 'edit', true],
                 [el.postOpen, 'post', true],
                 [el.cancelOpen, 'cancel', true],
+                [el.correctDateOpen, 'correct-date', true],
+                [el.voidPostingOpen, 'void-posting', true],
             ].forEach(([node, key, open]) => {
                 node?.addEventListener('click', () => toggleModal(key, open));
             });
@@ -972,6 +1044,8 @@
             document.querySelectorAll('[data-close="post"]').forEach((node) => node.addEventListener('click', () => toggleModal('post', false)));
             document.querySelectorAll('[data-close="cancel"]').forEach((node) => node.addEventListener('click', () => toggleModal('cancel', false)));
             document.querySelectorAll('[data-close="resolve"]').forEach((node) => node.addEventListener('click', () => toggleModal('resolve', false)));
+            document.querySelectorAll('[data-close="correct-date"]').forEach((node) => node.addEventListener('click', () => toggleModal('correct-date', false)));
+            document.querySelectorAll('[data-close="void-posting"]').forEach((node) => node.addEventListener('click', () => toggleModal('void-posting', false)));
             el.editRecipeVersion?.addEventListener('input', syncEditExpectedOutput);
             el.postOutput?.addEventListener('input', refreshVarianceHint);
             el.postVarianceReason?.addEventListener('input', refreshVarianceHint);
@@ -1126,6 +1200,78 @@
                 } finally {
                     el.cancelSubmit.disabled = false;
                     el.cancelSubmit.textContent = 'Ya, batalkan';
+                }
+            });
+
+            el.correctDateSubmit?.addEventListener('click', async () => {
+                setFeedback(el.correctDateFeedback, '');
+
+                const transactionDate = el.correctDateValue?.value || '';
+                const reason = (el.correctDateReason?.value || '').trim();
+                if (!transactionDate) {
+                    setFeedback(el.correctDateFeedback, 'Tanggal koreksi wajib diisi.');
+                    return;
+                }
+
+                if (reason.length < 10) {
+                    setFeedback(el.correctDateFeedback, 'Alasan koreksi minimal 10 karakter supaya audit jelas.');
+                    return;
+                }
+
+                el.correctDateSubmit.disabled = true;
+                el.correctDateSubmit.textContent = 'Menyimpan...';
+
+                try {
+                    await requestJson(`/api/v1/production-batches/${encodeURIComponent(batchId)}/correct-date`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            transaction_date: transactionDate,
+                            reason,
+                        }),
+                    });
+
+                    toggleModal('correct-date', false);
+                    await loadDetail();
+                    render();
+                } catch (error) {
+                    setFeedback(el.correctDateFeedback, error.message || 'Gagal menyimpan koreksi tanggal.');
+                } finally {
+                    el.correctDateSubmit.disabled = false;
+                    el.correctDateSubmit.textContent = 'Simpan Koreksi';
+                }
+            });
+
+            el.voidPostingSubmit?.addEventListener('click', async () => {
+                setFeedback(el.voidPostingFeedback, '');
+
+                const reason = (el.voidPostingReason?.value || '').trim();
+                if (reason.length < 10) {
+                    setFeedback(el.voidPostingFeedback, 'Alasan void minimal 10 karakter supaya audit jelas.');
+                    return;
+                }
+
+                el.voidPostingSubmit.disabled = true;
+                el.voidPostingSubmit.textContent = 'Mem-void...';
+
+                try {
+                    await requestJson(`/api/v1/production-batches/${encodeURIComponent(batchId)}/void-posting`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Idempotency-Key': `web-production-void-${generateClientRequestId()}`,
+                        },
+                        body: JSON.stringify({ reason }),
+                    });
+
+                    toggleModal('void-posting', false);
+                    await loadDetail();
+                    render();
+                } catch (error) {
+                    setFeedback(el.voidPostingFeedback, error.message || 'Gagal void posting batch.');
+                } finally {
+                    el.voidPostingSubmit.disabled = false;
+                    el.voidPostingSubmit.textContent = 'Void Posting';
                 }
             });
 

@@ -652,6 +652,75 @@ class ProductionBatchController extends Controller
         }
     }
 
+    public function correctDate(Request $request, string $batch, ProductionBatchService $service)
+    {
+        $payload = $request->validate([
+            'transaction_date' => ['required', 'date'],
+            'reason' => ['required', 'string', 'min:10', 'max:2000'],
+        ]);
+
+        try {
+            return response()->json($service->correctPostedTransactionDate($batch, $payload, $request->user()?->id));
+        } catch (ModelNotFoundException) {
+            abort(404);
+        } catch (LockPeriodException $exception) {
+            return response()->json([
+                'code' => $exception->errorCode(),
+                'message' => $exception->getMessage(),
+                'details' => [],
+            ], $exception->status());
+        } catch (InvalidArgumentException $exception) {
+            return response()->json([
+                'code' => 'INVALID_TRANSACTION_DATE',
+                'message' => $exception->getMessage(),
+                'details' => [],
+            ], 422);
+        } catch (ValidationException $exception) {
+            return response()->json([
+                'code' => 'VALIDATION_ERROR',
+                'message' => 'Data tidak valid.',
+                'details' => $exception->errors(),
+            ], 422);
+        } catch (RuntimeException $exception) {
+            return response()->json([
+                'code' => 'PRODUCTION_BATCH_DATE_CORRECTION_FAILED',
+                'message' => $exception->getMessage(),
+                'details' => [],
+            ], 422);
+        }
+    }
+
+    public function voidPosted(Request $request, string $batch, ProductionBatchService $service)
+    {
+        $payload = $request->validate([
+            'reason' => ['required', 'string', 'min:10', 'max:2000'],
+        ]);
+
+        try {
+            return response()->json($service->voidPostedBatch($batch, $payload, $request->user()?->id));
+        } catch (ModelNotFoundException) {
+            abort(404);
+        } catch (LockPeriodException $exception) {
+            return response()->json([
+                'code' => $exception->errorCode(),
+                'message' => $exception->getMessage(),
+                'details' => [],
+            ], $exception->status());
+        } catch (ValidationException $exception) {
+            return response()->json([
+                'code' => 'VALIDATION_ERROR',
+                'message' => 'Data tidak valid.',
+                'details' => $exception->errors(),
+            ], 422);
+        } catch (RuntimeException $exception) {
+            return response()->json([
+                'code' => 'PRODUCTION_BATCH_VOID_FAILED',
+                'message' => $exception->getMessage(),
+                'details' => [],
+            ], 422);
+        }
+    }
+
     private function productionBatchAnomalySummaries(string $tenantId, array $referenceIds): array
     {
         if ($referenceIds === []) {
