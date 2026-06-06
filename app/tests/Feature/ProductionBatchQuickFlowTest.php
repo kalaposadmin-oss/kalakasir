@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Product;
 use App\Models\Tenant;
+use App\Services\TenantDefaultAccountingSetupService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -556,6 +557,72 @@ class ProductionBatchQuickFlowTest extends TestCase
             'reference_id' => $batchId,
             'product_id' => $fixture['finished_good_id'],
             'qty_out' => 10.00,
+        ]);
+    }
+
+    public function test_posted_batch_can_record_waste_as_stock_adjustment(): void
+    {
+        [$tenant, $user] = $this->bootApiActor('admin', 'admin+production-waste@example.test');
+        app(TenantDefaultAccountingSetupService::class)->ensure((string) $tenant->id, (string) $user->id);
+
+        $fixture = $this->seedFixture($tenant);
+        $batchId = $this->createDraftBatch($tenant->id, $fixture, expectedOutputQty: 10, recipeVersion: 3);
+
+        $this->postJson('/api/v1/production-batches/'.$batchId.'/post', [
+            'actual_output_qty' => 10,
+            'inputs' => [
+                [
+                    'product_id' => $fixture['raw_material_id'],
+                    'actual_qty' => 20,
+                ],
+            ],
+        ], $this->tenantHeadersWithIdempotency($tenant->id, 'prod-post-waste'))
+            ->assertOk();
+
+        $response = $this->postJson('/api/v1/production-batches/'.$batchId.'/waste', [
+            'waste_type' => 'unsold',
+            'notes' => 'Produk tidak laku dan dibuang setelah closing.',
+            'items' => [
+                [
+                    'product_id' => $fixture['finished_good_id'],
+                    'waste_qty' => 2,
+                ],
+            ],
+        ], $this->tenantHeaders($tenant->id));
+
+        $response->assertOk()
+            ->assertJsonPath('status', 'posted')
+            ->assertJsonPath('waste_type', 'unsold')
+            ->assertJsonPath('items.0.waste_qty', 2);
+
+        $adjustmentId = (string) $response->json('adjustment_id');
+
+        $this->assertDatabaseHas('stock_adjustments', [
+            'id' => $adjustmentId,
+            'tenant_id' => $tenant->id,
+            'status' => 'posted',
+            'reason_code' => 'A02',
+            'waste_type' => 'unsold',
+            'production_batch_id' => $batchId,
+        ]);
+        $this->assertDatabaseHas('inventory_balances', [
+            'tenant_id' => $tenant->id,
+            'location_id' => $fixture['location_id'],
+            'product_id' => $fixture['finished_good_id'],
+            'qty_on_hand' => 8.00,
+        ]);
+        $this->assertDatabaseHas('stock_ledger', [
+            'tenant_id' => $tenant->id,
+            'reference_type' => 'stock_adjustment',
+            'reference_id' => $adjustmentId,
+            'product_id' => $fixture['finished_good_id'],
+            'qty_out' => 2.00,
+        ]);
+        $this->assertDatabaseHas('audit_logs', [
+            'tenant_id' => $tenant->id,
+            'event_type' => 'production_batch.waste_posted',
+            'reference_type' => 'production_batch',
+            'reference_id' => $batchId,
         ]);
     }
 

@@ -978,9 +978,222 @@ class ProductionBatchService
         });
     }
 
+    public function recordPostedWaste(string $batchId, array $payload, ?string $userId): array
+    {
+        $tenantId = TenantContext::id();
+        if (! $tenantId) {
+            throw new RuntimeException('Tenant tidak ditemukan.');
+        }
+
+        $wasteType = (string) Arr::get($payload, 'waste_type', 'damaged');
+        $notes = trim((string) Arr::get($payload, 'notes', ''));
+        $items = Arr::get($payload, 'items', []);
+
+        if (! in_array($wasteType, ['damaged', 'expired', 'unsold', 'sample', 'other'], true)) {
+            throw ValidationException::withMessages([
+                'waste_type' => 'Tipe waste tidak valid.',
+            ]);
+        }
+
+        if (mb_strlen($notes) < 10) {
+            throw ValidationException::withMessages([
+                'notes' => 'Catatan waste minimal 10 karakter.',
+            ]);
+        }
+
+        if (! is_array($items) || $items === []) {
+            throw ValidationException::withMessages([
+                'items' => 'Minimal satu produk waste wajib diisi.',
+            ]);
+        }
+
+        $batch = ProductionBatch::query()
+            ->where('tenant_id', $tenantId)
+            ->where('id', $batchId)
+            ->firstOrFail();
+
+        if ($batch->status !== ProductionBatch::STATUS_POSTED) {
+            throw new RuntimeException('Waste hanya bisa dicatat untuk batch yang sudah posted.');
+        }
+
+        $outputs = ProductionBatchItem::query()
+            ->where('tenant_id', $tenantId)
+            ->where('production_batch_id', $batchId)
+            ->where('line_type', 'output')
+            ->get()
+            ->keyBy(fn (ProductionBatchItem $item) => $this->itemKey(
+                (string) $item->product_id,
+                $item->product_variant_id ? (string) $item->product_variant_id : null
+            ));
+
+        if ($outputs->isEmpty()) {
+            throw new RuntimeException('Output batch tidak ditemukan.');
+        }
+
+        $adjustmentItems = [];
+        $wasteSummary = [];
+        $seenItemKeys = [];
+        foreach ($items as $index => $item) {
+            $productId = (string) Arr::get($item, 'product_id', '');
+            $productVariantId = Arr::get($item, 'product_variant_id');
+            $productVariantId = $productVariantId !== null && $productVariantId !== '' ? (string) $productVariantId : null;
+            $wasteQty = Decimal::qty(Arr::get($item, 'waste_qty', Arr::get($item, 'qty', 0)));
+            $key = $this->itemKey($productId, $productVariantId);
+            $output = $outputs->get($key);
+
+            if ($productId === '' || ! $output) {
+                throw ValidationException::withMessages([
+                    "items.$index.product_id" => 'Produk waste harus berasal dari output batch ini.',
+                ]);
+            }
+
+            if (isset($seenItemKeys[$key])) {
+                throw ValidationException::withMessages([
+                    "items.$index.product_id" => 'Produk waste duplikat. Gabungkan qty pada satu baris.',
+                ]);
+            }
+            $seenItemKeys[$key] = true;
+
+            if (Decimal::compare($wasteQty, 0) <= 0) {
+                throw ValidationException::withMessages([
+                    "items.$index.waste_qty" => 'Qty waste harus lebih dari 0.',
+                ]);
+            }
+
+            $actualOutputQty = Decimal::qty($output->actual_qty ?? 0);
+            $previousWasteQty = $this->postedWasteQtyForOutput(
+                $tenantId,
+                $batchId,
+                (string) $output->product_id,
+                $productVariantId
+            );
+            $totalWasteQty = Decimal::add($previousWasteQty, $wasteQty, Decimal::QTY_SCALE);
+            if (Decimal::compare($totalWasteQty, $actualOutputQty) > 0) {
+                throw ValidationException::withMessages([
+                    "items.$index.waste_qty" => 'Total waste melebihi hasil aktual batch untuk produk ini.',
+                ]);
+            }
+
+            $currentQty = Decimal::qty($this->inventoryBalanceQuery(
+                tenantId: $tenantId,
+                locationId: (string) $batch->location_id,
+                productId: (string) $output->product_id,
+                productVariantId: $productVariantId
+            )->value('qty_on_hand') ?? 0);
+
+            if (Decimal::compare($wasteQty, $currentQty) > 0) {
+                throw ValidationException::withMessages([
+                    "items.$index.waste_qty" => 'Stok produk jadi tidak cukup untuk dicatat waste.',
+                ]);
+            }
+
+            $physicalQty = Decimal::subtract($currentQty, $wasteQty, Decimal::QTY_SCALE);
+            $adjustmentItems[] = [
+                'product_id' => (string) $output->product_id,
+                'product_variant_id' => $productVariantId,
+                'physical_qty' => Decimal::float($physicalQty, Decimal::QTY_SCALE),
+            ];
+            $wasteSummary[] = [
+                'product_id' => (string) $output->product_id,
+                'product_variant_id' => $productVariantId,
+                'waste_qty' => Decimal::float($wasteQty, Decimal::QTY_SCALE),
+                'stock_before' => Decimal::float($currentQty, Decimal::QTY_SCALE),
+                'stock_after' => Decimal::float($physicalQty, Decimal::QTY_SCALE),
+            ];
+        }
+
+        $adjustmentService = app(StockAdjustmentService::class);
+        $adjustmentPayload = [
+            'location_id' => (string) $batch->location_id,
+            'reference_no' => 'WASTE-'.$this->batchReferenceLabel($batch),
+            'transaction_date' => Arr::get($payload, 'transaction_date') ?: $batch->transaction_date,
+            'reason_code' => 'A02',
+            'waste_type' => $wasteType,
+            'production_batch_id' => (string) $batch->id,
+            'notes' => $notes,
+            'items' => $adjustmentItems,
+        ];
+
+        $adjustmentId = null;
+        try {
+            $adjustmentId = $adjustmentService->createDraft($adjustmentPayload, $userId);
+            $adjustmentService->approve($adjustmentId, $userId);
+            $adjustmentService->post($adjustmentId, $userId, [
+                'transaction_date' => Arr::get($adjustmentPayload, 'transaction_date'),
+                'ip_address' => request()?->ip(),
+                'user_agent' => request()?->userAgent(),
+            ]);
+        } catch (Throwable $exception) {
+            if ($adjustmentId) {
+                try {
+                    $adjustmentService->cancel($adjustmentId, $userId);
+                } catch (Throwable) {
+                    // Keep the original posting failure visible to the caller.
+                }
+            }
+
+            throw $exception;
+        }
+
+        $this->logBatchAudit(
+            event: 'production_batch.waste_posted',
+            tenantId: $tenantId,
+            actorId: $userId,
+            batchId: (string) $batch->id,
+            payload: [
+                'adjustment_id' => $adjustmentId,
+                'waste_type' => $wasteType,
+                'notes' => $notes,
+                'items' => $wasteSummary,
+            ],
+            occurredAt: CarbonImmutable::now('UTC')
+        );
+
+        return [
+            'status' => 'posted',
+            'adjustment_id' => $adjustmentId,
+            'production_batch_id' => (string) $batch->id,
+            'waste_type' => $wasteType,
+            'items' => $wasteSummary,
+        ];
+    }
+
     private function loadLocation(string $tenantId, string $branchId, string $locationId): Location
     {
         return app(ProductionEligibilityService::class)->loadLocation($tenantId, $branchId, $locationId);
+    }
+
+    private function postedWasteQtyForOutput(string $tenantId, string $batchId, string $productId, ?string $productVariantId): string
+    {
+        $query = DB::table('stock_adjustment_items as sai')
+            ->join('stock_adjustments as sa', function ($join) {
+                $join->on('sai.stock_adjustment_id', '=', 'sa.id')
+                    ->on('sai.tenant_id', '=', 'sa.tenant_id');
+            })
+            ->where('sa.tenant_id', $tenantId)
+            ->where('sa.production_batch_id', $batchId)
+            ->where('sa.reason_code', 'A02')
+            ->whereIn('sa.status', ['draft', 'approved', 'posted'])
+            ->where('sai.product_id', $productId);
+
+        if ($productVariantId) {
+            $query->where('sai.product_variant_id', $productVariantId);
+        } else {
+            $query->whereNull('sai.product_variant_id');
+        }
+
+        return Decimal::qty($query
+            ->selectRaw('coalesce(sum(case when sai.difference_qty < 0 then abs(sai.difference_qty) else 0 end), 0) as total')
+            ->value('total') ?? 0);
+    }
+
+    private function batchReferenceLabel(ProductionBatch $batch): string
+    {
+        $reference = trim((string) ($batch->reference_no ?? ''));
+
+        return $reference !== ''
+            ? substr(preg_replace('/[^A-Za-z0-9\-]+/', '-', $reference) ?: $reference, 0, 60)
+            : substr((string) $batch->id, 0, 8);
     }
 
     private function loadBatchProduct(string $tenantId, string $productId): Product

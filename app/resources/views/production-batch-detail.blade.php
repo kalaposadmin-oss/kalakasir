@@ -31,6 +31,7 @@
     $productionBatchDetailObservabilityBaseUrl = $productionBatchDetailCanViewObservability ? '/backoffice/settings/observability' : null;
     $productionBatchDetailCanResolveAnomaly = in_array($productionBatchDetailRole, ['admin', 'owner'], true);
     $productionBatchDetailCanCorrectPosted = in_array($productionBatchDetailRole, ['admin', 'owner', 'superadmin'], true);
+    $productionBatchDetailCanRecordWaste = in_array($productionBatchDetailRole, ['admin', 'owner'], true);
     $productionBatchVariancePctThreshold = max(0, (float) config('services.anomaly.production_batch_yield_variance_pct_threshold', 10));
     $productionBatchVarianceQtyThreshold = max(0, (float) config('services.anomaly.production_batch_yield_variance_qty_threshold', 1));
     $productionBatchDetailUiMode = $productionBatchPortalPrefix === '/pos' ? 'pos' : 'backoffice';
@@ -131,10 +132,15 @@
                 <button id="batch-detail-post-open" class="rounded-full bg-emerald-500 px-4 py-2 text-sm font-bold text-white" type="button">Post Batch</button>
                 <button id="batch-detail-cancel-open" class="rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-bold text-rose-600" type="button">Batalkan Draft</button>
             </div>
-            @if ($productionBatchDetailCanCorrectPosted)
+            @if ($productionBatchDetailCanCorrectPosted || $productionBatchDetailCanRecordWaste)
                 <div id="batch-detail-posted-actions" class="mt-5 hidden flex-wrap gap-3 border-t border-slate-100 pt-4 dark:border-slate-800">
-                    <button id="batch-detail-correct-date-open" class="rounded-full border border-sky-200 bg-sky-50 px-4 py-2 text-sm font-bold text-sky-700" type="button">Koreksi Tanggal</button>
-                    <button id="batch-detail-void-posting-open" class="rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-bold text-rose-600" type="button">Void Posting</button>
+                    @if ($productionBatchDetailCanRecordWaste)
+                        <button id="batch-detail-waste-open" class="rounded-full border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-bold text-amber-700" type="button">Catat Waste</button>
+                    @endif
+                    @if ($productionBatchDetailCanCorrectPosted)
+                        <button id="batch-detail-correct-date-open" class="rounded-full border border-sky-200 bg-sky-50 px-4 py-2 text-sm font-bold text-sky-700" type="button">Koreksi Tanggal</button>
+                        <button id="batch-detail-void-posting-open" class="rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-bold text-rose-600" type="button">Void Posting</button>
+                    @endif
                 </div>
             @endif
         </section>
@@ -391,6 +397,45 @@
         </div>
     </div>
 
+    <div id="batch-detail-waste-modal" class="fixed inset-0 z-50 hidden">
+        <div data-close="waste" class="absolute inset-0 bg-slate-950/40"></div>
+        <div class="absolute inset-x-0 bottom-0 mx-auto w-full max-w-lg rounded-t-[28px] bg-white p-5 shadow-2xl dark:bg-slate-950 lg:top-1/2 lg:bottom-auto lg:-translate-y-1/2 lg:rounded-[28px]">
+            <div class="mx-auto mb-4 h-1.5 w-14 rounded-full bg-slate-200 dark:bg-slate-700"></div>
+            <p class="text-[11px] font-bold uppercase tracking-widest text-amber-500">Waste Produksi</p>
+            <h3 class="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">Catat produk rusak atau tidak laku</h3>
+            <p class="mt-2 text-sm text-slate-500">Aksi ini mem-post penyesuaian stok keluar dan menghubungkannya ke batch produksi ini.</p>
+            <label class="mt-4 block">
+                <span class="mb-1 block text-[11px] font-bold uppercase tracking-widest text-slate-400">Produk Jadi</span>
+                <select id="batch-waste-product" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium dark:border-slate-700 dark:bg-slate-900"></select>
+            </label>
+            <div class="mt-3 grid grid-cols-2 gap-3">
+                <label class="block">
+                    <span class="mb-1 block text-[11px] font-bold uppercase tracking-widest text-slate-400">Qty Waste</span>
+                    <input id="batch-waste-qty" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium dark:border-slate-700 dark:bg-slate-900" min="0.0001" step="0.0001" type="number" />
+                </label>
+                <label class="block">
+                    <span class="mb-1 block text-[11px] font-bold uppercase tracking-widest text-slate-400">Tipe</span>
+                    <select id="batch-waste-type" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium dark:border-slate-700 dark:bg-slate-900">
+                        <option value="damaged">Rusak</option>
+                        <option value="expired">Expired</option>
+                        <option value="unsold">Tidak laku</option>
+                        <option value="sample">Tester / sample</option>
+                        <option value="other">Lainnya</option>
+                    </select>
+                </label>
+            </div>
+            <label class="mt-3 block">
+                <span class="mb-1 block text-[11px] font-bold uppercase tracking-widest text-slate-400">Catatan</span>
+                <textarea id="batch-waste-notes" class="min-h-[96px] w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium dark:border-slate-700 dark:bg-slate-900" maxlength="500" placeholder="Contoh: 2 pcs cookies rusak kemasan dan dibuang."></textarea>
+            </label>
+            <div id="batch-waste-feedback" class="mt-4 hidden rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600"></div>
+            <div class="mt-5 flex justify-end gap-3">
+                <button data-close="waste" class="rounded-full border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600 dark:border-slate-700 dark:text-slate-300" type="button">Batal</button>
+                <button id="batch-waste-submit" class="rounded-full bg-amber-500 px-5 py-2.5 text-sm font-bold text-white" type="button">Catat Waste</button>
+            </div>
+        </div>
+    </div>
+
     <div id="batch-detail-resolve-modal" class="fixed inset-0 z-50 hidden">
         <div data-close="resolve" class="absolute inset-0 bg-slate-950/40"></div>
         <div class="absolute inset-x-0 bottom-0 mx-auto w-full max-w-lg rounded-t-[28px] bg-white p-5 shadow-2xl dark:bg-slate-950 lg:top-1/2 lg:bottom-auto lg:-translate-y-1/2 lg:rounded-[28px]">
@@ -427,6 +472,7 @@
             const observabilityBaseUrl = @json($productionBatchDetailObservabilityBaseUrl);
             const canResolveAnomaly = Boolean(@json($productionBatchDetailCanResolveAnomaly));
             const canCorrectPosted = Boolean(@json($productionBatchDetailCanCorrectPosted));
+            const canRecordWaste = Boolean(@json($productionBatchDetailCanRecordWaste));
             const varianceThresholds = {
                 qty: Number(@json($productionBatchVarianceQtyThreshold)),
                 pct: Number(@json($productionBatchVariancePctThreshold)),
@@ -468,11 +514,13 @@
                 cancelOpen: document.getElementById('batch-detail-cancel-open'),
                 correctDateOpen: document.getElementById('batch-detail-correct-date-open'),
                 voidPostingOpen: document.getElementById('batch-detail-void-posting-open'),
+                wasteOpen: document.getElementById('batch-detail-waste-open'),
                 editModal: document.getElementById('batch-detail-edit-modal'),
                 postModal: document.getElementById('batch-detail-post-modal'),
                 cancelModal: document.getElementById('batch-detail-cancel-modal'),
                 correctDateModal: document.getElementById('batch-detail-correct-date-modal'),
                 voidPostingModal: document.getElementById('batch-detail-void-posting-modal'),
+                wasteModal: document.getElementById('batch-detail-waste-modal'),
                 editForm: document.getElementById('batch-detail-edit-form'),
                 editDate: document.getElementById('batch-edit-date'),
                 editOutput: document.getElementById('batch-edit-output'),
@@ -505,6 +553,12 @@
                 voidPostingReason: document.getElementById('batch-void-posting-reason'),
                 voidPostingFeedback: document.getElementById('batch-void-posting-feedback'),
                 voidPostingSubmit: document.getElementById('batch-void-posting-submit'),
+                wasteProduct: document.getElementById('batch-waste-product'),
+                wasteQty: document.getElementById('batch-waste-qty'),
+                wasteType: document.getElementById('batch-waste-type'),
+                wasteNotes: document.getElementById('batch-waste-notes'),
+                wasteFeedback: document.getElementById('batch-waste-feedback'),
+                wasteSubmit: document.getElementById('batch-waste-submit'),
             };
 
             const state = {
@@ -813,6 +867,7 @@
                     resolve: el.resolveModal,
                     'correct-date': el.correctDateModal,
                     'void-posting': el.voidPostingModal,
+                    waste: el.wasteModal,
                 }[key];
 
                 modal?.classList.toggle('hidden', !open);
@@ -822,6 +877,7 @@
                     if (key === 'cancel') setFeedback(el.cancelFeedback, '');
                     if (key === 'correct-date') setFeedback(el.correctDateFeedback, '');
                     if (key === 'void-posting') setFeedback(el.voidPostingFeedback, '');
+                    if (key === 'waste') setFeedback(el.wasteFeedback, '');
                     if (key === 'resolve') {
                         setFeedback(el.resolveFeedback, '');
                         state.selectedAnomalyId = null;
@@ -956,7 +1012,7 @@
                 el.cancelReason.textContent = batch.cancel_reason || '-';
                 el.postedAt.textContent = batch.posted_at ? formatDate(batch.posted_at, true) : '-';
                 el.actions.classList.toggle('hidden', batch.status !== 'draft');
-                el.postedActions?.classList.toggle('hidden', !(canCorrectPosted && batch.status === 'posted'));
+                el.postedActions?.classList.toggle('hidden', !((canCorrectPosted || canRecordWaste) && batch.status === 'posted'));
                 renderAnomalySummary(detail);
                 renderAnomalyHistory(detail);
 
@@ -972,6 +1028,19 @@
                 if (el.correctDateValue) el.correctDateValue.value = batch.transaction_date || '';
                 if (el.correctDateReason) el.correctDateReason.value = '';
                 if (el.voidPostingReason) el.voidPostingReason.value = '';
+                if (el.wasteQty) el.wasteQty.value = '';
+                if (el.wasteNotes) el.wasteNotes.value = '';
+                if (el.wasteType) el.wasteType.value = 'damaged';
+                if (el.wasteProduct) {
+                    el.wasteProduct.innerHTML = '';
+                    outputs.forEach((line) => {
+                        const option = document.createElement('option');
+                        option.value = `${line.product_id}|${line.product_variant_id || ''}`;
+                        option.textContent = `${line.product_name || productName(line.product_id)} - hasil ${formatNumber(line.actual_qty || line.planned_qty || 0)}`;
+                        el.wasteProduct.appendChild(option);
+                    });
+                    el.wasteSubmit?.toggleAttribute('disabled', outputs.length === 0 || batch.status !== 'posted');
+                }
                 el.postOutputs.innerHTML = '';
                 outputs.forEach((line) => {
                     const row = document.createElement('label');
@@ -1036,6 +1105,7 @@
                 [el.cancelOpen, 'cancel', true],
                 [el.correctDateOpen, 'correct-date', true],
                 [el.voidPostingOpen, 'void-posting', true],
+                [el.wasteOpen, 'waste', true],
             ].forEach(([node, key, open]) => {
                 node?.addEventListener('click', () => toggleModal(key, open));
             });
@@ -1046,6 +1116,7 @@
             document.querySelectorAll('[data-close="resolve"]').forEach((node) => node.addEventListener('click', () => toggleModal('resolve', false)));
             document.querySelectorAll('[data-close="correct-date"]').forEach((node) => node.addEventListener('click', () => toggleModal('correct-date', false)));
             document.querySelectorAll('[data-close="void-posting"]').forEach((node) => node.addEventListener('click', () => toggleModal('void-posting', false)));
+            document.querySelectorAll('[data-close="waste"]').forEach((node) => node.addEventListener('click', () => toggleModal('waste', false)));
             el.editRecipeVersion?.addEventListener('input', syncEditExpectedOutput);
             el.postOutput?.addEventListener('input', refreshVarianceHint);
             el.postVarianceReason?.addEventListener('input', refreshVarianceHint);
@@ -1272,6 +1343,64 @@
                 } finally {
                     el.voidPostingSubmit.disabled = false;
                     el.voidPostingSubmit.textContent = 'Void Posting';
+                }
+            });
+
+            el.wasteSubmit?.addEventListener('click', async () => {
+                setFeedback(el.wasteFeedback, '');
+
+                const selected = String(el.wasteProduct?.value || '');
+                const [productId, productVariantId] = selected.split('|');
+                const wasteQty = Number(el.wasteQty?.value || 0);
+                const notes = (el.wasteNotes?.value || '').trim();
+                const wasteType = el.wasteType?.value || 'damaged';
+
+                if (!productId) {
+                    setFeedback(el.wasteFeedback, 'Pilih produk jadi yang akan dicatat waste.');
+                    return;
+                }
+
+                if (!(wasteQty > 0)) {
+                    setFeedback(el.wasteFeedback, 'Qty waste harus lebih dari 0.');
+                    return;
+                }
+
+                if (notes.length < 10) {
+                    setFeedback(el.wasteFeedback, 'Catatan waste minimal 10 karakter supaya audit jelas.');
+                    return;
+                }
+
+                el.wasteSubmit.disabled = true;
+                el.wasteSubmit.textContent = 'Mencatat...';
+
+                try {
+                    await requestJson(`/api/v1/production-batches/${encodeURIComponent(batchId)}/waste`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Idempotency-Key': `web-production-waste-${generateClientRequestId()}`,
+                        },
+                        body: JSON.stringify({
+                            waste_type: wasteType,
+                            notes,
+                            items: [
+                                {
+                                    product_id: productId,
+                                    ...(productVariantId ? { product_variant_id: productVariantId } : {}),
+                                    waste_qty: wasteQty,
+                                },
+                            ],
+                        }),
+                    });
+
+                    toggleModal('waste', false);
+                    await loadDetail();
+                    render();
+                } catch (error) {
+                    setFeedback(el.wasteFeedback, error.message || 'Gagal mencatat waste produksi.');
+                } finally {
+                    el.wasteSubmit.disabled = false;
+                    el.wasteSubmit.textContent = 'Catat Waste';
                 }
             });
 

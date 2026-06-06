@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Exceptions\AuthorizationLimitException;
 use App\Exceptions\LockPeriodException;
 use App\Http\Controllers\Controller;
 use App\Models\Anomaly;
@@ -715,6 +716,49 @@ class ProductionBatchController extends Controller
         } catch (RuntimeException $exception) {
             return response()->json([
                 'code' => 'PRODUCTION_BATCH_VOID_FAILED',
+                'message' => $exception->getMessage(),
+                'details' => [],
+            ], 422);
+        }
+    }
+
+    public function waste(Request $request, string $batch, ProductionBatchService $service)
+    {
+        $payload = $request->validate([
+            'transaction_date' => ['nullable', 'date'],
+            'waste_type' => ['required', Rule::in(['damaged', 'expired', 'unsold', 'sample', 'other'])],
+            'notes' => ['required', 'string', 'min:10', 'max:500'],
+            'items' => ['required', 'array', 'min:1'],
+            'items.*.product_id' => ['required', 'uuid'],
+            'items.*.product_variant_id' => ['nullable', 'uuid'],
+            'items.*.waste_qty' => ['required', 'numeric', 'min:0.0001'],
+        ]);
+
+        try {
+            return response()->json($service->recordPostedWaste($batch, $payload, $request->user()?->id));
+        } catch (ModelNotFoundException) {
+            abort(404);
+        } catch (LockPeriodException $exception) {
+            return response()->json([
+                'code' => $exception->errorCode(),
+                'message' => $exception->getMessage(),
+                'details' => [],
+            ], $exception->status());
+        } catch (AuthorizationLimitException $exception) {
+            return response()->json([
+                'code' => $exception->errorCode(),
+                'message' => $exception->getMessage(),
+                'details' => $exception->details(),
+            ], $exception->status());
+        } catch (ValidationException $exception) {
+            return response()->json([
+                'code' => 'VALIDATION_ERROR',
+                'message' => 'Data tidak valid.',
+                'details' => $exception->errors(),
+            ], 422);
+        } catch (RuntimeException $exception) {
+            return response()->json([
+                'code' => 'PRODUCTION_BATCH_WASTE_FAILED',
                 'message' => $exception->getMessage(),
                 'details' => [],
             ], 422);

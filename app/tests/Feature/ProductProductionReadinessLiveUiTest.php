@@ -84,8 +84,12 @@ class ProductProductionReadinessLiveUiTest extends TestCase
         $this->assertStringContainsString('batch-detail-posted-actions', $productionBatchDetailContents);
         $this->assertStringContainsString('batch-detail-correct-date-modal', $productionBatchDetailContents);
         $this->assertStringContainsString('batch-detail-void-posting-modal', $productionBatchDetailContents);
+        $this->assertStringContainsString('batch-detail-waste-open', $productionBatchDetailContents);
+        $this->assertStringContainsString('batch-detail-waste-modal', $productionBatchDetailContents);
+        $this->assertStringContainsString('batch-waste-product', $productionBatchDetailContents);
         $this->assertStringContainsString('/correct-date', $productionBatchDetailContents);
         $this->assertStringContainsString('/void-posting', $productionBatchDetailContents);
+        $this->assertStringContainsString('/waste', $productionBatchDetailContents);
 
         $this->assertStringContainsString('const resolveUnitPrice = (product, qty) => {', $posKasirCoreContents);
         $this->assertStringContainsString('const activePriceTier = (product, qty) => {', $posKasirCoreContents);

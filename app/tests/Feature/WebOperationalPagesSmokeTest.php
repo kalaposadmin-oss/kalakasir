@@ -23,6 +23,12 @@ class WebOperationalPagesSmokeTest extends TestCase
         $this->assertStringContainsString('${portalPrefix}/products/${product.id}?from=', $contents);
         $this->assertStringContainsString('Stok ${stockLabel}', $contents);
         $this->assertStringContainsString('formatQtyWithUnit(product.qty_on_hand', $contents);
+        $this->assertStringContainsString('product-category-filter', $contents);
+        $this->assertStringContainsString("initialParams.get('category')", $contents);
+        $this->assertStringContainsString("initialParams.get('q')", $contents);
+        $this->assertStringContainsString("url.searchParams.set('scroll'", $contents);
+        $this->assertStringContainsString('getCurrentListUrl()', $contents);
+        $this->assertStringContainsString('Tanpa Kategori', $contents);
     }
 
     public function test_product_create_route_and_view_expose_inline_category_creation(): void

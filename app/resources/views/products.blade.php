@@ -95,6 +95,7 @@
         const currentPath = @json($productsCurrentPath);
         const portalPrefix = @json($productsPortalPrefix);
         const successFlashKey = 'kalakasir:product-create-success';
+        const initialParams = new URLSearchParams(window.location.search);
 
         const el = {
             list: document.getElementById('product-list'),
@@ -133,8 +134,52 @@
         const state = {
             products: [],
             categories: [],
-            selectedCategory: 'all',
-            term: '',
+            selectedCategory: initialParams.get('category') || 'all',
+            term: initialParams.get('q') || '',
+        };
+
+        const scrollContainer = () => document.querySelector('main') || document.scrollingElement || document.documentElement;
+
+        const getCurrentScrollTop = () => Number(scrollContainer()?.scrollTop || window.scrollY || 0);
+
+        const getCurrentListUrl = () => {
+            const url = new URL(currentPath, window.location.origin);
+            if (state.selectedCategory && state.selectedCategory !== 'all') {
+                url.searchParams.set('category', state.selectedCategory);
+            }
+            if (state.term.trim() !== '') {
+                url.searchParams.set('q', state.term.trim());
+            }
+            const scrollTop = Math.round(getCurrentScrollTop());
+            if (scrollTop > 0) {
+                url.searchParams.set('scroll', String(scrollTop));
+            }
+
+            return `${url.pathname}${url.search}`;
+        };
+
+        const syncUrlState = (replace = true) => {
+            const nextUrl = getCurrentListUrl();
+            if (`${window.location.pathname}${window.location.search}` === nextUrl) {
+                return;
+            }
+
+            window.history[replace ? 'replaceState' : 'pushState'](null, '', nextUrl);
+        };
+
+        const restoreScrollState = () => {
+            const target = Number(initialParams.get('scroll') || 0);
+            if (!(target > 0)) {
+                return;
+            }
+
+            requestAnimationFrame(() => {
+                const container = scrollContainer();
+                if (container) {
+                    container.scrollTop = target;
+                }
+                window.scrollTo({ top: target, behavior: 'auto' });
+            });
         };
 
         const formatCurrency = (value) => new Intl.NumberFormat('id-ID', {
@@ -173,15 +218,15 @@
         const renderFilters = () => {
             el.filters.innerHTML = '';
             const allBtn = document.createElement('button');
-            allBtn.className = 'flex h-9 items-center justify-center gap-2 rounded-full bg-primary px-4 text-white text-sm font-medium';
+            allBtn.className = 'product-category-filter flex h-9 shrink-0 items-center justify-center gap-2 rounded-full px-4 text-sm font-bold transition-colors';
             allBtn.textContent = 'Semua';
             allBtn.dataset.category = 'all';
             el.filters.appendChild(allBtn);
 
             state.categories.forEach((category) => {
                 const button = document.createElement('button');
-                button.className = 'flex h-9 items-center justify-center gap-2 rounded-full bg-white px-4 text-sm font-bold text-slate-600 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:ring-slate-800';
-                button.textContent = category.name;
+                button.className = 'product-category-filter flex h-9 shrink-0 items-center justify-center gap-2 rounded-full px-4 text-sm font-bold transition-colors';
+                button.textContent = String(category.name || '').trim() || 'Tanpa Kategori';
                 button.dataset.category = category.id;
                 el.filters.appendChild(button);
             });
@@ -190,8 +235,10 @@
         const applyFilterStyles = () => {
             document.querySelectorAll('#category-filters button').forEach((btn) => {
                 const isActive = btn.dataset.category === state.selectedCategory;
-                btn.classList.toggle('bg-primary', isActive);
-                btn.classList.toggle('text-white', isActive);
+                btn.className = isActive
+                    ? 'product-category-filter flex h-9 shrink-0 items-center justify-center gap-2 rounded-full bg-primary px-4 text-sm font-black text-white shadow-sm ring-1 ring-primary/30 transition-colors'
+                    : 'product-category-filter flex h-9 shrink-0 items-center justify-center gap-2 rounded-full bg-white px-4 text-sm font-bold text-slate-700 shadow-sm ring-1 ring-slate-200 transition-colors hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-200 dark:ring-slate-800 dark:hover:bg-slate-800';
+                btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
             });
         };
 
@@ -241,10 +288,10 @@
                         </div>
                     </div>
                     <div class="flex items-center gap-2">
-                        <a class="flex items-center justify-center size-9 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors" href="${portalPrefix}/products/${product.id}/edit?from=${encodeURIComponent(currentPath)}" aria-label="Edit produk" title="Edit produk">
+                        <a data-product-nav class="flex items-center justify-center size-9 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors" href="${portalPrefix}/products/${product.id}/edit?from=${encodeURIComponent(getCurrentListUrl())}" aria-label="Edit produk" title="Edit produk">
                             <span class="material-symbols-outlined text-[20px]">edit</span>
                         </a>
-                        <a class="flex items-center justify-center size-9 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors" href="${portalPrefix}/products/${product.id}?from=${encodeURIComponent(currentPath)}" aria-label="Detail produk" title="Detail produk">
+                        <a data-product-nav class="flex items-center justify-center size-9 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors" href="${portalPrefix}/products/${product.id}?from=${encodeURIComponent(getCurrentListUrl())}" aria-label="Detail produk" title="Detail produk">
                             <span class="material-symbols-outlined text-[20px]">info</span>
                         </a>
                     </div>
@@ -279,11 +326,24 @@
             state.selectedCategory = button.dataset.category;
             applyFilterStyles();
             renderList();
+            syncUrlState(false);
         });
 
         el.search.addEventListener('input', (event) => {
             state.term = event.target.value;
             renderList();
+            syncUrlState();
+        });
+
+        el.list.addEventListener('click', (event) => {
+            const link = event.target.closest('a[data-product-nav]');
+            if (!link) {
+                return;
+            }
+
+            const url = new URL(link.href, window.location.origin);
+            url.searchParams.set('from', getCurrentListUrl());
+            link.href = `${url.pathname}${url.search}`;
         });
 
         (async () => {
@@ -296,10 +356,18 @@
             const [products, categories] = await Promise.all([loadProducts(), loadCategories()]);
             state.products = products;
             state.categories = categories;
+            if (state.selectedCategory !== 'all' && !state.categories.some((category) => category.id === state.selectedCategory)) {
+                state.selectedCategory = 'all';
+            }
+            if (el.search) {
+                el.search.value = state.term;
+            }
 
             renderFilters();
             applyFilterStyles();
             renderList();
+            syncUrlState();
+            restoreScrollState();
         })();
     })();
 </script>
