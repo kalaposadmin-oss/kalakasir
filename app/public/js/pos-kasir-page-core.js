@@ -824,6 +824,43 @@ if (!window.__posKasirPageInitialized) {
             renderProducts();
         };
 
+        const setCartQty = (productId, rawQty) => {
+            if (state.shiftBlocked) {
+                return;
+            }
+
+            const existing = state.cart.get(productId);
+            if (!existing) {
+                return;
+            }
+
+            const normalized = String(rawQty || '').replace(',', '.').trim();
+            const next = Number(normalized);
+            if (!Number.isFinite(next) || next <= 0) {
+                alert('Jumlah harus lebih dari 0.');
+                renderCart();
+                return;
+            }
+
+            if (existing.product.track_stock) {
+                const stock = getStock(existing.product);
+                if (stock !== null && next > stock) {
+                    alert('Stok produk tidak cukup.');
+                    renderCart();
+                    return;
+                }
+            }
+
+            state.cart.set(productId, {
+                ...existing,
+                qty: next,
+                unit_price: resolveUnitPrice(existing.product, next),
+                note: String(existing.note || '').trim(),
+            });
+            renderCart();
+            renderProducts();
+        };
+
         const summarizeDiscount = (discount) => {
             if (!discount) {
                 return null;
@@ -1012,11 +1049,11 @@ if (!window.__posKasirPageInitialized) {
                                     <span class="material-symbols-outlined text-base">delete</span>
                                 </button>
                                 <div class="flex items-center gap-2 rounded-full bg-white dark:bg-slate-900 px-2 py-1.5 border border-slate-200">
-                                    <button class="qty-minus w-7 h-7 flex items-center justify-center text-primary bg-slate-100 rounded-full" data-id="${item.product.id}">
+                                    <button class="qty-minus w-7 h-7 flex items-center justify-center text-primary bg-slate-100 rounded-full" data-id="${item.product.id}" type="button" aria-label="Kurangi jumlah">
                                         <span class="material-symbols-outlined text-base">remove</span>
                                     </button>
-                                    <span class="w-6 text-center text-sm font-bold">${item.qty}</span>
-                                    <button class="qty-plus w-7 h-7 flex items-center justify-center text-white bg-primary rounded-full" data-id="${item.product.id}">
+                                    <input class="qty-input h-8 w-16 rounded-full border border-slate-200 bg-slate-50 px-2 text-center text-sm font-bold text-slate-900 focus:border-primary focus:bg-white focus:ring-primary" data-id="${item.product.id}" type="number" min="0.01" step="1" inputmode="decimal" value="${formatNumber(item.qty)}" aria-label="Jumlah ${escapeHtml(item.product.name)}" />
+                                    <button class="qty-plus w-7 h-7 flex items-center justify-center text-white bg-primary rounded-full" data-id="${item.product.id}" type="button" aria-label="Tambah jumlah">
                                         <span class="material-symbols-outlined text-base">add</span>
                                     </button>
                                 </div>
@@ -2119,6 +2156,25 @@ if (!window.__posKasirPageInitialized) {
             }
         });
 
+        el.cartList.addEventListener('focusin', (event) => {
+            const qtyInput = event.target.closest('.qty-input');
+            if (qtyInput instanceof HTMLInputElement) {
+                qtyInput.select();
+            }
+        });
+
+        el.cartList.addEventListener('keydown', (event) => {
+            const qtyInput = event.target.closest('.qty-input');
+            if (!(qtyInput instanceof HTMLInputElement)) {
+                return;
+            }
+
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                qtyInput.blur();
+            }
+        });
+
         el.cartList.addEventListener('input', (event) => {
             const noteInput = event.target.closest('.item-note-input');
             if (noteInput) {
@@ -2155,6 +2211,12 @@ if (!window.__posKasirPageInitialized) {
         });
 
         el.cartList.addEventListener('change', (event) => {
+            const qtyInput = event.target.closest('.qty-input');
+            if (qtyInput) {
+                setCartQty(qtyInput.dataset.id, qtyInput.value);
+                return;
+            }
+
             const typeSelect = event.target.closest('.item-discount-type');
             if (!typeSelect) {
                 return;
