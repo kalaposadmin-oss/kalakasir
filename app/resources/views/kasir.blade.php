@@ -522,14 +522,7 @@
         };
 
         ['pointerdown', 'mousedown', 'touchstart'].forEach((eventName) => {
-            cartDrawer.addEventListener(eventName, (event) => {
-                markKeepOpen(event);
-            }, true);
-        });
-        cartDrawer.addEventListener('click', (event) => {
-            markKeepOpen(event);
-            window.setTimeout(restoreCartIfNeeded, 0);
-            event.stopPropagation();
+            cartDrawer.addEventListener(eventName, markKeepOpen, true);
         });
 
         const findQtyText = (control) => {

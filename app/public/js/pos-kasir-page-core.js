@@ -2253,9 +2253,6 @@ if (!window.__posKasirPageInitialized) {
         el.cartOverlay.addEventListener('touchstart', (event) => {
             state.cartPointerStartedInsideDrawer = event.composedPath().includes(el.cartDrawer);
         }, true);
-        el.cartDrawer?.addEventListener('click', (event) => {
-            event.stopPropagation();
-        });
         el.cartOverlay.addEventListener('click', (event) => {
             const clickedInsideDrawer = event.composedPath().includes(el.cartDrawer);
             if (!clickedInsideDrawer && !state.cartPointerStartedInsideDrawer) {
