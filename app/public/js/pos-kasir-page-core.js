@@ -15,6 +15,7 @@ if (!window.__posKasirPageInitialized) {
             search: document.getElementById('search-input'),
             customerQuickTrigger: document.getElementById('customer-quick-trigger'),
             customerCurrentLabel: document.getElementById('customer-current-label'),
+            transactionDate: document.getElementById('transaction-date-input'),
             editingSaleBanner: document.getElementById('editing-sale-banner'),
             editingSaleInvoice: document.getElementById('editing-sale-invoice'),
             editingSaleBadge: document.getElementById('editing-sale-badge'),
@@ -171,6 +172,32 @@ if (!window.__posKasirPageInitialized) {
                 target.textContent = value;
             }
         };
+
+        const todayDateString = () => {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+
+            return `${year}-${month}-${day}`;
+        };
+
+        const normalizeTransactionDate = (value) => {
+            const text = String(value || '').trim();
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+                return todayDateString();
+            }
+
+            return text > todayDateString() ? todayDateString() : text;
+        };
+
+        const getSelectedTransactionDate = () => normalizeTransactionDate(el.transactionDate?.value || state.replacingTransactionDate || null);
+
+        if (el.transactionDate) {
+            const today = todayDateString();
+            el.transactionDate.max = today;
+            el.transactionDate.value = normalizeTransactionDate(el.transactionDate.value || today);
+        }
 
         const syncEditingSaleBanner = () => {
             const isEditingSale = Boolean(state.replacingSaleId);
@@ -393,7 +420,7 @@ if (!window.__posKasirPageInitialized) {
                 order_holder_name: el.orderHolderName ? String(el.orderHolderName.value || '').trim() : '',
                 order_note: el.orderNote ? String(el.orderNote.value || '').trim() : '',
                 replace_sale_id: state.replacingSaleId || null,
-                transaction_date: state.replacingTransactionDate || null,
+                transaction_date: getSelectedTransactionDate(),
                 updated_at: new Date().toISOString(),
             }));
         };
@@ -423,6 +450,7 @@ if (!window.__posKasirPageInitialized) {
                         fees: Array.isArray(entry?.fees) ? entry.fees : [],
                         selected_promos: Array.isArray(entry?.selected_promos) ? entry.selected_promos : [],
                         transaction_discounts: Array.isArray(entry?.transaction_discounts) ? entry.transaction_discounts : [],
+                        transaction_date: entry?.transaction_date || null,
                         customer_id: entry?.customer_id || null,
                         total: Number(entry?.total || 0),
                         item_count: Number(entry?.item_count || 0),
@@ -1149,6 +1177,7 @@ if (!window.__posKasirPageInitialized) {
                 fees: state.fees,
                 selected_promos: [...state.selectedPromos],
                 transaction_discounts: state.transactionDiscounts,
+                transaction_date: getSelectedTransactionDate(),
                 total: Number(pricing.total || 0),
                 item_count: Number(pricing.itemCount || 0),
             };
@@ -1163,6 +1192,7 @@ if (!window.__posKasirPageInitialized) {
                 fees: orderPayload.fees,
                 selected_promos: orderPayload.selected_promos,
                 transaction_discounts: orderPayload.transaction_discounts,
+                transaction_date: orderPayload.transaction_date,
                 customer_id: orderPayload.customer_id,
                 total: orderPayload.total,
                 item_count: orderPayload.item_count,
@@ -1172,7 +1202,11 @@ if (!window.__posKasirPageInitialized) {
             window.PosUi.runWithSubmitGuard(el.saveOrder, async () => {
                 try {
                     const savedOrder = await saveOrderToApi(orderPayload, savedOrderId);
-                    upsertSavedOrder(savedOrder || fallbackOrder);
+                    upsertSavedOrder({
+                        ...fallbackOrder,
+                        ...(savedOrder || {}),
+                        transaction_date: savedOrder?.transaction_date || fallbackOrder.transaction_date,
+                    });
                     clearCurrentOrder();
                     alert('Pesanan berhasil disimpan.');
                 } catch (_) {
@@ -1240,6 +1274,9 @@ if (!window.__posKasirPageInitialized) {
             }
             if (el.orderNote) {
                 el.orderNote.value = savedOrder.note || '';
+            }
+            if (el.transactionDate) {
+                el.transactionDate.value = normalizeTransactionDate(savedOrder.transaction_date || el.transactionDate.value);
             }
 
             state.activeItemDiscountEditor = null;
@@ -1863,6 +1900,9 @@ if (!window.__posKasirPageInitialized) {
             }
             state.replacingSaleId = draft.replace_sale_id ? String(draft.replace_sale_id) : null;
             state.replacingTransactionDate = draft.transaction_date ? String(draft.transaction_date) : null;
+            if (el.transactionDate) {
+                el.transactionDate.value = normalizeTransactionDate(state.replacingTransactionDate || el.transactionDate.value);
+            }
             syncEditingSaleBanner();
             if (el.orderHolderName) {
                 el.orderHolderName.value = String(draft.order_holder_name || '');
@@ -1941,7 +1981,7 @@ if (!window.__posKasirPageInitialized) {
                 total_discount: pricing.totalDiscount,
                 saved_order_id: state.activeSavedOrderId || null,
                 replace_sale_id: state.replacingSaleId || null,
-                transaction_date: state.replacingTransactionDate || null,
+                transaction_date: getSelectedTransactionDate(),
                 transaction_discounts: pricing.transactionDiscounts.map((discount) => ({
                     type: discount.type,
                     value: discount.value,
@@ -2021,6 +2061,11 @@ if (!window.__posKasirPageInitialized) {
             searchDebounceTimer = window.setTimeout(() => {
                 loadProducts({ page: 1, append: false });
             }, 200);
+        });
+
+        el.transactionDate?.addEventListener('change', () => {
+            el.transactionDate.value = normalizeTransactionDate(el.transactionDate.value);
+            saveCartDraft();
         });
 
         el.cartList.addEventListener('click', (event) => {

@@ -276,20 +276,19 @@
                 const currentAllowedDateRange = () => {
                     const max = new Date();
                     max.setHours(0, 0, 0, 0);
-                    const min = new Date(max.getFullYear(), max.getMonth(), 1);
 
                     return {
-                        min: localDateInputValue(min),
+                        min: '',
                         max: localDateInputValue(max),
                     };
                 };
 
                 const syncOrderDateBounds = () => {
                     const range = currentAllowedDateRange();
-                    el.orderDate.min = range.min;
+                    el.orderDate.removeAttribute('min');
                     el.orderDate.max = range.max;
                     if (el.orderDateHint) {
-                        el.orderDateHint.textContent = `Boleh tanggal ${range.min} sampai ${range.max}.`;
+                        el.orderDateHint.textContent = `Boleh tanggal sampai ${range.max}.`;
                     }
 
                     return range;
@@ -303,14 +302,14 @@
                 const validateOrderDate = () => {
                     const range = syncOrderDateBounds();
                     const value = el.orderDate.value || '';
-                    const valid = value >= range.min && value <= range.max;
+                    const valid = !value || value <= range.max;
                     if (el.orderDateHint) {
                         el.orderDateHint.classList.toggle('text-rose-600', !valid);
                         el.orderDateHint.classList.toggle('text-slate-400', valid);
                     }
 
                     if (!valid) {
-                        alert(`Tanggal pesanan ${value || '-'} tidak bisa dipakai. Pilih tanggal ${range.min} sampai ${range.max}.`);
+                        alert(`Tanggal pesanan ${value || '-'} tidak bisa dipakai. Pilih tanggal sampai ${range.max}.`);
                         el.orderDate.focus();
                     }
 
@@ -821,12 +820,20 @@
                                 if (mapped.code === 'INVALID_TRANSACTION_DATE') {
                                     const minDate = mapped.details?.min_date;
                                     const maxDate = mapped.details?.max_date;
-                                    if (minDate && maxDate) {
-                                        alert(`Tanggal pesanan ${transactionDate || '-'} tidak bisa dipakai. Pilih tanggal ${minDate} sampai ${maxDate}.`);
-                                        el.orderDate.min = minDate;
+                                    if (maxDate) {
+                                        alert(minDate
+                                            ? `Tanggal pesanan ${transactionDate || '-'} tidak bisa dipakai. Pilih tanggal ${minDate} sampai ${maxDate}.`
+                                            : `Tanggal pesanan ${transactionDate || '-'} tidak bisa dipakai. Pilih tanggal sampai ${maxDate}.`);
+                                        if (minDate) {
+                                            el.orderDate.min = minDate;
+                                        } else {
+                                            el.orderDate.removeAttribute('min');
+                                        }
                                         el.orderDate.max = maxDate;
                                         if (el.orderDateHint) {
-                                            el.orderDateHint.textContent = `Boleh tanggal ${minDate} sampai ${maxDate}.`;
+                                            el.orderDateHint.textContent = minDate
+                                                ? `Boleh tanggal ${minDate} sampai ${maxDate}.`
+                                                : `Boleh tanggal sampai ${maxDate}.`;
                                             el.orderDateHint.classList.add('text-rose-600');
                                             el.orderDateHint.classList.remove('text-slate-400');
                                         }
@@ -883,7 +890,7 @@
                 el.orderDate.addEventListener('change', () => {
                     const range = syncOrderDateBounds();
                     const value = el.orderDate.value || '';
-                    const valid = !value || (value >= range.min && value <= range.max);
+                    const valid = !value || value <= range.max;
                     el.orderDateHint?.classList.toggle('text-rose-600', !valid);
                     el.orderDateHint?.classList.toggle('text-slate-400', valid);
                 });

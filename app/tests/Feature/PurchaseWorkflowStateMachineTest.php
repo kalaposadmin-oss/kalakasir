@@ -212,7 +212,7 @@ class PurchaseWorkflowStateMachineTest extends TestCase
         $this->assertSame(53000.0, $journalCredits[(string) $mapping->payable_account_id] ?? 0.0);
     }
 
-    public function test_create_purchase_returns_date_bounds_when_order_date_is_before_current_month(): void
+    public function test_create_purchase_accepts_order_date_before_current_month(): void
     {
         [$tenant, $user] = $this->bootApiActor('admin', 'purchase-create-date-bounds@example.test');
         CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-06-03 10:00:00', 'Asia/Jakarta'));
@@ -234,11 +234,13 @@ class PurchaseWorkflowStateMachineTest extends TestCase
                 ],
             ]);
 
-        $response->assertStatus(422)
-            ->assertJsonPath('code', 'INVALID_TRANSACTION_DATE')
-            ->assertJsonPath('details.min_date', '2026-06-01')
-            ->assertJsonPath('details.max_date', '2026-06-03')
-            ->assertJsonPath('details.policy', 'current_month');
+        $response->assertCreated();
+
+        $this->assertDatabaseHas('purchases', [
+            'tenant_id' => $tenant->id,
+            'supplier_id' => $supplierId,
+            'transaction_date' => '2026-05-31',
+        ]);
     }
 
     public function test_purchase_index_includes_item_summary_for_list_cards(): void

@@ -44,14 +44,15 @@ class CheckoutTransactionDateValidationTest extends TestCase
             ]);
     }
 
-    public function test_checkout_returns_invalid_transaction_date_before_current_month(): void
+    public function test_checkout_accepts_transaction_date_before_current_month(): void
     {
         $response = $this->withHeaders($this->tenantHeaders($this->tenant->id))
             ->postJson('/api/v1/checkout', $this->checkoutPayload($this->fixture, '2026-01-31'));
 
-        $response->assertStatus(422)
-            ->assertJson([
-                'code' => 'INVALID_TRANSACTION_DATE',
-            ]);
+        $response->assertStatus(201);
+        $this->assertDatabaseHas('sales', [
+            'tenant_id' => $this->tenant->id,
+            'transaction_date' => '2026-01-31',
+        ]);
     }
 }

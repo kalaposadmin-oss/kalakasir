@@ -336,9 +336,9 @@ class PurchaseController extends Controller
         $today = CarbonImmutable::now($timezone)->startOfDay();
 
         return [
-            'min_date' => $today->startOfMonth()->toDateString(),
+            'min_date' => null,
             'max_date' => $today->toDateString(),
-            'policy' => 'current_month',
+            'policy' => 'no_future',
             'timezone' => $timezone,
         ];
     }

@@ -23,10 +23,6 @@ class TransactionDateService
             throw new InvalidTransactionDateException('Tanggal transaksi tidak boleh di masa depan.');
         }
 
-        if ($value->lessThan($today->startOfMonth())) {
-            throw new InvalidTransactionDateException('Tanggal transaksi tidak boleh melewati bulan berjalan.');
-        }
-
         return $value;
     }
 }

@@ -97,6 +97,15 @@
                         <span id="receivable-quick-label" class="text-[11px] font-bold text-slate-800">Rp 0</span>
                     </button>
                 </div>
+                <label class="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
+                    <span class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-700">
+                        <span class="material-symbols-outlined text-[18px]">event</span>
+                    </span>
+                    <span class="min-w-0 flex-1">
+                        <span class="block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Tanggal Transaksi</span>
+                        <input id="transaction-date-input" class="mt-0.5 w-full border-0 bg-transparent p-0 text-xs font-bold text-slate-800 focus:ring-0" type="date" value="{{ now($kasirTenant?->timezone ?? config('app.timezone'))->toDateString() }}" max="{{ now($kasirTenant?->timezone ?? config('app.timezone'))->toDateString() }}" />
+                    </span>
+                </label>
             </section>
 
             <section class="space-y-4 px-4 py-4">
