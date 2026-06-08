@@ -2106,6 +2106,8 @@ if (!window.__posKasirPageInitialized) {
         });
 
         el.cartList.addEventListener('click', (event) => {
+            event.stopPropagation();
+
             const emptyClose = event.target.closest('#cart-empty-close');
             const remove = event.target.closest('.item-remove');
             const minus = event.target.closest('.qty-minus');
@@ -2243,7 +2245,8 @@ if (!window.__posKasirPageInitialized) {
         el.cartToggle.addEventListener('click', openCart);
         el.cartClose.addEventListener('click', closeCart);
         el.cartOverlay.addEventListener('click', (event) => {
-            if (!event.target.closest('#cart-drawer')) {
+            const clickedInsideDrawer = event.composedPath().includes(el.cartDrawer);
+            if (!clickedInsideDrawer) {
                 closeCart();
             }
         });
