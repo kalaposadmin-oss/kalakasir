@@ -397,6 +397,19 @@
                     currency: 'IDR',
                     maximumFractionDigits: 0,
                 }).format(value || 0);
+                const parseAmount = (value, fallback = 0) => {
+                    if (typeof value === 'number') {
+                        return Number.isFinite(value) ? value : fallback;
+                    }
+
+                    if (typeof value === 'string') {
+                        const normalized = value.replace(/[^\d,-]/g, '').replace(',', '.');
+                        const parsed = Number(normalized || 0);
+                        return Number.isFinite(parsed) ? parsed : fallback;
+                    }
+
+                    return fallback;
+                };
 
                 const els = {
                     total: document.getElementById('total-amount'),
@@ -516,6 +529,7 @@
                 };
 
                 const snapshot = loadSnapshot();
+                const initialTotal = parseAmount(snapshot?.total, parseAmount(els.total?.textContent));
                 const tenantId = document.querySelector('meta[name="tenant-id"]')?.content || '';
                 const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
                 const headers = tenantId ? { 'X-Tenant-Id': tenantId } : {};
@@ -574,7 +588,7 @@
                 };
                 const defaultReceivableDays = 7;
                 const state = {
-                    total: snapshot?.total || 0,
+                    total: initialTotal,
                     paidInput: '',
                     method: 'cash',
                     bankAccounts: [],
@@ -1271,11 +1285,11 @@
                 };
 
                 const updateAmounts = () => {
-                    state.total = Number(snapshot?.total || state.total || 0);
+                    state.total = parseAmount(snapshot?.total, state.total || parseAmount(els.total?.textContent));
                     const isReceivable = state.method === 'receivable';
                     const paid = isReceivable
-                        ? Math.max(0, Math.floor(Number(state.receivable.dpAmount || 0)))
-                        : Number(state.paidInput || 0);
+                        ? Math.max(0, Math.floor(parseAmount(state.receivable.dpAmount)))
+                        : parseAmount(state.paidInput);
                     const total = state.total || 0;
                     const remaining = Math.max(total - paid, 0);
                     const change = isReceivable ? 0 : Math.max(paid - total, 0);
@@ -1594,10 +1608,10 @@
                     }
 
                     const isReceivable = state.method === 'receivable';
-                    state.total = Number(snapshot?.total || state.total || 0);
+                    state.total = parseAmount(snapshot?.total, state.total || parseAmount(els.total?.textContent));
                     const paid = isReceivable
-                        ? Math.max(0, Math.floor(Number(state.receivable.dpAmount || 0)))
-                        : Number(state.paidInput || 0);
+                        ? Math.max(0, Math.floor(parseAmount(state.receivable.dpAmount)))
+                        : parseAmount(state.paidInput);
 
                     if (isReceivable && !state.receivable.configured) {
                         await openReceivableModal();
@@ -1706,10 +1720,10 @@
                             const result = await response.json().catch(() => ({}));
                             const saleId = result?.sale_id || null;
                             const receipt = {
-                                ...snapshot,
-                                method: isReceivable ? 'receivable' : selectedConfig.method,
-                                paid,
-                                change: isReceivable ? 0 : Math.max(paid - snapshot.total, 0),
+                        ...snapshot,
+                        method: isReceivable ? 'receivable' : selectedConfig.method,
+                        paid,
+                        change: isReceivable ? 0 : Math.max(paid - state.total, 0),
                                 invoice: saleId,
                                 receivable_id: result?.receivable_id || null,
                                 payment_status: result?.payment_status || (isReceivable ? (paid > 0 ? 'partial' : 'unpaid') : 'paid'),
