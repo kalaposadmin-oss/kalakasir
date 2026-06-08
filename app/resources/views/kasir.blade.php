@@ -471,6 +471,146 @@
     @push('scripts')
     <script>
     (() => {
+        const cartOverlay = document.getElementById('cart-overlay');
+        const cartDrawer = document.getElementById('cart-drawer');
+        const bottomNav = document.getElementById('bottom-nav');
+        const cartList = document.getElementById('cart-list');
+
+        if (!cartOverlay || !cartDrawer || !cartList) return;
+
+        let keepCartOpen = false;
+
+        const openCart = () => {
+            cartOverlay.classList.remove('hidden');
+            bottomNav?.classList.add('hidden');
+        };
+
+        const markKeepOpen = (event) => {
+            if (event.composedPath().includes(cartDrawer)) {
+                keepCartOpen = true;
+            }
+        };
+
+        const restoreCartIfNeeded = () => {
+            if (!keepCartOpen) return;
+            window.requestAnimationFrame(() => {
+                openCart();
+                enhanceQtyInputs();
+                keepCartOpen = false;
+            });
+        };
+
+        ['pointerdown', 'mousedown', 'touchstart', 'click'].forEach((eventName) => {
+            cartDrawer.addEventListener(eventName, (event) => {
+                markKeepOpen(event);
+                if (eventName === 'click') {
+                    event.stopPropagation();
+                    restoreCartIfNeeded();
+                }
+            }, true);
+        });
+
+        const findQtyText = (control) => {
+            return Array.from(control.children).find((child) => {
+                if (child.matches('button, input')) return false;
+                return /^\d+(\.\d+)?$/.test((child.textContent || '').trim());
+            });
+        };
+
+        const clickButton = async (button) => {
+            button.click();
+            await new Promise((resolve) => window.requestAnimationFrame(resolve));
+            openCart();
+        };
+
+        const applyTypedQty = async (input) => {
+            const productId = input.dataset.id;
+            const targetQty = Math.max(1, Math.floor(Number(String(input.value || '').replace(',', '.')) || 1));
+            let guard = 0;
+
+            while (guard < 200) {
+                guard += 1;
+                const plus = cartList.querySelector(`.qty-plus[data-id="${productId}"]`);
+                const minus = cartList.querySelector(`.qty-minus[data-id="${productId}"]`);
+                const control = plus?.parentElement || minus?.parentElement;
+                const qtyText = control ? findQtyText(control) : null;
+                const currentQty = Number((qtyText?.textContent || input.value || '').trim());
+
+                if (!plus || !minus || !Number.isFinite(currentQty) || currentQty === targetQty) {
+                    enhanceQtyInputs();
+                    return;
+                }
+
+                await clickButton(targetQty > currentQty ? plus : minus);
+            }
+        };
+
+        const enhanceQtyInputs = () => {
+            cartList.querySelectorAll('.qty-plus, .qty-minus').forEach((button) => {
+                const control = button.parentElement;
+                if (!control || control.querySelector('.qty-input')) return;
+
+                const qtyText = findQtyText(control);
+                if (!qtyText) return;
+
+                const productId = button.dataset.id;
+                const input = document.createElement('input');
+                input.className = 'qty-input h-8 w-16 rounded-full border border-slate-200 bg-slate-50 px-2 text-center text-sm font-bold text-slate-900 focus:border-primary focus:bg-white focus:ring-primary';
+                input.type = 'number';
+                input.min = '1';
+                input.step = '1';
+                input.inputMode = 'numeric';
+                input.value = (qtyText.textContent || '1').trim();
+                input.dataset.id = productId;
+                input.setAttribute('aria-label', 'Jumlah item');
+
+                qtyText.replaceWith(input);
+            });
+        };
+
+        cartList.addEventListener('focusin', (event) => {
+            const input = event.target.closest('.qty-input');
+            if (input instanceof HTMLInputElement) {
+                input.select();
+            }
+        }, true);
+
+        cartList.addEventListener('keydown', (event) => {
+            const input = event.target.closest('.qty-input');
+            if (!(input instanceof HTMLInputElement)) return;
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                input.blur();
+            }
+        }, true);
+
+        cartList.addEventListener('change', (event) => {
+            const input = event.target.closest('.qty-input');
+            if (!(input instanceof HTMLInputElement)) return;
+            keepCartOpen = true;
+            applyTypedQty(input);
+        }, true);
+
+        cartList.addEventListener('click', (event) => {
+            if (event.target.closest('.qty-plus, .qty-minus')) {
+                keepCartOpen = true;
+                window.setTimeout(() => {
+                    openCart();
+                    enhanceQtyInputs();
+                }, 0);
+            }
+        }, true);
+
+        new MutationObserver(() => enhanceQtyInputs()).observe(cartList, {
+            childList: true,
+            subtree: true,
+        });
+
+        enhanceQtyInputs();
+    })();
+    </script>
+    <script>
+    (() => {
         const tenantId = document.querySelector('meta[name="tenant-id"]')?.content;
         const headers = tenantId ? { 'X-Tenant-Id': tenantId } : {};
 
