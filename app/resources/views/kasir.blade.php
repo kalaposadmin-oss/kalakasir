@@ -22,6 +22,27 @@
     <style>
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        #cart-list > .rounded-2xl > div:first-child {
+            align-items: start;
+            display: grid;
+            gap: .75rem;
+            grid-template-columns: auto minmax(0, 1fr);
+        }
+        #cart-list > .rounded-2xl > div:first-child > div:nth-child(3) {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .5rem;
+            grid-column: 1 / -1;
+            justify-content: space-between;
+            min-width: 0;
+        }
+        #cart-list .item-discount-toggle {
+            min-height: 2.25rem;
+            white-space: normal;
+        }
+        #cart-list .qty-input {
+            width: 4rem;
+        }
     </style>
 @endpush
 
@@ -185,7 +206,7 @@
                 </div>
 
                 <div class="flex min-h-0 flex-1 flex-col">
-                    <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4 no-scrollbar">
+                    <div class="min-h-0 flex-1 overflow-y-auto px-4 pt-4 pb-32 no-scrollbar">
                         <div id="cart-list" class="space-y-3"></div>
 
                         <details class="mt-4 rounded-3xl border border-slate-200 bg-slate-50 p-4">

@@ -1030,10 +1030,10 @@ if (!window.__posKasirPageInitialized) {
                     const row = document.createElement('div');
                     row.className = 'rounded-2xl bg-slate-50 dark:bg-slate-800/50 p-3 border border-slate-100 dark:border-slate-700';
                     row.innerHTML = `
-                        <div class="flex items-center gap-4">
+                        <div class="grid grid-cols-[auto_minmax(0,1fr)] gap-3">
                             ${getCartProductMedia(item.product)}
-                            <div class="min-w-0 flex-1">
-                                <h4 class="text-sm font-bold text-slate-800 dark:text-slate-100">${item.product.name}</h4>
+                            <div class="min-w-0">
+                                <h4 class="break-words text-sm font-bold leading-5 text-slate-800 dark:text-slate-100">${item.product.name}</h4>
                                 <p class="text-[11px] text-slate-500">${formatCurrency(item.unit_price)}</p>
                                 ${tierBadge}
                                 ${itemNote ? `<p class="mt-1 line-clamp-2 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-medium text-amber-800">Catatan: ${escapeHtml(itemNote)}</p>` : ''}
@@ -1045,16 +1045,16 @@ if (!window.__posKasirPageInitialized) {
                                     ${itemDiscountSummary ? `<span class="text-[10px] font-semibold text-emerald-700">${itemDiscountSummary}${line.itemDiscountTotal > 0 ? ` · ${formatCurrency(line.itemDiscountTotal)}` : ''}</span>` : ''}
                                 </div>
                             </div>
-                            <div class="flex items-center gap-3">
+                            <div class="col-span-2 flex flex-wrap items-center justify-between gap-2">
                                 <button class="item-remove flex h-9 w-9 items-center justify-center rounded-full bg-rose-50 text-rose-500" data-id="${item.product.id}" type="button" aria-label="Hapus item">
                                     <span class="material-symbols-outlined text-base">delete</span>
                                 </button>
-                                <div class="flex items-center gap-2 rounded-full bg-white dark:bg-slate-900 px-2 py-1.5 border border-slate-200">
-                                    <button class="qty-minus w-7 h-7 flex items-center justify-center text-primary bg-slate-100 rounded-full" data-id="${item.product.id}" type="button" aria-label="Kurangi jumlah">
+                                <div class="flex shrink-0 items-center gap-2 rounded-full bg-white dark:bg-slate-900 px-2 py-1.5 border border-slate-200">
+                                    <button class="qty-minus w-8 h-8 flex items-center justify-center text-primary bg-slate-100 rounded-full" data-id="${item.product.id}" type="button" aria-label="Kurangi jumlah">
                                         <span class="material-symbols-outlined text-base">remove</span>
                                     </button>
                                     <input class="qty-input h-8 w-16 rounded-full border border-slate-200 bg-slate-50 px-2 text-center text-sm font-bold text-slate-900 focus:border-primary focus:bg-white focus:ring-primary" data-id="${item.product.id}" type="number" min="0.01" step="1" inputmode="decimal" value="${formatNumber(item.qty)}" aria-label="Jumlah ${escapeHtml(item.product.name)}" />
-                                    <button class="qty-plus w-7 h-7 flex items-center justify-center text-white bg-primary rounded-full" data-id="${item.product.id}" type="button" aria-label="Tambah jumlah">
+                                    <button class="qty-plus w-8 h-8 flex items-center justify-center text-white bg-primary rounded-full" data-id="${item.product.id}" type="button" aria-label="Tambah jumlah">
                                         <span class="material-symbols-outlined text-base">add</span>
                                     </button>
                                 </div>
