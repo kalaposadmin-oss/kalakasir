@@ -35,12 +35,17 @@ class ProductionBatchService
         $location = $this->loadLocation($tenantId, (string) $payload['branch_id'], (string) $payload['location_id']);
         $product = $this->loadBatchProduct($tenantId, (string) $payload['product_id']);
         $productVariantId = $this->resolveVariantId($tenantId, (string) $product->id, Arr::get($payload, 'product_variant_id'));
-        $recipeLines = $this->normalizeRecipeLines($product);
         $draftPlan = $this->resolveDraftPlan($payload, $product);
         $recipeCount = $draftPlan['recipe_count'];
         $plannedOutputs = $this->normalizeDraftOutputs($tenantId, $payload, $product, $productVariantId, $draftPlan);
         $expectedOutputQty = Decimal::qty(collect($plannedOutputs)->sum(fn (array $line) => (float) $line['planned_qty']));
-        $plannedInputs = $this->buildPlannedInputsFromRecipeLines($recipeLines, $draftPlan['input_multiplier']);
+        $baseRecipeLines = $this->normalizeRecipeLines($product);
+        $outputRecipeLines = $this->buildAdditionalOutputRecipeLines($tenantId, $plannedOutputs, (string) $product->id);
+        $recipeLines = $this->mergeRecipeLinesForInputRows(array_merge($baseRecipeLines, $outputRecipeLines));
+        $plannedInputs = $this->mergePlannedInputMaps(
+            $this->buildPlannedInputsFromRecipeLines($baseRecipeLines, $draftPlan['input_multiplier']),
+            $this->buildPlannedInputsFromRecipeLines($outputRecipeLines, '1')
+        );
 
         try {
             return DB::transaction(function () use ($payload, $tenantId, $userId, $now, $transactionDate, $location, $product, $productVariantId, $recipeLines, $expectedOutputQty, $recipeCount, $plannedInputs, $plannedOutputs): ProductionBatch {
@@ -1341,16 +1346,125 @@ class ProductionBatchService
         $plannedInputs = [];
 
         foreach ($recipeLines as $line) {
-            $plannedInputs[$this->itemKey(
+            $key = $this->itemKey(
                 (string) $line['product_id'],
                 Arr::get($line, 'product_variant_id')
-            )] = Decimal::float(
-                Decimal::multiply($multiplier, Decimal::qty($line['qty']), Decimal::QTY_SCALE),
+            );
+            $plannedInputs[$key] = Decimal::float(
+                Decimal::add(
+                    Decimal::qty($plannedInputs[$key] ?? 0),
+                    Decimal::multiply($multiplier, Decimal::qty($line['qty']), Decimal::QTY_SCALE),
+                    Decimal::QTY_SCALE
+                ),
                 Decimal::QTY_SCALE
             );
         }
 
         return $plannedInputs;
+    }
+
+    private function mergePlannedInputMaps(array ...$maps): array
+    {
+        $merged = [];
+
+        foreach ($maps as $map) {
+            foreach ($map as $key => $qty) {
+                $merged[$key] = Decimal::float(
+                    Decimal::add(Decimal::qty($merged[$key] ?? 0), Decimal::qty($qty), Decimal::QTY_SCALE),
+                    Decimal::QTY_SCALE
+                );
+            }
+        }
+
+        return $merged;
+    }
+
+    private function mergeRecipeLinesForInputRows(array $recipeLines): array
+    {
+        $merged = [];
+
+        foreach ($recipeLines as $line) {
+            $productId = (string) Arr::get($line, 'product_id', '');
+            if ($productId === '') {
+                continue;
+            }
+
+            $productVariantId = Arr::get($line, 'product_variant_id');
+            $productVariantId = $productVariantId !== null && $productVariantId !== '' ? (string) $productVariantId : null;
+            $key = $this->itemKey($productId, $productVariantId);
+
+            if (! isset($merged[$key])) {
+                $merged[$key] = [
+                    ...$line,
+                    'product_id' => $productId,
+                    'product_variant_id' => $productVariantId,
+                    'qty' => Decimal::qty(0),
+                ];
+            }
+
+            $merged[$key]['qty'] = Decimal::float(
+                Decimal::add(Decimal::qty($merged[$key]['qty'] ?? 0), Decimal::qty(Arr::get($line, 'qty', 0)), Decimal::QTY_SCALE),
+                Decimal::QTY_SCALE
+            );
+        }
+
+        return array_values($merged);
+    }
+
+    private function buildAdditionalOutputRecipeLines(string $tenantId, array $plannedOutputs, string $baseProductId): array
+    {
+        $outputProductIds = collect($plannedOutputs)
+            ->pluck('product_id')
+            ->filter()
+            ->map(fn ($value) => (string) $value)
+            ->reject(fn (string $productId) => $productId === $baseProductId)
+            ->unique()
+            ->values();
+
+        if ($outputProductIds->isEmpty()) {
+            return [];
+        }
+
+        $products = Product::query()
+            ->where('tenant_id', $tenantId)
+            ->whereIn('id', $outputProductIds->all())
+            ->get()
+            ->keyBy(fn (Product $product) => (string) $product->id);
+
+        $lines = [];
+        foreach ($plannedOutputs as $output) {
+            $outputProductId = (string) ($output['product_id'] ?? '');
+            if ($outputProductId === '' || $outputProductId === $baseProductId) {
+                continue;
+            }
+
+            $outputProduct = $products->get($outputProductId);
+            if (! $outputProduct) {
+                continue;
+            }
+
+            $outputRecipeQty = Decimal::snappedQty($outputProduct->recipe_output_qty ?? 0);
+            if (Decimal::compare($outputRecipeQty, '0') <= 0) {
+                continue;
+            }
+
+            $multiplier = Decimal::divide(Decimal::qty($output['planned_qty'] ?? 0), $outputRecipeQty, Decimal::QTY_SCALE);
+            if (Decimal::compare($multiplier, '0') <= 0) {
+                continue;
+            }
+
+            foreach ($this->normalizeRecipeLines($outputProduct) as $line) {
+                $lines[] = [
+                    ...$line,
+                    'qty' => Decimal::float(
+                        Decimal::multiply($multiplier, Decimal::qty(Arr::get($line, 'qty', 0)), Decimal::QTY_SCALE),
+                        Decimal::QTY_SCALE
+                    ),
+                ];
+            }
+        }
+
+        return $lines;
     }
 
     private function normalizeDraftOutputs(string $tenantId, array $payload, Product $defaultProduct, ?string $defaultVariantId, array $draftPlan): array

@@ -992,6 +992,21 @@
             const outputProductDraft = (productId) => (state.bootstrap.products || [])
                 .find((product) => String(product.id || '') === String(productId || '')) || null;
 
+            const outputAdditionalRecipeSummary = () => {
+                const recipeProductId = String(el.createProduct?.value || '');
+
+                return state.outputRows
+                    .map((row) => outputProductDraft(row.product_id))
+                    .filter((product) => {
+                        const bomItems = Array.isArray(product?.bom_items) ? product.bom_items : [];
+                        return product
+                            && String(product.id || '') !== recipeProductId
+                            && bomItems.length !== 0
+                            && Number(product.recipe_output_qty || 0) > 0;
+                    })
+                    .map((product) => `${product.name} memakai ${product.bom_items.length} bahan tambahan`);
+            };
+
             const outputRecipeFactorForRow = (row) => {
                 const recipeProduct = getCreateProductDraft();
                 const outputProduct = outputProductDraft(row.product_id);
@@ -1042,9 +1057,13 @@
                 const over = summary.remaining < -0.0001;
                 const hasDuplicate = duplicateOutputProductIds().size > 0;
                 el.outputSummary.className = `mt-3 rounded-2xl px-3 py-3 text-xs font-semibold ${over || hasDuplicate ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200' : 'bg-slate-50 text-slate-600'}`;
+                const additionalRecipes = outputAdditionalRecipeSummary();
                 el.outputSummary.textContent = hasDuplicate
                     ? 'Produk hasil duplikat. Gabungkan qty pada satu baris atau pilih produk jadi yang berbeda.'
-                    : `Resep dibuat ${formatNumber(summary.recipeCount)} - dipakai output ${formatNumber(summary.usage)} - sisa ${formatNumber(Math.max(0, summary.remaining))}`;
+                    : [
+                        `Resep dibuat ${formatNumber(summary.recipeCount)} - dipakai output ${formatNumber(summary.usage)} - sisa ${formatNumber(Math.max(0, summary.remaining))}`,
+                        additionalRecipes.length ? `BOM output tambahan: ${additionalRecipes.join(', ')}.` : '',
+                    ].filter(Boolean).join(' ');
             };
 
             const renderOutputRows = () => {
@@ -1223,10 +1242,10 @@
             const updateSubmitState = () => {
                 const canPost = canCreateDraftFromPreview()
                     && outputRowsAreValid();
-                el.createSubmit.disabled = !canPost;
                 el.createSubmit.classList.toggle('opacity-60', !canPost);
                 el.createSubmit.classList.toggle('cursor-not-allowed', !canPost);
                 el.createSubmit.title = canPost ? '' : (getPreviewMessage() || 'Lengkapi produk dan lokasi terlebih dahulu.');
+                el.createSubmit.setAttribute('aria-disabled', canPost ? 'false' : 'true');
             };
 
             const renderMaterialChips = () => {
@@ -2098,6 +2117,7 @@
                         ? 'Total hasil jadi melebihi jumlah resep yang dibuat.'
                         : 'Lengkapi produk, qty, dan faktor resep pada hasil jadi.';
                     setCreateFeedback(outputsValid ? (getPreviewMessage() || 'Lengkapi produk dan lokasi terlebih dahulu.') : outputMessage, true);
+                    el.createFeedback?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                     return;
                 }
                 setCreateFeedback('');

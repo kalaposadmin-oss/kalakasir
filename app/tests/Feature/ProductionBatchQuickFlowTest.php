@@ -735,6 +735,134 @@ class ProductionBatchQuickFlowTest extends TestCase
         ]);
     }
 
+    public function test_multi_output_batch_includes_additional_output_recipe_materials(): void
+    {
+        [$tenant] = $this->bootApiActor('admin', 'admin+production-output-extra-bom@example.test');
+
+        $fixture = $this->seedFixture($tenant, rawMaterialQty: 100);
+        $nutellaId = $this->insertProduct($tenant, [
+            'sku' => 'NUTELLA-'.Str::upper(Str::random(6)),
+            'name' => 'Nutella Selai',
+            'product_mode' => 'add_on',
+            'production_mode' => Product::PRODUCTION_MODE_NONE,
+            'item_type' => 'raw_material',
+            'track_stock' => true,
+            'price' => 1,
+            'unit' => 'gram',
+        ]);
+        $nutellaBrowniesId = $this->insertProduct($tenant, [
+            'sku' => 'NUT-BR-'.Str::upper(Str::random(6)),
+            'name' => 'Nutella Brownies',
+            'product_mode' => 'bom',
+            'production_mode' => Product::PRODUCTION_MODE_BATCH,
+            'item_type' => 'finished_good',
+            'track_stock' => true,
+            'price' => 35000,
+            'recipe_output_qty' => 6,
+            'bom_items' => json_encode([
+                [
+                    'product_id' => $nutellaId,
+                    'qty' => 10,
+                    'unit' => 'gram',
+                ],
+            ]),
+        ]);
+
+        DB::table('inventory_balances')->insert([
+            'tenant_id' => $tenant->id,
+            'product_id' => $nutellaId,
+            'location_id' => $fixture['location_id'],
+            'qty_on_hand' => 100,
+        ]);
+        DB::table('inventory_cost_states')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $tenant->id,
+            'product_id' => $nutellaId,
+            'location_id' => $fixture['location_id'],
+            'qty_on_hand' => 100,
+            'average_cost' => 200,
+            'last_cost' => 200,
+            'updated_at' => now('UTC'),
+        ]);
+
+        $create = $this->postJson('/api/v1/production-batches', [
+            'branch_id' => $fixture['branch_id'],
+            'location_id' => $fixture['location_id'],
+            'product_id' => $fixture['finished_good_id'],
+            'transaction_date' => '2026-02-27',
+            'recipe_count' => 1,
+            'outputs' => [
+                [
+                    'product_id' => $nutellaBrowniesId,
+                    'planned_qty' => 6,
+                    'recipe_factor' => 0.16666667,
+                ],
+            ],
+        ], $this->tenantHeaders($tenant->id));
+
+        $create->assertCreated()
+            ->assertJsonPath('expected_output_qty', 6)
+            ->assertJsonPath('recipe_count', 1);
+
+        $batchId = (string) $create->json('batch_id');
+
+        $this->assertDatabaseHas('production_batch_items', [
+            'tenant_id' => $tenant->id,
+            'production_batch_id' => $batchId,
+            'line_type' => 'input',
+            'product_id' => $fixture['raw_material_id'],
+            'planned_qty' => 2.0000,
+        ]);
+        $this->assertDatabaseHas('production_batch_items', [
+            'tenant_id' => $tenant->id,
+            'production_batch_id' => $batchId,
+            'line_type' => 'input',
+            'product_id' => $nutellaId,
+            'planned_qty' => 10.0000,
+        ]);
+
+        $this->postJson('/api/v1/production-batches/'.$batchId.'/post', [
+            'inputs' => [
+                [
+                    'product_id' => $fixture['raw_material_id'],
+                    'actual_qty' => 2,
+                ],
+                [
+                    'product_id' => $nutellaId,
+                    'actual_qty' => 10,
+                ],
+            ],
+            'outputs' => [
+                [
+                    'product_id' => $nutellaBrowniesId,
+                    'actual_qty' => 6,
+                ],
+            ],
+        ], $this->tenantHeadersWithIdempotency($tenant->id, 'prod-post-nutella-output'))
+            ->assertOk()
+            ->assertJsonPath('status', 'posted')
+            ->assertJsonPath('actual_output_qty', 6);
+
+        $this->assertDatabaseHas('inventory_balances', [
+            'tenant_id' => $tenant->id,
+            'location_id' => $fixture['location_id'],
+            'product_id' => $fixture['raw_material_id'],
+            'qty_on_hand' => 98.00,
+        ]);
+        $this->assertDatabaseHas('inventory_balances', [
+            'tenant_id' => $tenant->id,
+            'location_id' => $fixture['location_id'],
+            'product_id' => $nutellaId,
+            'qty_on_hand' => 90.00,
+        ]);
+        $this->assertDatabaseHas('inventory_balances', [
+            'tenant_id' => $tenant->id,
+            'location_id' => $fixture['location_id'],
+            'product_id' => $nutellaBrowniesId,
+            'qty_on_hand' => 6.00,
+        ]);
+    }
+
     public function test_multi_output_batch_accepts_fractional_brownies_recipe_factor_without_rounding_overage(): void
     {
         [$tenant] = $this->bootApiActor('admin', 'admin+production-brownies-fraction@example.test');

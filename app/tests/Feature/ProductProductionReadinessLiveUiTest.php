@@ -71,6 +71,11 @@ class ProductProductionReadinessLiveUiTest extends TestCase
         $this->assertStringContainsString('const includeAdvancedOutputs = outputAdvancedIsActive();', $productionBatchContents);
         $this->assertStringContainsString('if (includeAdvancedOutputs) {', $productionBatchContents);
         $this->assertStringContainsString('Produk hasil duplikat. Gabungkan qty pada satu baris', $productionBatchContents);
+        $this->assertStringContainsString('const outputAdditionalRecipeSummary = () => {', $productionBatchContents);
+        $this->assertStringContainsString('BOM output tambahan:', $productionBatchContents);
+        $this->assertStringNotContainsString('el.createSubmit.disabled = !canPost;', $productionBatchContents);
+        $this->assertStringContainsString("el.createSubmit.setAttribute('aria-disabled'", $productionBatchContents);
+        $this->assertStringContainsString('el.createFeedback?.scrollIntoView', $productionBatchContents);
 
         $this->assertStringContainsString('batch-post-variance-reason-presets', $productionBatchDetailContents);
         $this->assertStringContainsString('data-variance-reason="Salah input - koreksi draft"', $productionBatchDetailContents);
