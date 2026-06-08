@@ -138,6 +138,7 @@ if (!window.__posKasirPageInitialized) {
             replacingSaleId: null,
             replacingTransactionDate: null,
             pendingDraftRestore: false,
+            cartPointerStartedInsideDrawer: false,
         };
 
         const cartStorageKey = 'pos_cart_draft';
@@ -2152,9 +2153,11 @@ if (!window.__posKasirPageInitialized) {
             }
             if (minus) {
                 updateCartQty(minus.dataset.id, -1);
+                openCart();
             }
             if (plus) {
                 updateCartQty(plus.dataset.id, 1);
+                openCart();
             }
         });
 
@@ -2244,11 +2247,21 @@ if (!window.__posKasirPageInitialized) {
 
         el.cartToggle.addEventListener('click', openCart);
         el.cartClose.addEventListener('click', closeCart);
+        el.cartOverlay.addEventListener('pointerdown', (event) => {
+            state.cartPointerStartedInsideDrawer = event.composedPath().includes(el.cartDrawer);
+        }, true);
+        el.cartOverlay.addEventListener('touchstart', (event) => {
+            state.cartPointerStartedInsideDrawer = event.composedPath().includes(el.cartDrawer);
+        }, true);
+        el.cartDrawer?.addEventListener('click', (event) => {
+            event.stopPropagation();
+        }, true);
         el.cartOverlay.addEventListener('click', (event) => {
             const clickedInsideDrawer = event.composedPath().includes(el.cartDrawer);
-            if (!clickedInsideDrawer) {
+            if (!clickedInsideDrawer && !state.cartPointerStartedInsideDrawer) {
                 closeCart();
             }
+            state.cartPointerStartedInsideDrawer = false;
         });
 
         el.checkout.addEventListener('click', goToPayment);
