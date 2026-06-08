@@ -541,23 +541,29 @@
         const applyTypedQty = async (input) => {
             const productId = input.dataset.id;
             const targetQty = Math.max(1, Math.floor(Number(String(input.value || '').replace(',', '.')) || 1));
+            const committedQty = Math.max(1, Math.floor(Number(input.dataset.committedQty || input.defaultValue || 1)) || 1);
             let guard = 0;
+            let currentQty = committedQty;
 
-            while (guard < 200) {
+            while (guard < 200 && currentQty !== targetQty) {
                 guard += 1;
                 const plus = cartList.querySelector(`.qty-plus[data-id="${productId}"]`);
                 const minus = cartList.querySelector(`.qty-minus[data-id="${productId}"]`);
-                const control = plus?.parentElement || minus?.parentElement;
-                const qtyText = control ? findQtyText(control) : null;
-                const currentQty = Number((qtyText?.textContent || input.value || '').trim());
 
-                if (!plus || !minus || !Number.isFinite(currentQty) || currentQty === targetQty) {
+                if (!plus || !minus) {
                     enhanceQtyInputs();
                     return;
                 }
 
                 await clickButton(targetQty > currentQty ? plus : minus);
+                currentQty += targetQty > currentQty ? 1 : -1;
             }
+
+            input.dataset.committedQty = String(targetQty);
+            input.defaultValue = String(targetQty);
+            input.value = String(targetQty);
+            openCart();
+            enhanceQtyInputs();
         };
 
         const enhanceQtyInputs = () => {
@@ -576,6 +582,8 @@
                 input.step = '1';
                 input.inputMode = 'numeric';
                 input.value = (qtyText.textContent || '1').trim();
+                input.defaultValue = input.value;
+                input.dataset.committedQty = input.value;
                 input.dataset.id = productId;
                 input.setAttribute('aria-label', 'Jumlah item');
 

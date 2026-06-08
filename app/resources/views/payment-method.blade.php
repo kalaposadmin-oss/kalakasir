@@ -519,6 +519,46 @@
                 const tenantId = document.querySelector('meta[name="tenant-id"]')?.content || '';
                 const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
                 const headers = tenantId ? { 'X-Tenant-Id': tenantId } : {};
+                const readCookie = (name) => document.cookie
+                    .split('; ')
+                    .find((row) => row.startsWith(`${name}=`))
+                    ?.split('=')
+                    .slice(1)
+                    .join('=') || '';
+                const csrfHeaders = () => {
+                    const xsrfToken = readCookie('XSRF-TOKEN');
+                    if (xsrfToken) {
+                        return { 'X-XSRF-TOKEN': decodeURIComponent(xsrfToken) };
+                    }
+
+                    return csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {};
+                };
+                const fetchWriteWithFreshCsrf = async (url, options = {}, timeout = null) => {
+                    const makeOptions = () => ({
+                        ...options,
+                        credentials: 'same-origin',
+                        headers: {
+                            ...(options.headers || {}),
+                            ...headers,
+                            ...csrfHeaders(),
+                        },
+                    });
+
+                    let response = timeout
+                        ? await window.PosUi.fetchWithTimeout(url, makeOptions(), timeout)
+                        : await fetch(url, makeOptions());
+                    if (response.status === 419) {
+                        await fetch('/sanctum/csrf-cookie', {
+                            credentials: 'same-origin',
+                            headers,
+                        }).catch(() => null);
+                        response = timeout
+                            ? await window.PosUi.fetchWithTimeout(url, makeOptions(), timeout)
+                            : await fetch(url, makeOptions());
+                    }
+
+                    return response;
+                };
                 const formatDateInput = (date) => {
                     const year = date.getFullYear();
                     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -566,15 +606,12 @@
                 };
 
                 const saveOrderToApi = async (payload, savedOrderId = null) => {
-                    const response = await fetch(savedOrderId ? `/api/v1/pos/saved-orders/${savedOrderId}` : '/api/v1/pos/saved-orders', {
+                    const response = await fetchWriteWithFreshCsrf(savedOrderId ? `/api/v1/pos/saved-orders/${savedOrderId}` : '/api/v1/pos/saved-orders', {
                         method: savedOrderId ? 'PUT' : 'POST',
-                        credentials: 'same-origin',
                         headers: {
                             'Content-Type': 'application/json',
                             'Accept': 'application/json',
                             'X-Requested-With': 'XMLHttpRequest',
-                            ...(csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}),
-                            ...headers,
                         },
                         body: JSON.stringify(payload),
                     });
@@ -681,6 +718,7 @@
                     els.bankList.innerHTML = '';
                     if (!state.bankAccounts.length) {
                         els.bankEmpty.classList.remove('hidden');
+                        updateAmounts();
                         return;
                     }
 
@@ -707,6 +745,7 @@
                         });
                         els.bankList.appendChild(button);
                     });
+                    updateAmounts();
                 };
 
                 const showError = (message) => {
@@ -1232,6 +1271,7 @@
                 };
 
                 const updateAmounts = () => {
+                    state.total = Number(snapshot?.total || state.total || 0);
                     const isReceivable = state.method === 'receivable';
                     const paid = isReceivable
                         ? Math.max(0, Math.floor(Number(state.receivable.dpAmount || 0)))
@@ -1554,6 +1594,7 @@
                     }
 
                     const isReceivable = state.method === 'receivable';
+                    state.total = Number(snapshot?.total || state.total || 0);
                     const paid = isReceivable
                         ? Math.max(0, Math.floor(Number(state.receivable.dpAmount || 0)))
                         : Number(state.paidInput || 0);
@@ -1622,7 +1663,7 @@
                         : [{
                             account_id: accountId,
                             method: selectedConfig.method,
-                            amount: snapshot.total,
+                            amount: state.total,
                         }];
 
                     const payload = {
@@ -1641,7 +1682,7 @@
                         subtotal: snapshot.subtotal,
                         discount: snapshot.discount || 0,
                         tax: snapshot.tax,
-                        total: snapshot.total,
+                        total: state.total,
                         items: snapshot.checkout_items || [],
                         transaction_discounts: snapshot.transaction_discounts || [],
                         payments,
@@ -1649,11 +1690,10 @@
 
                     await window.PosUi.runWithSubmitGuard(triggerButton, async () => {
                         try {
-                            const response = await window.PosUi.fetchWithTimeout('/api/v1/checkout', {
+                            const response = await fetchWriteWithFreshCsrf('/api/v1/checkout', {
                                 method: 'POST',
                                 headers: {
                                     'Content-Type': 'application/json',
-                                    ...headers,
                                 },
                                 body: JSON.stringify(payload),
                             }, 15000);

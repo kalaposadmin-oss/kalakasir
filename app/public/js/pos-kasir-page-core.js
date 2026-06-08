@@ -5,6 +5,42 @@ if (!window.__posKasirPageInitialized) {
         const tenantId = document.querySelector('meta[name="tenant-id"]')?.content || '';
         const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
         const headers = tenantId ? { 'X-Tenant-Id': tenantId } : {};
+        const readCookie = (name) => document.cookie
+            .split('; ')
+            .find((row) => row.startsWith(`${name}=`))
+            ?.split('=')
+            .slice(1)
+            .join('=') || '';
+        const csrfHeaders = () => {
+            const xsrfToken = readCookie('XSRF-TOKEN');
+            if (xsrfToken) {
+                return { 'X-XSRF-TOKEN': decodeURIComponent(xsrfToken) };
+            }
+
+            return csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {};
+        };
+        const fetchWriteWithFreshCsrf = async (url, options = {}) => {
+            const makeOptions = () => ({
+                ...options,
+                credentials: 'same-origin',
+                headers: {
+                    ...(options.headers || {}),
+                    ...headers,
+                    ...csrfHeaders(),
+                },
+            });
+
+            let response = await fetch(url, makeOptions());
+            if (response.status === 419) {
+                await fetch('/sanctum/csrf-cookie', {
+                    credentials: 'same-origin',
+                    headers,
+                }).catch(() => null);
+                response = await fetch(url, makeOptions());
+            }
+
+            return response;
+        };
 
         const el = {
             cashierName: document.getElementById('cashier-name'),
@@ -139,6 +175,7 @@ if (!window.__posKasirPageInitialized) {
             replacingTransactionDate: null,
             pendingDraftRestore: false,
             cartPointerStartedInsideDrawer: false,
+            qtyInputTimer: null,
         };
 
         const cartStorageKey = 'pos_cart_draft';
@@ -497,15 +534,12 @@ if (!window.__posKasirPageInitialized) {
         };
 
         const saveOrderToApi = async (payload, savedOrderId = null) => {
-            const response = await fetch(savedOrderId ? `/api/v1/pos/saved-orders/${savedOrderId}` : '/api/v1/pos/saved-orders', {
+            const response = await fetchWriteWithFreshCsrf(savedOrderId ? `/api/v1/pos/saved-orders/${savedOrderId}` : '/api/v1/pos/saved-orders', {
                 method: savedOrderId ? 'PUT' : 'POST',
-                credentials: 'same-origin',
                 headers: {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json',
                     'X-Requested-With': 'XMLHttpRequest',
-                    ...(csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}),
-                    ...headers,
                 },
                 body: JSON.stringify(payload),
             });
@@ -520,14 +554,11 @@ if (!window.__posKasirPageInitialized) {
         };
 
         const deleteSavedOrderFromApi = async (id) => {
-            const response = await fetch(`/api/v1/pos/saved-orders/${id}`, {
+            const response = await fetchWriteWithFreshCsrf(`/api/v1/pos/saved-orders/${id}`, {
                 method: 'DELETE',
-                credentials: 'same-origin',
                 headers: {
                     'Accept': 'application/json',
                     'X-Requested-With': 'XMLHttpRequest',
-                    ...(csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}),
-                    ...headers,
                 },
             });
 
@@ -2192,6 +2223,15 @@ if (!window.__posKasirPageInitialized) {
                     ...existing,
                     note: String(noteInput.value || '').trim(),
                 });
+                return;
+            }
+            const qtyInput = event.target.closest('.qty-input');
+            if (qtyInput) {
+                window.clearTimeout(state.qtyInputTimer);
+                state.qtyInputTimer = window.setTimeout(() => {
+                    setCartQty(qtyInput.dataset.id, qtyInput.value);
+                    openCart();
+                }, 250);
                 return;
             }
             const valueInput = event.target.closest('.item-discount-value');

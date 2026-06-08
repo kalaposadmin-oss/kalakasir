@@ -1,1 +1,1 @@
-if(!window.__posKasirPageScriptInjected){window.__posKasirPageScriptInjected=!0;const e=document.createElement("script");e.src="/js/pos-kasir-page-core.js?v=20260608-qty-drawer-fix3",e.async=!1,document.head.appendChild(e)}
+if(!window.__posKasirPageScriptInjected){window.__posKasirPageScriptInjected=!0;const e=document.createElement("script");e.src="/js/pos-kasir-page-core.js?v=20260608-pos-payment-fix4",e.async=!1,document.head.appendChild(e)}
