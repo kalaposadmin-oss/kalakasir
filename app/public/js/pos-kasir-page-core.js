@@ -2255,7 +2255,7 @@ if (!window.__posKasirPageInitialized) {
         }, true);
         el.cartDrawer?.addEventListener('click', (event) => {
             event.stopPropagation();
-        }, true);
+        });
         el.cartOverlay.addEventListener('click', (event) => {
             const clickedInsideDrawer = event.composedPath().includes(el.cartDrawer);
             if (!clickedInsideDrawer && !state.cartPointerStartedInsideDrawer) {

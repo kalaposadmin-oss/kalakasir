@@ -500,14 +500,15 @@
             });
         };
 
-        ['pointerdown', 'mousedown', 'touchstart', 'click'].forEach((eventName) => {
+        ['pointerdown', 'mousedown', 'touchstart'].forEach((eventName) => {
             cartDrawer.addEventListener(eventName, (event) => {
                 markKeepOpen(event);
-                if (eventName === 'click') {
-                    event.stopPropagation();
-                    restoreCartIfNeeded();
-                }
             }, true);
+        });
+        cartDrawer.addEventListener('click', (event) => {
+            markKeepOpen(event);
+            window.setTimeout(restoreCartIfNeeded, 0);
+            event.stopPropagation();
         });
 
         const findQtyText = (control) => {
