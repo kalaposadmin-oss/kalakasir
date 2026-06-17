@@ -76,6 +76,10 @@
                 <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Metode Bayar</p>
                 <p class="text-xs font-medium" id="sale-payment">-</p>
             </div>
+            <div>
+                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Tanggal Transaksi</p>
+                <p class="text-xs font-medium" id="sale-transaction-date">-</p>
+            </div>
         </div>
     </div>
     <div class="px-4 mb-6">
@@ -111,6 +115,13 @@
         <p class="mt-2 px-2 text-[11px] leading-relaxed text-slate-400">Item dan jumlah akan disalin ke keranjang kasir. Ini membuat draft baru untuk diedit, bukan mengubah transaksi lama langsung.</p>
     </div>
     @endif
+    <div class="px-4 mb-6">
+        <button id="edit-transaction-date" class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" type="button">
+            <span class="material-symbols-outlined">event</span>
+            Ubah Tanggal Transaksi
+        </button>
+        <p class="mt-2 px-2 text-[11px] leading-relaxed text-slate-400">Hanya tanggal transaksi yang diubah, item dan pembayaran tetap sama.</p>
+    </div>
     <div class="px-4">
         @if ($allowVoidRefundAction)
         <button id="void-button" class="w-full bg-white dark:bg-slate-900 border-2 border-red-500/20 text-red-600 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-red-50 transition-colors">
@@ -153,7 +164,9 @@
                     tax: document.getElementById('tax'),
                     discount: document.getElementById('discount'),
                     total: document.getElementById('total'),
+                    transactionDate: document.getElementById('sale-transaction-date'),
                     editSaleDraft: document.getElementById('edit-sale-draft'),
+                    editTransactionDate: document.getElementById('edit-transaction-date'),
                     voidButton: document.getElementById('void-button'),
                     voidRefundLink: document.getElementById('void-refund-link'),
                 };
@@ -304,6 +317,7 @@
                         el.channel.textContent = sale.sales_channel_label || '-';
                         el.customer.textContent = sale.customer_name || 'Guest (Umum)';
                         el.payment.textContent = paymentLabel(data.payments);
+                        el.transactionDate.textContent = sale.transaction_date ? formatDateTime(sale.transaction_date) : formatDateTime(sale.created_at);
                         el.subtotal.textContent = formatCurrency(sale.subtotal);
                         el.tax.textContent = formatCurrency(sale.tax);
                         el.discount.textContent = sale.discount > 0 ? `- ${formatCurrency(sale.discount)}` : formatCurrency(0);
@@ -328,6 +342,40 @@
                                 } catch (error) {
                                     alert(error.message || 'Gagal menyiapkan draft edit.');
                                 }
+                            });
+                        }
+
+                        if (el.editTransactionDate) {
+                            el.editTransactionDate.addEventListener('click', async () => {
+                                const currentDate = sale.transaction_date || new Date(sale.created_at).toISOString().slice(0, 10);
+                                const nextDate = prompt('Tanggal transaksi baru (YYYY-MM-DD):', currentDate) || '';
+                                if (!nextDate) {
+                                    return;
+                                }
+
+                                const reason = prompt('Alasan perubahan tanggal (opsional):', 'Koreksi tanggal transaksi') || '';
+                                const response = await fetch(`/api/v1/sales/${saleId}`, {
+                                    method: 'PATCH',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        ...headers,
+                                    },
+                                    body: JSON.stringify({
+                                        transaction_date: nextDate,
+                                        reason,
+                                    }),
+                                });
+
+                                if (!response.ok) {
+                                    const payload = await response.json().catch(() => ({}));
+                                    alert(payload.message || 'Gagal memperbarui tanggal transaksi.');
+                                    return;
+                                }
+
+                                const refreshed = await loadSale(saleId);
+                                const refreshedSale = refreshed.sale;
+                                el.transactionDate.textContent = refreshedSale.transaction_date ? formatDateTime(refreshedSale.transaction_date) : formatDateTime(refreshedSale.created_at);
+                                alert('Tanggal transaksi berhasil diperbarui.');
                             });
                         }
 

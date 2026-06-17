@@ -11,6 +11,7 @@ use App\Models\SaleItem;
 use App\Support\SaleChannel;
 use App\Support\TenantContext;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class SaleDetailController extends Controller
 {
@@ -193,6 +194,33 @@ class SaleDetailController extends Controller
                     'notes' => $payment->notes,
                 ])->values(),
             ] : null,
+        ]);
+    }
+
+    public function update(Request $request, string $sale)
+    {
+        $tenantId = TenantContext::id();
+
+        $payload = $request->validate([
+            'transaction_date' => ['required', 'date_format:Y-m-d'],
+            'reason' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $saleRow = Sale::query()
+            ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
+            ->where('id', $sale)
+            ->firstOrFail();
+
+        $saleRow->forceFill([
+            'transaction_date' => $payload['transaction_date'],
+        ])->save();
+
+        return response()->json([
+            'message' => 'Tanggal transaksi berhasil diperbarui.',
+            'sale' => [
+                'id' => $saleRow->id,
+                'transaction_date' => $saleRow->transaction_date,
+            ],
         ]);
     }
 }

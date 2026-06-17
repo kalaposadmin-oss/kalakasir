@@ -62,6 +62,13 @@ _upload-ready/
 /app/storage/logs/*
 !/app/storage/logs/.gitignore
 
+# Levia Bakery standalone app
+/levia-bakery/v2/config.php
+/levia-bakery/v2/storage/sessions/*
+!/levia-bakery/v2/storage/sessions/.gitkeep
+/levia-bakery/v2/uploads/*
+!/levia-bakery/v2/uploads/.gitkeep
+
 # Android / APK artifacts
 /apk/
 *.apk

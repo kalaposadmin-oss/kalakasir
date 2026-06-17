@@ -2,7 +2,8 @@
 
 @section('page_title', 'Import Produk')
 @section('ui_mode', 'backoffice')
-@section('main_class', 'flex-1 overflow-y-auto bg-slate-50 pb-12')
+@section('body_class', 'bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100')
+@section('main_class', 'flex-1 overflow-y-auto pb-12 lg:pl-72')
 
 @section('header')
     <x-page-header title="Import Produk" backUrl="/backoffice/products" :showMenuButton="true" />

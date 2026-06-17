@@ -137,6 +137,7 @@ Route::prefix('v1')
         Route::get('settings/refund-legacy-audit/export', [RefundLegacyAuditController::class, 'export'])->middleware('role:admin,owner');
         Route::post('settings/refund-legacy-audit/remediate', [RefundLegacyAuditController::class, 'remediate'])->middleware('role:admin,owner');
         Route::get('sales/{sale}', SaleDetailController::class);
+        Route::patch('sales/{sale}', [SaleDetailController::class, 'update']);
         Route::get('sales-history', [SalesHistoryController::class, 'index']);
         Route::get('shifts/opening', [ShiftController::class, 'openingData']);
         Route::get('shifts/summary', [ShiftController::class, 'summary']);
