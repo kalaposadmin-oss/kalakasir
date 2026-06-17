@@ -122,6 +122,43 @@
         </button>
         <p class="mt-2 px-2 text-[11px] leading-relaxed text-slate-400">Hanya tanggal transaksi yang diubah, item dan pembayaran tetap sama.</p>
     </div>
+    <div id="edit-transaction-date-sheet" class="fixed inset-0 z-40 hidden items-end justify-center bg-slate-950/30 backdrop-blur-[2px]">
+        <div id="edit-transaction-date-overlay" class="absolute inset-0"></div>
+        <div class="relative w-full max-w-[430px] rounded-t-[28px] bg-white shadow-2xl">
+            <div class="border-b border-slate-200 px-4 pt-3 pb-4">
+                <div class="mx-auto mb-3 h-1.5 w-14 rounded-full bg-slate-200"></div>
+                <div class="flex items-start justify-between gap-3">
+                    <div>
+                        <p class="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400">Edit Tanggal</p>
+                        <h3 class="text-lg font-bold text-slate-900">Ubah Tanggal Transaksi</h3>
+                    </div>
+                    <button id="edit-transaction-date-close" class="rounded-xl bg-slate-100 p-2 text-slate-500" type="button" aria-label="Tutup edit tanggal">
+                        <span class="material-symbols-outlined">close</span>
+                    </button>
+                </div>
+            </div>
+            <div class="space-y-3 px-4 py-4">
+                <label class="block space-y-1">
+                    <span class="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Tanggal Baru</span>
+                    <input id="edit-transaction-date-input" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 focus:border-primary focus:ring-primary" type="date" />
+                </label>
+                <label class="block space-y-1">
+                    <span class="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Alasan</span>
+                    <textarea id="edit-transaction-date-reason" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 focus:border-primary focus:ring-primary" rows="3" maxlength="500" placeholder="Contoh: Koreksi tanggal input transaksi"></textarea>
+                </label>
+                <p id="edit-transaction-date-feedback" class="hidden rounded-xl border px-3 py-2 text-xs font-medium"></p>
+            </div>
+            <div class="border-t border-slate-200 bg-white px-4 py-4">
+                <div class="flex gap-3">
+                    <button id="edit-transaction-date-cancel" class="inline-flex flex-1 items-center justify-center rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-600" type="button">Batal</button>
+                    <button id="edit-transaction-date-save" class="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-bold text-white" type="button">
+                        <span class="material-symbols-outlined text-lg">save</span>
+                        Simpan
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
     <div class="px-4">
         @if ($allowVoidRefundAction)
         <button id="void-button" class="w-full bg-white dark:bg-slate-900 border-2 border-red-500/20 text-red-600 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-red-50 transition-colors">
@@ -167,6 +204,14 @@
                     transactionDate: document.getElementById('sale-transaction-date'),
                     editSaleDraft: document.getElementById('edit-sale-draft'),
                     editTransactionDate: document.getElementById('edit-transaction-date'),
+                    editTransactionDateSheet: document.getElementById('edit-transaction-date-sheet'),
+                    editTransactionDateOverlay: document.getElementById('edit-transaction-date-overlay'),
+                    editTransactionDateClose: document.getElementById('edit-transaction-date-close'),
+                    editTransactionDateCancel: document.getElementById('edit-transaction-date-cancel'),
+                    editTransactionDateInput: document.getElementById('edit-transaction-date-input'),
+                    editTransactionDateReason: document.getElementById('edit-transaction-date-reason'),
+                    editTransactionDateSave: document.getElementById('edit-transaction-date-save'),
+                    editTransactionDateFeedback: document.getElementById('edit-transaction-date-feedback'),
                     voidButton: document.getElementById('void-button'),
                     voidRefundLink: document.getElementById('void-refund-link'),
                 };
@@ -244,6 +289,41 @@
                         throw new Error('Gagal memuat detail transaksi.');
                     }
                     return response.json();
+                };
+
+                const showEditTransactionDateFeedback = (message, type = 'error') => {
+                    if (!el.editTransactionDateFeedback) {
+                        return;
+                    }
+
+                    if (!message) {
+                        el.editTransactionDateFeedback.classList.add('hidden');
+                        el.editTransactionDateFeedback.textContent = '';
+                        return;
+                    }
+
+                    el.editTransactionDateFeedback.classList.remove('hidden');
+                    el.editTransactionDateFeedback.textContent = message;
+                    el.editTransactionDateFeedback.className = type === 'success'
+                        ? 'rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700'
+                        : 'rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700';
+                };
+
+                const openEditTransactionDateSheet = (sale) => {
+                    if (!el.editTransactionDateSheet || !el.editTransactionDateInput || !el.editTransactionDateReason) {
+                        return;
+                    }
+
+                    showEditTransactionDateFeedback('');
+                    el.editTransactionDateInput.value = sale.transaction_date || new Date(sale.created_at).toISOString().slice(0, 10);
+                    el.editTransactionDateReason.value = 'Koreksi tanggal transaksi';
+                    el.editTransactionDateSheet.classList.remove('hidden');
+                    el.editTransactionDateSheet.classList.add('flex');
+                };
+
+                const closeEditTransactionDateSheet = () => {
+                    el.editTransactionDateSheet?.classList.add('hidden');
+                    el.editTransactionDateSheet?.classList.remove('flex');
                 };
 
                 const prepareCheckoutDraft = (sale, items) => {
@@ -346,38 +426,53 @@
                         }
 
                         if (el.editTransactionDate) {
-                            el.editTransactionDate.addEventListener('click', async () => {
-                                const currentDate = sale.transaction_date || new Date(sale.created_at).toISOString().slice(0, 10);
-                                const nextDate = prompt('Tanggal transaksi baru (YYYY-MM-DD):', currentDate) || '';
-                                if (!nextDate) {
-                                    return;
-                                }
-
-                                const reason = prompt('Alasan perubahan tanggal (opsional):', 'Koreksi tanggal transaksi') || '';
-                                const response = await fetch(`/api/v1/sales/${saleId}`, {
-                                    method: 'PATCH',
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                        ...headers,
-                                    },
-                                    body: JSON.stringify({
-                                        transaction_date: nextDate,
-                                        reason,
-                                    }),
-                                });
-
-                                if (!response.ok) {
-                                    const payload = await response.json().catch(() => ({}));
-                                    alert(payload.message || 'Gagal memperbarui tanggal transaksi.');
-                                    return;
-                                }
-
-                                const refreshed = await loadSale(saleId);
-                                const refreshedSale = refreshed.sale;
-                                el.transactionDate.textContent = refreshedSale.transaction_date ? formatDateTime(refreshedSale.transaction_date) : formatDateTime(refreshedSale.created_at);
-                                alert('Tanggal transaksi berhasil diperbarui.');
-                            });
+                            el.editTransactionDate.addEventListener('click', () => openEditTransactionDateSheet(sale));
                         }
+
+                        el.editTransactionDateClose?.addEventListener('click', closeEditTransactionDateSheet);
+                        el.editTransactionDateCancel?.addEventListener('click', closeEditTransactionDateSheet);
+                        el.editTransactionDateOverlay?.addEventListener('click', closeEditTransactionDateSheet);
+
+                        el.editTransactionDateSave?.addEventListener('click', async () => {
+                            if (!el.editTransactionDateInput) {
+                                return;
+                            }
+
+                            const nextDate = el.editTransactionDateInput.value;
+                            if (!nextDate) {
+                                showEditTransactionDateFeedback('Tanggal baru wajib diisi.');
+                                return;
+                            }
+
+                            showEditTransactionDateFeedback('');
+                            const reason = String(el.editTransactionDateReason?.value || '').trim();
+                            const response = await fetch(`/api/v1/sales/${saleId}`, {
+                                method: 'PATCH',
+                                credentials: 'same-origin',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Accept': 'application/json',
+                                    'X-Requested-With': 'XMLHttpRequest',
+                                    ...headers,
+                                },
+                                body: JSON.stringify({
+                                    transaction_date: nextDate,
+                                    reason,
+                                }),
+                            });
+
+                            if (!response.ok) {
+                                const payload = await response.json().catch(() => ({}));
+                                showEditTransactionDateFeedback(payload.message || 'Gagal memperbarui tanggal transaksi.');
+                                return;
+                            }
+
+                            const refreshed = await loadSale(saleId);
+                            const refreshedSale = refreshed.sale;
+                            el.transactionDate.textContent = refreshedSale.transaction_date ? formatDateTime(refreshedSale.transaction_date) : formatDateTime(refreshedSale.created_at);
+                            showEditTransactionDateFeedback('Tanggal transaksi berhasil diperbarui.', 'success');
+                            setTimeout(() => closeEditTransactionDateSheet(), 450);
+                        });
 
                         if (el.voidButton) {
                             el.voidButton.addEventListener('click', async () => {
