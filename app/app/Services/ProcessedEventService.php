@@ -4,8 +4,10 @@ namespace App\Services;
 
 use App\Models\ProcessedEvent;
 use Carbon\CarbonImmutable;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class ProcessedEventService
@@ -14,18 +16,27 @@ class ProcessedEventService
     {
         $lockKey = sprintf('processed_event:%s:%s:%s', $tenantId, $listenerName, $eventUuid);
 
-        Cache::lock($lockKey, 15)->block(5, function () use ($tenantId, $eventUuid, $listenerName, $handler): void {
-            if ($this->alreadyProcessed($tenantId, $eventUuid, $listenerName)) {
-                return;
-            }
+        try {
+            Cache::lock($lockKey, 15)->block(5, function () use ($tenantId, $eventUuid, $listenerName, $handler): void {
+                if ($this->alreadyProcessed($tenantId, $eventUuid, $listenerName)) {
+                    return;
+                }
 
-            $processed = $handler();
-            if ($processed === false) {
-                return;
-            }
+                $processed = $handler();
+                if ($processed === false) {
+                    return;
+                }
 
-            $this->markProcessed($tenantId, $eventUuid, $listenerName);
-        });
+                $this->markProcessed($tenantId, $eventUuid, $listenerName);
+            });
+        } catch (LockTimeoutException $exception) {
+            Log::warning('processed_event.lock_timeout', [
+                'tenant_id' => $tenantId,
+                'event_uuid' => $eventUuid,
+                'listener_name' => $listenerName,
+                'lock_key' => $lockKey,
+            ]);
+        }
     }
 
     public function alreadyProcessed(string $tenantId, string $eventUuid, string $listenerName): bool
