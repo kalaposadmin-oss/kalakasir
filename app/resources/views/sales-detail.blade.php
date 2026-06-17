@@ -291,6 +291,28 @@
                     return response.json();
                 };
 
+                const fetchWriteWithFreshCsrf = async (url, options = {}, timeout = 15000) => {
+                    const makeOptions = () => ({
+                        ...options,
+                        credentials: 'same-origin',
+                        headers: {
+                            ...(options.headers || {}),
+                            ...headers,
+                        },
+                    });
+
+                    let response = await window.PosUi.fetchWithTimeout(url, makeOptions(), timeout);
+                    if (response.status === 419) {
+                        await fetch('/sanctum/csrf-cookie', {
+                            credentials: 'same-origin',
+                            headers,
+                        }).catch(() => null);
+                        response = await window.PosUi.fetchWithTimeout(url, makeOptions(), timeout);
+                    }
+
+                    return response;
+                };
+
                 const showEditTransactionDateFeedback = (message, type = 'error') => {
                     if (!el.editTransactionDateFeedback) {
                         return;
@@ -446,14 +468,12 @@
 
                             showEditTransactionDateFeedback('');
                             const reason = String(el.editTransactionDateReason?.value || '').trim();
-                            const response = await fetch(`/api/v1/sales/${saleId}`, {
+                            const response = await fetchWriteWithFreshCsrf(`/api/v1/sales/${saleId}`, {
                                 method: 'PATCH',
-                                credentials: 'same-origin',
                                 headers: {
                                     'Content-Type': 'application/json',
                                     'Accept': 'application/json',
                                     'X-Requested-With': 'XMLHttpRequest',
-                                    ...headers,
                                 },
                                 body: JSON.stringify({
                                     transaction_date: nextDate,
