@@ -63,7 +63,13 @@
                         </button>
                     @endif
                 </div>
-                <div class="space-y-3" id="tax-list"></div>
+                                <div class="space-y-3" id="tax-list"></div>
+                @if ($canManageTaxPromo)
+                    <button class="mt-4 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white shadow-sm shadow-primary/20" type="button">
+                        <span class="material-symbols-outlined text-sm">add_task</span>
+                        Tambah Pajak Baru
+                    </button>
+                @endif
             </section>
             <div class="h-2 bg-slate-50 dark:bg-slate-900"></div>
             <section class="p-4">
@@ -109,14 +115,6 @@
             </section>
             <div class="h-8"></div>
         </div>
-        @if ($canManageTaxPromo)
-            <div class="fixed bottom-[88px] left-1/2 -translate-x-1/2 w-full max-w-[430px] px-6 z-40 app-bottom-safe-space">
-                <button class="w-full bg-primary text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-xl shadow-primary/30">
-                    <span class="material-symbols-outlined">add_task</span>
-                    Tambah Pajak Baru
-                </button>
-            </div>
-        @endif
 
         <script>
             (() => {
@@ -173,24 +171,6 @@
                         el.taxes.appendChild(row);
                     });
                 };
-
-                const updateRoundingUi = () => {
-                    if (!el.roundingMode || !el.roundingIncrementWrap) {
-                        return;
-                    }
-                    const isMultiple = el.roundingMode.value === 'multiple';
-                    el.roundingIncrementWrap.classList.toggle('hidden', !isMultiple);
-                };
-
-                const applyRoundingSettings = (settings) => {
-                    if (!el.roundingMode || !el.roundingIncrement) {
-                        return;
-                    }
-                    el.roundingMode.value = settings?.mode || 'none';
-                    el.roundingIncrement.value = settings?.increment || '';
-                    updateRoundingUi();
-                };
-
                 const updateRoundingUi = () => {
                     if (!el.roundingMode || !el.roundingIncrementWrap) {
                         return;
@@ -290,5 +270,8 @@
             })();
         </script>
 @endsection
+
+
+
 
 
