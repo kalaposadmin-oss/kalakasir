@@ -139,6 +139,21 @@
                     return `Potongan ${formatCurrency(promo.value)}`;
                 };
 
+                const updateRoundingUi = () => {
+                    if (!el.roundingMode || !el.roundingIncrementWrap) {
+                        return;
+                    }
+                    el.roundingIncrementWrap.classList.toggle('hidden', el.roundingMode.value !== 'multiple');
+                };
+
+                const applyRoundingSettings = (settings) => {
+                    if (!el.roundingMode || !el.roundingIncrement) {
+                        return;
+                    }
+                    el.roundingMode.value = settings?.mode || 'none';
+                    el.roundingIncrement.value = settings?.increment || '';
+                    updateRoundingUi();
+                };
                 const renderTaxes = (taxes) => {
                     el.taxes.innerHTML = '';
                     if (!taxes.length) {
@@ -270,6 +285,7 @@
             })();
         </script>
 @endsection
+
 
 
 
