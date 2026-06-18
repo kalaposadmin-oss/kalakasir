@@ -191,6 +191,22 @@
                     updateRoundingUi();
                 };
 
+                const updateRoundingUi = () => {
+                    if (!el.roundingMode || !el.roundingIncrementWrap) {
+                        return;
+                    }
+                    el.roundingIncrementWrap.classList.toggle('hidden', el.roundingMode.value !== 'multiple');
+                };
+
+                const applyRoundingSettings = (settings) => {
+                    if (!el.roundingMode || !el.roundingIncrement) {
+                        return;
+                    }
+                    el.roundingMode.value = settings?.mode || 'none';
+                    el.roundingIncrement.value = settings?.increment || '';
+                    updateRoundingUi();
+                };
+
                 const renderPromos = (promos) => {
                     el.promos.innerHTML = '';
                     if (!promos.length) {
@@ -274,4 +290,5 @@
             })();
         </script>
 @endsection
+
 
