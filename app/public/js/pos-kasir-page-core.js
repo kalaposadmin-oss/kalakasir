@@ -921,6 +921,8 @@ if (!window.__posKasirPageInitialized) {
             return Math.max(total, 0);
         };
 
+        const roundMoney = (value) => Math.round((Number(value) || 0) * 100) / 100;
+
         const computeCartPricing = () => {
             const cartItems = [...state.cart.values()];
             const lineItems = cartItems.map((item) => {
@@ -936,11 +938,12 @@ if (!window.__posKasirPageInitialized) {
                 };
             });
             const productSubtotal = lineItems.reduce((sum, line) => sum + line.lineNetSubtotal, 0);
-            const feeTotal = computeFeeTotal(productSubtotal);
+            const feeTotal = roundMoney(computeFeeTotal(productSubtotal));
             const transactionDiscounts = applyDiscountLines(productSubtotal, getTransactionDiscountLines(productSubtotal));
-            const subtotal = productSubtotal + feeTotal;
-            const tax = (subtotal - transactionDiscounts.total) * state.taxRate;
-            const total = subtotal - transactionDiscounts.total + tax;
+            const subtotal = roundMoney(productSubtotal + feeTotal);
+            const transactionDiscountTotal = roundMoney(transactionDiscounts.total);
+            const tax = roundMoney((subtotal - transactionDiscountTotal) * state.taxRate);
+            const total = roundMoney(subtotal - transactionDiscountTotal + tax);
 
             return {
                 lineItems,
@@ -948,8 +951,8 @@ if (!window.__posKasirPageInitialized) {
                 feeTotal,
                 subtotal,
                 itemDiscountTotal: lineItems.reduce((sum, line) => sum + line.itemDiscountTotal, 0),
-                transactionDiscountTotal: transactionDiscounts.total,
-                totalDiscount: lineItems.reduce((sum, line) => sum + line.itemDiscountTotal, 0) + transactionDiscounts.total,
+                transactionDiscountTotal,
+                totalDiscount: roundMoney(lineItems.reduce((sum, line) => sum + line.itemDiscountTotal, 0) + transactionDiscountTotal),
                 transactionDiscounts: transactionDiscounts.lines,
                 tax,
                 total,
@@ -2509,3 +2512,4 @@ if (!window.__posKasirPageInitialized) {
         });
     })();
 }
+
