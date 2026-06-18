@@ -219,6 +219,7 @@ Route::prefix('v1')
         Route::post('lock-periods/{period}/reopen', [LockPeriodController::class, 'reopen'])->middleware(['role:admin,owner', 'feature_gate:finance.lock_period']);
         Route::patch('lock-periods/{period}', [LockPeriodController::class, 'toggle'])->middleware(['role:admin,owner', 'feature_gate:finance.lock_period']);
         Route::put('materials/{material}', [MaterialController::class, 'update'])->middleware(['role:admin,owner,superadmin', 'feature_gate:product.materials']);
+        Route::post('taxes', [SettingsController::class, 'storeTax'])->middleware(['role:admin,owner', 'feature_gate:settings.tax']);
         Route::patch('taxes/{tax}', [SettingsController::class, 'updateTax'])->middleware(['role:admin,owner', 'feature_gate:settings.tax']);
         Route::patch('settings/inventory-valuation-method', [SettingsController::class, 'updateInventoryValuationMethod'])->middleware(['role:owner,admin', 'feature_gate:settings.inventory_method_basic', 'subscription_status:active,trialing']);
         Route::post('settings/valuation-rebuild', [SettingsController::class, 'triggerInventoryValuationRebuild'])->middleware(['role:owner,admin', 'feature_gate:settings.inventory_valuation', 'subscription_status:active,trialing']);
@@ -247,4 +248,5 @@ Route::prefix('v1')
         Route::put('branches/{branch}', [BranchController::class, 'update'])->middleware(['role:admin,owner', 'feature_gate:settings.branches_manage']);
         Route::delete('materials/{material}', [MaterialController::class, 'destroy'])->middleware(['role:admin,owner,superadmin', 'feature_gate:product.materials']);
     });
+
 

@@ -257,7 +257,70 @@
             };
 
             @if ($canManageTaxPromo)
+            const openTaxSheet = () => {
+                el.taxSheetFeedback?.classList.add('hidden');
+                if (el.taxName) el.taxName.value = '';
+                if (el.taxDescription) el.taxDescription.value = '';
+                if (el.taxRate) el.taxRate.value = '';
+                el.taxSheetOverlay?.classList.remove('hidden');
+            };
+
+            const closeTaxSheet = () => {
+                el.taxSheetOverlay?.classList.add('hidden');
+            };
+
             el.roundingMode?.addEventListener('change', updateRoundingUi);
+            el.taxSheetBackdrop?.addEventListener('click', closeTaxSheet);
+            el.taxSheetClose?.addEventListener('click', closeTaxSheet);
+            el.taxSheetCancel?.addEventListener('click', closeTaxSheet);
+            el.taxSheetSave?.addEventListener('click', async () => {
+                const name = String(el.taxName?.value || '').trim();
+                const description = String(el.taxDescription?.value || '').trim();
+                const rate = Number(el.taxRate?.value || 0);
+
+                if (!name) {
+                    el.taxSheetFeedback?.classList.remove('hidden');
+                    el.taxSheetFeedback.textContent = 'Nama pajak wajib diisi.';
+                    el.taxSheetFeedback.className = 'mb-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700';
+                    return;
+                }
+                if (!Number.isFinite(rate) || rate < 0) {
+                    el.taxSheetFeedback?.classList.remove('hidden');
+                    el.taxSheetFeedback.textContent = 'Tarif pajak tidak valid.';
+                    el.taxSheetFeedback.className = 'mb-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700';
+                    return;
+                }
+
+                const response = await fetchWriteWithFreshCsrf('/api/v1/taxes', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    body: JSON.stringify({
+                        name,
+                        description,
+                        rate,
+                        is_active: true,
+                    }),
+                });
+
+                if (!response.ok) {
+                    const payload = await response.json().catch(() => ({}));
+                    el.taxSheetFeedback?.classList.remove('hidden');
+                    el.taxSheetFeedback.textContent = payload.message || 'Gagal menyimpan pajak.';
+                    el.taxSheetFeedback.className = 'mb-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700';
+                    return;
+                }
+
+                closeTaxSheet();
+                const refresh = await fetch('/api/v1/settings/tax-promos', { headers });
+                if (refresh.ok) {
+                    const data = await refresh.json();
+                    renderTaxes(data.taxes || []);
+                    renderPromos(data.promos || []);
+                }
+            });
             el.roundingSave?.addEventListener('click', async () => {
                 const mode = el.roundingMode?.value || 'none';
                 const increment = Number(el.roundingIncrement?.value || 0);
@@ -316,6 +379,8 @@
         })();
     </script>
 @endsection
+
+
 
 
 

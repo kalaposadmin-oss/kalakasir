@@ -71,6 +71,41 @@ class SettingsController extends Controller
         ]);
     }
 
+    public function storeTax(Request $request)
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:120'],
+            'description' => ['nullable', 'string', 'max:255'],
+            'rate' => ['required', 'numeric', 'min:0', 'max:100'],
+            'is_active' => ['nullable', 'boolean'],
+        ]);
+
+        $tenantId = TenantContext::id();
+        if (! $tenantId) {
+            return response()->json([
+                'message' => 'Tenant tidak ditemukan.',
+            ], 400);
+        }
+
+        $tax = Tax::query()->create([
+            'tenant_id' => $tenantId,
+            'name' => trim((string) $validated['name']),
+            'description' => trim((string) ($validated['description'] ?? '')) ?: null,
+            'rate' => $validated['rate'],
+            'is_active' => (bool) ($validated['is_active'] ?? true),
+        ]);
+
+        return response()->json([
+            'status' => 'ok',
+            'tax' => [
+                'id' => $tax->id,
+                'name' => $tax->name,
+                'description' => $tax->description,
+                'rate' => (float) $tax->rate,
+                'is_active' => (bool) $tax->is_active,
+            ],
+        ], 201);
+    }
     public function updateTax(Request $request, string $tax)
     {
         $validated = $request->validate([
@@ -474,6 +509,11 @@ class SettingsController extends Controller
         return $meta;
     }
 }
+
+
+
+
+
 
 
 
