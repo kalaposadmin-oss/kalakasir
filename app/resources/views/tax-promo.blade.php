@@ -94,10 +94,10 @@
                     </select>
                 </label>
                 <label class="grid gap-2" id="rounding-increment-wrap">
-                    <span class="text-xs font-bold uppercase tracking-widest text-slate-500">Kelipatan</span>
+                    <span class="text-xs font-bold uppercase tracking-widest text-slate-500">Nilai Pembulatan</span>
                     <input id="rounding-increment" type="number" min="1" step="1" inputmode="numeric" placeholder="100" class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold dark:border-slate-700 dark:bg-slate-800" />
                 </label>
-                <p class="text-[11px] leading-5 text-slate-500">Contoh: pilih kelipatan 100 agar 36.667 menjadi 36.700. Default aman tetap tanpa pembulatan sampai diaktifkan.</p>
+                <p class="text-[11px] leading-5 text-slate-500">Masukkan angka seperti 100, 500, atau 1000. Kolom ini tetap tampil dan dipakai saat mode kelipatan aktif.</p>
             </div>
         </section>
         <div class="h-2 bg-slate-50 dark:bg-slate-900"></div>
@@ -140,7 +140,8 @@
                 if (!el.roundingMode || !el.roundingIncrementWrap) {
                     return;
                 }
-                el.roundingIncrementWrap.classList.toggle('hidden', el.roundingMode.value !== 'multiple');
+                el.roundingIncrementWrap.classList.toggle('opacity-60', el.roundingMode.value !== 'multiple');
+                el.roundingIncrement.disabled = el.roundingMode.value !== 'multiple';
             };
 
             const applyRoundingSettings = (settings) => {
@@ -148,7 +149,7 @@
                     return;
                 }
                 el.roundingMode.value = settings?.mode || 'none';
-                el.roundingIncrement.value = settings?.increment || '';
+                el.roundingIncrement.value = settings?.increment || '100';
                 updateRoundingUi();
             };
 
@@ -292,4 +293,5 @@
         })();
     </script>
 @endsection
+
 
