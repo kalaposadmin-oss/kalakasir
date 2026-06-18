@@ -27,11 +27,14 @@ class Tenant extends Model
         'default_location_id',
         'auto_consume_on_sell_enabled',
         'allow_negative_raw_material_stock',
+        'rounding_mode',
+        'rounding_increment',
     ];
 
     protected $casts = [
         'auto_consume_on_sell_enabled' => 'boolean',
         'allow_negative_raw_material_stock' => 'boolean',
+        'rounding_increment' => 'integer',
     ];
 
     public function getPlanAttribute($value): string
@@ -57,3 +60,4 @@ class Tenant extends Model
         $this->attributes['purchase_mode'] = PurchaseMode::normalize((string) $value);
     }
 }
+

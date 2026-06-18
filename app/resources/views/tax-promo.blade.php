@@ -68,6 +68,35 @@
             <div class="h-2 bg-slate-50 dark:bg-slate-900"></div>
             <section class="p-4">
                 <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-sm font-bold text-slate-500 uppercase tracking-widest">Pembulatan Transaksi</h2>
+                    @if ($canManageTaxPromo)
+                        <button id="rounding-save" class="bg-primary/10 text-primary px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1" type="button">
+                            <span class="material-symbols-outlined text-sm">save</span>
+                            Simpan
+                        </button>
+                    @endif
+                </div>
+                <div class="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+                    <label class="grid gap-2">
+                        <span class="text-xs font-bold uppercase tracking-widest text-slate-500">Mode</span>
+                        <select id="rounding-mode" class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold dark:border-slate-700 dark:bg-slate-800">
+                            <option value="none">Tidak dibulatkan</option>
+                            <option value="nearest">Ke rupiah terdekat</option>
+                            <option value="up">Naik ke rupiah</option>
+                            <option value="down">Turun ke rupiah</option>
+                            <option value="multiple">Kelipatan tertentu</option>
+                        </select>
+                    </label>
+                    <label class="grid gap-2" id="rounding-increment-wrap">
+                        <span class="text-xs font-bold uppercase tracking-widest text-slate-500">Kelipatan</span>
+                        <input id="rounding-increment" type="number" min="1" step="1" inputmode="numeric" placeholder="100" class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold dark:border-slate-700 dark:bg-slate-800" />
+                    </label>
+                    <p class="text-[11px] leading-5 text-slate-500">Contoh: pilih kelipatan 100 agar 36.667 menjadi 36.700. Default aman tetap tanpa pembulatan sampai diaktifkan.</p>
+                </div>
+            </section>
+            <div class="h-2 bg-slate-50 dark:bg-slate-900"></div>
+            <section class="p-4">
+                <div class="flex items-center justify-between mb-4">
                     <h2 class="text-sm font-bold text-slate-500 uppercase tracking-widest">Manajemen Promo</h2>
                     @if ($canManageTaxPromo)
                         <button class="bg-primary/10 text-primary px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1">
@@ -143,6 +172,23 @@
                         `;
                         el.taxes.appendChild(row);
                     });
+                };
+
+                const updateRoundingUi = () => {
+                    if (!el.roundingMode || !el.roundingIncrementWrap) {
+                        return;
+                    }
+                    const isMultiple = el.roundingMode.value === 'multiple';
+                    el.roundingIncrementWrap.classList.toggle('hidden', !isMultiple);
+                };
+
+                const applyRoundingSettings = (settings) => {
+                    if (!el.roundingMode || !el.roundingIncrement) {
+                        return;
+                    }
+                    el.roundingMode.value = settings?.mode || 'none';
+                    el.roundingIncrement.value = settings?.increment || '';
+                    updateRoundingUi();
                 };
 
                 const renderPromos = (promos) => {
@@ -228,3 +274,4 @@
             })();
         </script>
 @endsection
+

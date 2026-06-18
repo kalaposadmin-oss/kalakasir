@@ -144,6 +144,7 @@ Route::prefix('v1')
         Route::get('shifts/close-summary', [ShiftController::class, 'closeSummary']);
         Route::get('shifts/closed', [ShiftController::class, 'closedHistory']);
         Route::get('settings/tax-promos', [SettingsController::class, 'index']);
+        Route::patch('settings/rounding', [SettingsController::class, 'updateRoundingSettings'])->middleware(['role:admin,owner,superadmin', 'feature_gate:settings.tax']);
         Route::get('subscription/current', [SubscriptionController::class, 'current'])->middleware(['role:warehouse,supervisor,admin,owner,superadmin', 'feature_gate:settings.subscription_billing']);
         Route::get('subscription/entitlements', [SubscriptionController::class, 'entitlements'])->middleware(['role:warehouse,supervisor,admin,owner,superadmin', 'feature_gate:settings.subscription_billing']);
         Route::get('subscription/impact-preview', [SubscriptionController::class, 'impactPreview'])->middleware(['role:admin,owner,superadmin', 'feature_gate:settings.subscription_billing']);
@@ -246,3 +247,4 @@ Route::prefix('v1')
         Route::put('branches/{branch}', [BranchController::class, 'update'])->middleware(['role:admin,owner', 'feature_gate:settings.branches_manage']);
         Route::delete('materials/{material}', [MaterialController::class, 'destroy'])->middleware(['role:admin,owner,superadmin', 'feature_gate:product.materials']);
     });
+
