@@ -136,12 +136,34 @@
                 maximumFractionDigits: 0,
             }).format(value || 0);
 
+            const fetchWriteWithFreshCsrf = async (url, options = {}, timeout = 15000) => {
+                const makeOptions = () => ({
+                    ...options,
+                    credentials: 'same-origin',
+                    headers: {
+                        ...(options.headers || {}),
+                        ...headers,
+                    },
+                });
+
+                let response = await window.PosUi.fetchWithTimeout(url, makeOptions(), timeout);
+                if (response.status === 419) {
+                    await fetch('/sanctum/csrf-cookie', {
+                        credentials: 'same-origin',
+                        headers,
+                    }).catch(() => null);
+                    response = await window.PosUi.fetchWithTimeout(url, makeOptions(), timeout);
+                }
+
+                return response;
+            };
+
             const updateRoundingUi = () => {
                 if (!el.roundingMode || !el.roundingIncrementWrap) {
                     return;
                 }
                 el.roundingIncrementWrap.classList.toggle('opacity-60', el.roundingMode.value !== 'multiple');
-                el.roundingIncrement.disabled = el.roundingMode.value !== 'multiple';
+                el.roundingIncrement.readOnly = false;
             };
 
             const applyRoundingSettings = (settings) => {
@@ -150,6 +172,7 @@
                 }
                 el.roundingMode.value = settings?.mode || 'none';
                 el.roundingIncrement.value = settings?.increment || '100';
+                el.roundingIncrement.readOnly = false;
                 updateRoundingUi();
             };
 
@@ -238,11 +261,11 @@
             el.roundingSave?.addEventListener('click', async () => {
                 const mode = el.roundingMode?.value || 'none';
                 const increment = Number(el.roundingIncrement?.value || 0);
-                const response = await fetch('/api/v1/settings/rounding', {
+                const response = await fetchWriteWithFreshCsrf('/api/v1/settings/rounding', {
                     method: 'PATCH',
                     headers: {
                         'Content-Type': 'application/json',
-                        ...headers,
+                        'X-Requested-With': 'XMLHttpRequest',
                     },
                     body: JSON.stringify({
                         mode,
@@ -267,7 +290,7 @@
                     method: 'PATCH',
                     headers: {
                         'Content-Type': 'application/json',
-                        ...headers,
+                        'X-Requested-With': 'XMLHttpRequest',
                     },
                     body: JSON.stringify({ is_active: checkbox.checked }),
                 });
@@ -293,5 +316,9 @@
         })();
     </script>
 @endsection
+
+
+
+
 
 
