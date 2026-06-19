@@ -174,6 +174,14 @@ class WebOperationalPagesSmokeTest extends TestCase
         $this->assertStringContainsString('refresh-products', $createContents);
         $this->assertStringContainsString('product-refresh-status', $createContents);
         $this->assertStringContainsString('syncProductSelectOptions', $createContents);
+        $this->assertStringContainsString('product-search', $createContents);
+        $this->assertStringContainsString('product-search-menu', $createContents);
+        $this->assertStringContainsString('normalizeProductSearch', $createContents);
+        $this->assertStringContainsString('searchable.includes(token)', $createContents);
+        $this->assertStringContainsString('isCloseProductWord(token, word)', $createContents);
+        $this->assertStringContainsString('purchaseDraftStorageKey', $createContents);
+        $this->assertStringContainsString('restorePurchaseDraft(loadPurchaseDraft())', $createContents);
+        $this->assertStringContainsString('Form PO disimpan sementara di browser', $createContents);
         $this->assertStringContainsString('add-additional-cost', $createContents);
         $this->assertStringContainsString('additional-cost-total', $createContents);
         $this->assertStringContainsString('collectAdditionalCosts', $createContents);
@@ -283,7 +291,7 @@ class WebOperationalPagesSmokeTest extends TestCase
         $middleware = $route->gatherMiddleware();
         $contents = file_get_contents(resource_path('views/production-batches.blade.php'));
 
-        $this->assertContains('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview', $middleware);
+        $this->assertContains('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,inventory.production_batches', $middleware);
         $this->assertTrue(view()->exists('production-batches'));
         $this->assertStringContainsString('Daftar Batch Produksi', $contents);
         $this->assertStringContainsString('production-status-filter', $contents);
@@ -292,7 +300,7 @@ class WebOperationalPagesSmokeTest extends TestCase
         $this->assertStringContainsString('production-sort-filter', $contents);
         $this->assertStringContainsString('production-date-from', $contents);
         $this->assertStringContainsString('/api/v1/production-batches', $contents);
-        $this->assertStringContainsString('/backoffice/inventory/production-batches/${encodeURIComponent(batch.id)}?from=', $contents);
+        $this->assertStringContainsString('${detailBaseUrl}/${encodeURIComponent(batch.id)}?from=', $contents);
         $this->assertStringContainsString('production-batch-create-open', $contents);
         $this->assertStringContainsString('production-batch-create-form', $contents);
         $this->assertStringContainsString('data-stat="cancelled"', $contents);
@@ -301,6 +309,8 @@ class WebOperationalPagesSmokeTest extends TestCase
         $this->assertStringContainsString('Observability', $contents);
         $this->assertStringContainsString('const batchProductOptions = () => {', $contents);
         $this->assertStringContainsString('const finishedOutputProductOptions = () => {', $contents);
+        $this->assertStringContainsString('batchOutputSummaryHtml', $contents);
+        $this->assertStringContainsString('batchOutputTitle', $contents);
         $this->assertStringNotContainsString("&& String(product.product_mode || '') === 'bom'", $contents);
         $this->assertStringNotContainsString("&& String(product.production_mode || '').trim() === 'batch_production'", $contents);
     }
@@ -311,7 +321,7 @@ class WebOperationalPagesSmokeTest extends TestCase
         $middleware = $route->gatherMiddleware();
         $contents = file_get_contents(resource_path('views/production-batch-detail.blade.php'));
 
-        $this->assertContains('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,dash.overview', $middleware);
+        $this->assertContains('web_access:backoffice,warehouse|supervisor|admin|owner|superadmin,inventory.production_batches', $middleware);
         $this->assertTrue(view()->exists('production-batch-detail'));
         $this->assertStringContainsString('Detail Batch Produksi', $contents);
         $this->assertStringContainsString('Input Bahan Baku', $contents);

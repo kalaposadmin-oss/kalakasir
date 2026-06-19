@@ -91,6 +91,7 @@ class ProductionBatchController extends Controller
 
         $ids = $batches->pluck('id')->all();
         $lineStats = [];
+        $outputLines = [];
         $anomalySummaries = [];
 
         if ($ids) {
@@ -112,10 +113,44 @@ class ProductionBatchController extends Controller
                 ];
             }
 
+            $outputRows = ProductionBatchItem::query()
+                ->leftJoin('products', function ($join) {
+                    $join->on('products.id', '=', 'production_batch_items.product_id')
+                        ->on('products.tenant_id', '=', 'production_batch_items.tenant_id');
+                })
+                ->where('production_batch_items.tenant_id', $tenantId)
+                ->whereIn('production_batch_items.production_batch_id', $ids)
+                ->where('production_batch_items.line_type', 'output')
+                ->orderBy('production_batch_items.production_batch_id')
+                ->orderBy('products.name')
+                ->select([
+                    'production_batch_items.production_batch_id',
+                    'production_batch_items.product_id',
+                    'production_batch_items.product_variant_id',
+                    'production_batch_items.planned_qty',
+                    'production_batch_items.actual_qty',
+                    'production_batch_items.uom',
+                    'products.name as product_name',
+                    'products.sku as product_sku',
+                ])
+                ->get();
+
+            foreach ($outputRows as $row) {
+                $outputLines[$row->production_batch_id][] = [
+                    'product_id' => $row->product_id,
+                    'product_variant_id' => $row->product_variant_id,
+                    'product_name' => $row->product_name,
+                    'product_sku' => $row->product_sku,
+                    'planned_qty' => (float) ($row->planned_qty ?? 0),
+                    'actual_qty' => (float) ($row->actual_qty ?? 0),
+                    'uom' => $row->uom,
+                ];
+            }
+
             $anomalySummaries = $this->productionBatchAnomalySummaries($tenantId, $ids);
         }
 
-        $payload = $batches->map(function ($batch) use ($lineStats, $anomalySummaries) {
+        $payload = $batches->map(function ($batch) use ($lineStats, $outputLines, $anomalySummaries) {
             $input = $lineStats[$batch->id]['input'] ?? ['line_count' => 0, 'planned_qty_total' => 0.0, 'actual_qty_total' => 0.0];
             $output = $lineStats[$batch->id]['output'] ?? ['line_count' => 0, 'planned_qty_total' => 0.0, 'actual_qty_total' => 0.0];
 
@@ -142,6 +177,7 @@ class ProductionBatchController extends Controller
                 'output_line_count' => $output['line_count'],
                 'output_planned_qty_total' => $output['planned_qty_total'],
                 'output_actual_qty_total' => $output['actual_qty_total'],
+                'outputs' => $outputLines[$batch->id] ?? [],
                 'anomaly_summary' => $anomalySummaries[$batch->id] ?? $this->emptyProductionBatchAnomalySummary(),
                 'observability_url' => $this->productionBatchObservabilityUrl((string) $batch->id),
             ];

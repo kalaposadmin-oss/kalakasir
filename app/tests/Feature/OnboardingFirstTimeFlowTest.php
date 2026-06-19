@@ -381,6 +381,46 @@ class OnboardingFirstTimeFlowTest extends TestCase
         ]);
     }
 
+    public function test_newly_registered_owner_can_login_when_another_tenant_exists_first(): void
+    {
+        $existingTenantId = $this->seedTenant();
+
+        DB::table('users')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $existingTenantId,
+            'name' => 'Owner Existing',
+            'email' => 'owner-existing-login@example.test',
+            'password' => bcrypt('secret123'),
+            'failed_login_attempts' => 0,
+            'remember_token' => null,
+            'created_at' => now('UTC'),
+            'updated_at' => now('UTC'),
+            'deleted_at' => null,
+        ]);
+
+        $this->completeOnboardingStepThree('owner-login-baru@example.test', 'Tenant Login Baru');
+
+        $this->from('/register/step-4')->post('/register/step-4', [
+            'skip_product' => '1',
+        ])->assertRedirect('/register/review');
+
+        $this->post('/register/complete', [
+            'selected_plan' => 'M',
+        ])->assertRedirect('/pos/dashboard');
+
+        $this->post('/logout')->assertRedirect('/');
+        $this->assertGuest();
+
+        $this->from('/login')->post('/login', [
+            'email' => 'owner-login-baru@example.test',
+            'password' => 'secret123',
+        ])->assertRedirect('/backoffice/dashboard')
+            ->assertSessionHas('auth_portal', 'backoffice');
+
+        $this->assertAuthenticated();
+        $this->assertNotSame($existingTenantId, auth()->user()->tenant_id);
+    }
+
     public function test_onboarding_variant_product_posts_initial_stock_per_variant_bucket(): void
     {
         $existingTenantId = $this->seedTenant();

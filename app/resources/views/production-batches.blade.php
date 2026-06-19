@@ -563,6 +563,57 @@
             };
 
             const productName = (id) => state.bootstrap.products.find((row) => row.id === id)?.name || 'Produk';
+            const escapeHtml = (value) => String(value ?? '').replace(/[&<>"]/g, (char) => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+            }[char]));
+            const batchOutputLines = (batch) => Array.isArray(batch.outputs) && batch.outputs.length
+                ? batch.outputs
+                : [{
+                    product_id: batch.product_id,
+                    product_name: productName(batch.product_id),
+                    planned_qty: batch.expected_output_qty,
+                    actual_qty: batch.actual_output_qty,
+                    uom: batch.output_unit || 'Unit',
+                }];
+            const batchOutputQty = (batch, output) => {
+                const actualQty = Number(output.actual_qty || 0);
+                const plannedQty = Number(output.planned_qty || 0);
+                if (batch.status === 'draft' || actualQty <= 0) {
+                    return plannedQty;
+                }
+
+                return actualQty;
+            };
+            const batchOutputSummaryHtml = (batch) => {
+                const outputs = batchOutputLines(batch);
+                const visibleOutputs = outputs.slice(0, 3);
+                const moreCount = Math.max(0, outputs.length - visibleOutputs.length);
+                const rows = visibleOutputs.map((output) => {
+                    const name = output.product_name || productName(output.product_id);
+                    const qty = batchOutputQty(batch, output);
+                    const uom = output.uom || batch.output_unit || 'Unit';
+
+                    return `
+                        <div class="mt-1 flex items-start justify-between gap-3 rounded-xl bg-white/65 px-3 py-2 ring-1 ring-slate-100 dark:bg-slate-900/40 dark:ring-slate-800">
+                            <span class="min-w-0 flex-1 text-sm font-bold leading-snug text-slate-800 dark:text-slate-100">${escapeHtml(name)}</span>
+                            <span class="shrink-0 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">${formatNumber(qty)} ${escapeHtml(uom)}</span>
+                        </div>
+                    `;
+                }).join('');
+
+                return `${rows}${moreCount ? `<p class="mt-1 text-[11px] font-bold text-slate-400">+${moreCount} produk hasil lain</p>` : ''}`;
+            };
+            const batchOutputTitle = (batch) => {
+                const outputs = batchOutputLines(batch);
+                if (outputs.length === 1) {
+                    return outputs[0].product_name || productName(outputs[0].product_id);
+                }
+
+                return `${outputs.length} produk hasil produksi`;
+            };
             const branchName = (id) => state.bootstrap.branches.find((row) => row.id === id)?.name || 'Cabang';
             const locationName = (id) => state.bootstrap.locations.find((row) => row.id === id)?.name || 'Lokasi';
 
@@ -1824,10 +1875,12 @@
                                 <div class="flex items-start justify-between gap-2">
                                     <div class="min-w-0">
                                         <h4 class="truncate text-[17px] font-bold leading-tight text-slate-900">${batch.reference_no || batch.id.slice(0, 8).toUpperCase()}</h4>
-                                        <p class="mt-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">${productName(batch.product_id)}</p>
-                                        <p class="mt-1 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">${formatNumber(batch.actual_output_qty)} ${batch.output_unit || 'Unit'}</p>
+                                        <p class="mt-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">${escapeHtml(batchOutputTitle(batch))}</p>
                                     </div>
                                     <span class="inline-flex shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${statusBadge(batch.status)}">${statusLabel(batch.status)}</span>
+                                </div>
+                                <div class="mt-3 space-y-1">
+                                    ${batchOutputSummaryHtml(batch)}
                                 </div>
                                 <div class="mt-3 flex items-center justify-between gap-2">
                                     <p class="text-sm font-semibold ${hasOpenAlert ? 'text-rose-600' : 'text-slate-500'}">${batch.status === 'draft' ? 'In Preparation' : `Variance: ${formatNumber(batch.yield_variance_qty)}`}</p>

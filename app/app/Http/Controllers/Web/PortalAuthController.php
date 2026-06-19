@@ -188,10 +188,6 @@ class PortalAuthController extends Controller
             'email' => $normalizedEmail,
             'password' => $validated['password'],
         ];
-        $tenantId = $this->resolveTenantId();
-        if ($tenantId) {
-            $credentials['tenant_id'] = $tenantId;
-        }
 
         if (! Auth::guard('web')->attempt($credentials)) {
             $this->recordFailedAttempt($request, $normalizedEmail, $user, $forcedPortal);
@@ -209,6 +205,7 @@ class PortalAuthController extends Controller
         if (! $authenticatedUser) {
             throw new RuntimeException('Autentikasi web gagal menyelesaikan sesi pengguna.');
         }
+        $this->syncAuthenticatedTenant($request, $authenticatedUser);
 
         $targetPortal = $forcedPortal ?? $this->resolvePreferredPortal($request, $authenticatedUser);
         $accessError = $this->portalAccessError($targetPortal, $this->resolvePortalRole($authenticatedUser));
@@ -457,5 +454,25 @@ class PortalAuthController extends Controller
     private function resolveTenantId(): ?string
     {
         return TenantContext::id() ?: Tenant::query()->value('id');
+    }
+
+    private function syncAuthenticatedTenant(Request $request, User $user): void
+    {
+        $tenantId = (string) ($user->tenant_id ?? '');
+        if ($tenantId === '') {
+            return;
+        }
+
+        $tenant = Tenant::query()->find($tenantId);
+        if (! $tenant) {
+            return;
+        }
+
+        TenantContext::set($tenant);
+        $request->session()->put('current_tenant_id', $tenantId);
+
+        if ((string) ($user->current_tenant_id ?? '') !== $tenantId) {
+            $user->forceFill(['current_tenant_id' => $tenantId])->save();
+        }
     }
 }
