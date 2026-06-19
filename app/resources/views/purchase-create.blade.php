@@ -117,11 +117,26 @@
             </button>
         </div>
         <p id="product-refresh-status" class="hidden px-1 text-xs font-semibold text-slate-500"></p>
+        <p class="px-1 text-[11px] leading-5 text-slate-400">Form PO disimpan sementara di browser. Gunakan Refresh Produk untuk memuat produk baru tanpa menghapus item yang sudah diisi.</p>
         <div class="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4" id="item-container"></div>
         <button id="add-item" class="w-full h-11 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl text-slate-400 text-sm font-semibold flex items-center justify-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors" type="button">
             <span class="material-symbols-outlined">add_circle</span>
             Tambah Item Lain
         </button>
+    </section>
+
+    <section class="space-y-3">
+        <div class="flex items-center justify-between px-1">
+            <div>
+                <h3 class="text-[13px] font-semibold text-slate-500 uppercase tracking-wider">Biaya Tambahan</h3>
+                <p class="mt-1 text-xs text-slate-400">Untuk plastik, kardus, ongkir, atau biaya supplier yang tidak menambah stok barang.</p>
+            </div>
+            <button id="add-additional-cost" class="inline-flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1.5 text-[11px] font-bold text-primary" type="button">
+                <span class="material-symbols-outlined text-sm">add</span>
+                Tambah
+            </button>
+        </div>
+        <div id="additional-cost-list" class="space-y-3"></div>
     </section>
     <section class="bg-primary/5 dark:bg-primary/10 rounded-2xl p-4 border border-primary/10 space-y-3">
         <div class="flex justify-between items-center text-sm">
@@ -149,19 +164,6 @@
             <span class="text-base font-bold text-slate-900 dark:text-white">Total Estimasi</span>
             <span class="text-lg font-bold text-primary tracking-tight" id="total">Rp 0</span>
         </div>
-    </section>
-    <section class="space-y-3">
-        <div class="flex items-center justify-between px-1">
-            <div>
-                <h3 class="text-[13px] font-semibold text-slate-500 uppercase tracking-wider">Biaya Tambahan</h3>
-                <p class="mt-1 text-xs text-slate-400">Untuk plastik, kardus, ongkir, atau biaya supplier yang tidak menambah stok barang.</p>
-            </div>
-            <button id="add-additional-cost" class="inline-flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1.5 text-[11px] font-bold text-primary" type="button">
-                <span class="material-symbols-outlined text-sm">add</span>
-                Tambah
-            </button>
-        </div>
-        <div id="additional-cost-list" class="space-y-3"></div>
     </section>
     <section class="space-y-1.5 px-1">
         <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider">Catatan Opsional</label>
@@ -259,6 +261,9 @@
                     selectedCashAccountId: null,
                     cashAccountMapping: null,
                 };
+                const purchaseDraftStorageKey = `purchase-create-draft:${tenantId || 'tenant'}:${window.location.pathname}`;
+                const purchaseDraftVersion = 1;
+                let purchaseDraftTimer = null;
 
                 const formatCurrency = (value) => new Intl.NumberFormat('id-ID', {
                     style: 'currency',
@@ -370,7 +375,9 @@
                 const syncProductSelectOptions = () => {
                     el.container.querySelectorAll('.product-select').forEach((select) => {
                         const selectedProductId = select.value;
-                        const selectedLabel = select.options[select.selectedIndex]?.textContent || 'Produk belum ada di daftar';
+                        const wrapper = select.closest('.space-y-4');
+                        const searchInput = wrapper?.querySelector('.product-search');
+                        const selectedLabel = searchInput?.value || select.options[select.selectedIndex]?.textContent || 'Produk belum ada di daftar';
                         const productStillExists = state.products.some((product) => product.id === selectedProductId);
 
                         select.innerHTML = `
@@ -379,11 +386,135 @@
                             ${buildProductOptions()}
                         `;
                         select.value = selectedProductId;
-                        updateRowUnit(select.closest('.space-y-4'), selectedProductId);
+                        if (searchInput && selectedProductId) {
+                            searchInput.value = getProductSearchLabel(selectedProductId, selectedLabel);
+                        }
+                        updateRowUnit(wrapper, selectedProductId);
                     });
                 };
 
+                const findProductById = (productId) => state.products.find((item) => item.id === productId) || null;
+
+                const getProductSearchLabel = (productId, fallback = '') => {
+                    const product = findProductById(productId);
+                    return product?.name || fallback || '';
+                };
+
+                const normalizeProductSearch = (value) => String(value || '')
+                    .toLowerCase()
+                    .normalize('NFD')
+                    .replace(/[\u0300-\u036f]/g, '')
+                    .replace(/[^a-z0-9]+/g, ' ')
+                    .trim();
+
+                const searchDistance = (left, right) => {
+                    if (Math.abs(left.length - right.length) > 2) {
+                        return 3;
+                    }
+
+                    const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+                    for (let i = 1; i <= left.length; i += 1) {
+                        let diagonal = previous[0];
+                        previous[0] = i;
+                        let rowBest = previous[0];
+                        for (let j = 1; j <= right.length; j += 1) {
+                            const insertCost = previous[j] + 1;
+                            const deleteCost = previous[j - 1] + 1;
+                            const replaceCost = diagonal + (left[i - 1] === right[j - 1] ? 0 : 1);
+                            diagonal = previous[j];
+                            previous[j] = Math.min(insertCost, deleteCost, replaceCost);
+                            rowBest = Math.min(rowBest, previous[j]);
+                        }
+                        if (rowBest > 2) {
+                            return 3;
+                        }
+                    }
+                    return previous[right.length];
+                };
+
+                const isCloseProductWord = (token, word) => {
+                    if (token.length < 4 || word.length < 4) {
+                        return false;
+                    }
+                    const limit = token.length <= 5 ? 1 : 2;
+                    return searchDistance(token, word) <= limit;
+                };
+
+                const matchingProducts = (query) => {
+                    const normalized = normalizeProductSearch(query);
+                    if (!normalized) {
+                        return state.products.slice(0, 40);
+                    }
+
+                    const tokens = normalized.split(/\s+/).filter(Boolean);
+                    const products = state.products.filter((product) => {
+                        const searchable = normalizeProductSearch(product.name);
+                        const words = searchable.split(/\s+/).filter(Boolean);
+                        return tokens.every((token) => searchable.includes(token) || words.some((word) => isCloseProductWord(token, word)));
+                    });
+                    return products.slice(0, 40);
+                };
+
+                const hideProductSearchMenu = (wrapper) => {
+                    const menu = wrapper?.querySelector('.product-search-menu');
+                    if (!menu) {
+                        return;
+                    }
+                    menu.innerHTML = '';
+                    menu.classList.add('hidden');
+                };
+
+                const chooseProductForRow = (wrapper, productId, { updatePrice = true } = {}) => {
+                    const product = findProductById(productId);
+                    const select = wrapper.querySelector('.product-select');
+                    const searchInput = wrapper.querySelector('.product-search');
+                    const priceInput = wrapper.querySelector('.item-price');
+
+                    select.value = product?.id || '';
+                    searchInput.value = product?.name || '';
+                    if (product) {
+                        if (updatePrice) {
+                            priceInput.value = product.price || 0;
+                        }
+                        updateRowUnit(wrapper, product.id);
+                    } else {
+                        updateRowUnit(wrapper, '');
+                    }
+                    hideProductSearchMenu(wrapper);
+                    recalcTotals();
+                    scheduleSavePurchaseDraft();
+                };
+
+                const renderProductSearchMenu = (wrapper) => {
+                    const input = wrapper.querySelector('.product-search');
+                    const menu = wrapper.querySelector('.product-search-menu');
+                    const results = matchingProducts(input.value);
+                    menu.innerHTML = '';
+
+                    if (!results.length) {
+                        const empty = document.createElement('div');
+                        empty.className = 'px-4 py-3 text-xs font-semibold text-slate-400';
+                        empty.textContent = 'Produk tidak ditemukan.';
+                        menu.appendChild(empty);
+                    } else {
+                        results.forEach((product) => {
+                            const button = document.createElement('button');
+                            button.type = 'button';
+                            button.className = 'block w-full px-4 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-primary/5 focus:bg-primary/10 dark:text-slate-100';
+                            button.textContent = product.name || '-';
+                            button.addEventListener('mousedown', (event) => {
+                                event.preventDefault();
+                                chooseProductForRow(wrapper, product.id);
+                            });
+                            menu.appendChild(button);
+                        });
+                    }
+
+                    menu.classList.remove('hidden');
+                };
+
                 const refreshProducts = async ({ silent = false } = {}) => {
+                    savePurchaseDraft();
                     if (state.refreshingProducts) {
                         return;
                     }
@@ -457,17 +588,19 @@
                     }
                 };
 
-                const addItemRow = () => {
+                const addItemRow = (item = {}) => {
                     const wrapper = document.createElement('div');
                     wrapper.className = 'space-y-4';
                     wrapper.innerHTML = `
                         <div class="relative">
                             <label class="block text-xs font-medium text-slate-400 mb-1.5 ml-1">Pilih Produk</label>
                             <div class="relative">
-                                <select class="product-select w-full h-12 bg-slate-50 dark:bg-slate-800 border-none rounded-xl px-4 text-sm font-medium focus:ring-2 focus:ring-primary/20 appearance-none">
+                                <input class="product-search w-full h-12 bg-slate-50 dark:bg-slate-800 border-none rounded-xl px-4 text-sm font-medium focus:ring-2 focus:ring-primary/20" placeholder="Ketik nama produk, contoh: UHT / coklat / hokiito" type="text" autocomplete="off" />
+                                <select class="product-select hidden" tabindex="-1" aria-hidden="true">
                                     <option value="">Pilih Produk...</option>
                                     ${buildProductOptions()}
                                 </select>
+                                <div class="product-search-menu hidden absolute left-0 right-0 z-40 mt-1 max-h-64 overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-xl dark:border-slate-700 dark:bg-slate-900"></div>
                             </div>
                         </div>
                         <div class="grid grid-cols-2 gap-4">
@@ -501,20 +634,54 @@
                     el.container.appendChild(wrapper);
 
                     const select = wrapper.querySelector('.product-select');
+                    const searchInput = wrapper.querySelector('.product-search');
+                    const qtyInput = wrapper.querySelector('.item-qty');
                     const priceInput = wrapper.querySelector('.item-price');
-                    select.addEventListener('change', () => {
-                        const product = state.products.find((item) => item.id === select.value);
-                        if (product) {
-                            priceInput.value = product.price || 0;
-                            updateRowUnit(wrapper, product.id);
-                            recalcTotals();
-                        } else {
-                            updateRowUnit(wrapper, '');
+                    const unitSelect = wrapper.querySelector('.item-purchase-unit');
+
+                    if (item.product_id) {
+                        chooseProductForRow(wrapper, item.product_id, { updatePrice: false });
+                    }
+                    if (item.purchase_unit && unitSelect) {
+                        const normalizedUnit = String(item.purchase_unit).trim().toLowerCase();
+                        if (normalizedUnit && !Array.from(unitSelect.options).some((option) => option.value === normalizedUnit)) {
+                            unitSelect.insertAdjacentHTML('beforeend', `<option value="${normalizedUnit}">${normalizedUnit}</option>`);
+                        }
+                        unitSelect.value = normalizedUnit;
+                    }
+                    if (item.qty !== undefined && item.qty !== null && item.qty !== '') {
+                        qtyInput.value = item.qty;
+                    }
+                    if (item.price !== undefined && item.price !== null && item.price !== '') {
+                        priceInput.value = item.price;
+                    }
+
+                    searchInput.addEventListener('focus', () => renderProductSearchMenu(wrapper));
+                    searchInput.addEventListener('input', () => {
+                        select.value = '';
+                        updateRowUnit(wrapper, '');
+                        renderProductSearchMenu(wrapper);
+                        recalcTotals();
+                    });
+                    searchInput.addEventListener('keydown', (event) => {
+                        if (event.key === 'Enter') {
+                            const firstProduct = matchingProducts(searchInput.value)[0];
+                            if (firstProduct) {
+                                event.preventDefault();
+                                chooseProductForRow(wrapper, firstProduct.id);
+                            }
+                        }
+                        if (event.key === 'Escape') {
+                            hideProductSearchMenu(wrapper);
                         }
                     });
+                    searchInput.addEventListener('blur', () => {
+                        window.setTimeout(() => hideProductSearchMenu(wrapper), 120);
+                    });
 
-                    wrapper.querySelectorAll('input').forEach((input) => {
+                    wrapper.querySelectorAll('input, select').forEach((input) => {
                         input.addEventListener('input', recalcTotals);
+                        input.addEventListener('change', recalcTotals);
                     });
                 };
 
@@ -554,6 +721,7 @@
                     wrapper.querySelector('.remove-additional-cost').addEventListener('click', () => {
                         wrapper.remove();
                         recalcTotals();
+                    scheduleSavePurchaseDraft();
                     });
                 };
 
@@ -571,6 +739,102 @@
                     return costs;
                 };
 
+                const collectItemDrafts = () => Array.from(el.container.querySelectorAll('.product-select')).map((select) => {
+                    const wrapper = select.closest('.space-y-4');
+                    return {
+                        product_id: select.value || '',
+                        qty: wrapper?.querySelector('.item-qty')?.value || '',
+                        purchase_unit: wrapper?.querySelector('.item-purchase-unit')?.value || '',
+                        price: wrapper?.querySelector('.item-price')?.value || '',
+                    };
+                }).filter((item) => item.product_id || item.qty || item.price);
+
+                const collectAdditionalCostDrafts = () => Array.from(el.additionalCostList.querySelectorAll('.additional-cost-row')).map((row) => ({
+                    name: row.querySelector('.additional-cost-name')?.value || '',
+                    category: row.querySelector('.additional-cost-category')?.value || 'packaging',
+                    amount: row.querySelector('.additional-cost-amount')?.value || '',
+                })).filter((cost) => cost.name || cost.amount);
+
+                const collectPurchaseDraft = () => ({
+                    version: purchaseDraftVersion,
+                    saved_at: new Date().toISOString(),
+                    supplier_id: el.supplier.value || '',
+                    order_date: el.orderDate.value || '',
+                    payment_method: el.paymentMethod.value || 'tempo',
+                    due_date: el.dueDate.value || '',
+                    tax_enabled: el.taxEnabled?.checked ?? false,
+                    tax_rate: el.taxRate?.value || '11',
+                    notes: el.notes.value || '',
+                    items: collectItemDrafts(),
+                    additional_costs: collectAdditionalCostDrafts(),
+                });
+
+                const savePurchaseDraft = () => {
+                    try {
+                        sessionStorage.setItem(purchaseDraftStorageKey, JSON.stringify(collectPurchaseDraft()));
+                    } catch (error) {
+                        // Browser storage can be unavailable in private mode.
+                    }
+                };
+
+                const scheduleSavePurchaseDraft = () => {
+                    window.clearTimeout(purchaseDraftTimer);
+                    purchaseDraftTimer = window.setTimeout(savePurchaseDraft, 150);
+                };
+
+                const loadPurchaseDraft = () => {
+                    try {
+                        const raw = sessionStorage.getItem(purchaseDraftStorageKey);
+                        return raw ? JSON.parse(raw) : null;
+                    } catch (error) {
+                        return null;
+                    }
+                };
+
+                const clearPurchaseDraft = () => {
+                    try {
+                        sessionStorage.removeItem(purchaseDraftStorageKey);
+                    } catch (error) {
+                        // Ignore storage cleanup failures.
+                    }
+                };
+
+                const restorePurchaseDraft = (draft) => {
+                    if (!draft || draft.version !== purchaseDraftVersion) {
+                        return false;
+                    }
+
+                    el.supplier.value = draft.supplier_id || '';
+                    if (draft.order_date) {
+                        el.orderDate.value = draft.order_date;
+                    }
+                    el.paymentMethod.value = draft.payment_method || 'tempo';
+                    if (draft.due_date) {
+                        el.dueDate.value = draft.due_date;
+                    }
+                    if (el.taxEnabled) {
+                        el.taxEnabled.checked = !!draft.tax_enabled;
+                    }
+                    if (el.taxRate) {
+                        el.taxRate.value = draft.tax_rate || '11';
+                    }
+                    el.notes.value = draft.notes || '';
+
+                    el.container.innerHTML = '';
+                    const draftItems = Array.isArray(draft.items) && draft.items.length ? draft.items : [{}];
+                    draftItems.forEach((item) => addItemRow(item));
+
+                    el.additionalCostList.innerHTML = '';
+                    if (Array.isArray(draft.additional_costs)) {
+                        draft.additional_costs.forEach((cost) => addAdditionalCostRow(cost));
+                    }
+
+                    syncPaymentFields();
+                    syncTaxFields();
+                    recalcTotals();
+                    setProductRefreshStatus('Input PO dipulihkan setelah refresh halaman.', 'success');
+                    return true;
+                };
                 const recalcTotals = () => {
                     let subtotal = 0;
                     el.container.querySelectorAll('.product-select').forEach((select) => {
@@ -847,6 +1111,7 @@
                                 return;
                             }
 
+                            clearPurchaseDraft();
                             alert(purchaseMode === purchaseModeSimple ? 'Pembelian langsung berhasil diproses.' : 'PO berhasil disimpan.');
                             const purchaseId = responseData?.purchase_id || responseData?.purchase?.id || null;
                             window.location.href = purchaseId
@@ -864,10 +1129,12 @@
 
                 el.addItem.addEventListener('click', () => {
                     addItemRow();
+                scheduleSavePurchaseDraft();
                 });
 
                 el.addAdditionalCost?.addEventListener('click', () => {
                     addAdditionalCostRow();
+                scheduleSavePurchaseDraft();
                 });
 
                 el.refreshProducts?.addEventListener('click', () => {
@@ -916,6 +1183,16 @@
                 el.taxEnabled?.addEventListener('change', recalcTotals);
                 el.taxRate?.addEventListener('input', recalcTotals);
 
+                const draftFieldSelector = '#supplier-select, #order-date, #payment-method, #due-date, #tax-enabled, #tax-rate, #notes, #item-container, #additional-cost-list';
+                ['input', 'change'].forEach((eventName) => {
+                    document.addEventListener(eventName, (event) => {
+                        if (event.target.closest(draftFieldSelector)) {
+                            scheduleSavePurchaseDraft();
+                        }
+                    });
+                });
+                window.addEventListener('beforeunload', savePurchaseDraft);
+
                 (async () => {
                     setDefaultOrderDate();
                     setDefaultDueDate();
@@ -939,8 +1216,10 @@
                     renderCashAccountInfo();
                     el.supplier.innerHTML = `<option value="">Pilih Pemasok...</option>${buildSupplierOptions()}`;
                     syncTaxFields();
-                    addItemRow();
-                    recalcTotals();
+                    if (!restorePurchaseDraft(loadPurchaseDraft())) {
+                        addItemRow();
+                        recalcTotals();
+                    }
                 })();
             })();
         </script>

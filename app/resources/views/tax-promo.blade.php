@@ -74,7 +74,7 @@
                 @endif
             </div>
             <div class="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-                <div class="rounded-xl bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300" id="rounding-status">Memuat pengaturan pembulatan...</div>
+                <div class="rounded-xl bg-slate-50 px-3 py-3 text-xs leading-5 text-slate-600 dark:bg-slate-800 dark:text-slate-300" id="rounding-status">Memuat pengaturan pembulatan...</div>
                 <label class="grid gap-2">
                     <span class="text-xs font-bold uppercase tracking-widest text-slate-500">Mode</span>
                     <select id="rounding-mode" class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold dark:border-slate-700 dark:bg-slate-800">
@@ -89,7 +89,10 @@
                     <span class="text-xs font-bold uppercase tracking-widest text-slate-500">Nominal Pembulatan</span>
                     <input id="rounding-increment" type="number" min="1" step="1" inputmode="numeric" placeholder="100" class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold dark:border-slate-700 dark:bg-slate-800" />
                 </label>
-                <p class="text-[11px] leading-5 text-slate-500">Gunakan nominal seperti 100, 500, atau 1000 saat mode kelipatan dipilih.</p>
+                <div class="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-3 text-[11px] leading-5 text-slate-500 dark:border-slate-700 dark:bg-slate-800/60">
+                    <p class="font-bold uppercase tracking-widest text-slate-500">Panduan cepat</p>
+                    <p class="mt-1">Untuk membulatkan Rp 36.667 menjadi Rp 36.700, pilih <strong>Kelipatan tertentu</strong> lalu isi nominal <strong>100</strong>.</p>
+                </div>
                 <p id="rounding-save-feedback" class="min-h-4 text-[11px] font-semibold text-slate-500"></p>
             </div>
         </section>
@@ -241,15 +244,40 @@
                     el.roundingIncrement.disabled = !isMultiple;
                 }
 
-                const labels = {
-                    none: 'Pembulatan nonaktif.',
-                    nearest: 'Total akan dibulatkan ke rupiah terdekat.',
-                    up: 'Total akan dibulatkan naik.',
-                    down: 'Total akan dibulatkan turun.',
-                    multiple: `Total akan dibulatkan ke kelipatan ${increment || '-'} rupiah.`,
+                const examples = {
+                    none: {
+                        title: 'Tidak dibulatkan',
+                        body: 'Total transaksi dipakai apa adanya tanpa perubahan.',
+                        example: 'Contoh: Rp 36.667 tetap Rp 36.667.',
+                    },
+                    nearest: {
+                        title: 'Ke rupiah terdekat',
+                        body: 'Dipakai kalau total masih memiliki angka sen/desimal dan ingin dibulatkan ke rupiah paling dekat.',
+                        example: 'Contoh: Rp 36.666,40 menjadi Rp 36.666; Rp 36.666,60 menjadi Rp 36.667.',
+                    },
+                    up: {
+                        title: 'Naik ke rupiah',
+                        body: 'Dipakai kalau total masih memiliki angka sen/desimal dan selalu ingin dinaikkan ke rupiah bulat berikutnya.',
+                        example: 'Contoh: Rp 36.666,10 menjadi Rp 36.667. Rp 36.667 tetap Rp 36.667.',
+                    },
+                    down: {
+                        title: 'Turun ke rupiah',
+                        body: 'Dipakai kalau total masih memiliki angka sen/desimal dan selalu ingin diturunkan ke rupiah bulat sebelumnya.',
+                        example: 'Contoh: Rp 36.666,90 menjadi Rp 36.666. Rp 36.667 tetap Rp 36.667.',
+                    },
+                    multiple: {
+                        title: 'Kelipatan tertentu',
+                        body: `Total transaksi dinaikkan ke kelipatan nominal yang diisi (${increment || 'misalnya 100, 500, atau 1000'}).`,
+                        example: 'Contoh nominal 100: Rp 36.667 menjadi Rp 36.700. Contoh nominal 500: Rp 36.667 menjadi Rp 37.000.',
+                    },
                 };
+                const activeExample = examples[mode] || examples.none;
 
-                el.roundingStatus.textContent = labels[mode] || 'Pengaturan pembulatan.';
+                el.roundingStatus.innerHTML = `
+                    <p class="font-bold text-slate-700 dark:text-slate-100">${activeExample.title}</p>
+                    <p class="mt-1">${activeExample.body}</p>
+                    <p class="mt-1 font-semibold text-primary">${activeExample.example}</p>
+                `;
             };
 
             const applyRoundingSettings = (settings) => {
