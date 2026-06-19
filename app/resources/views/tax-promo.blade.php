@@ -65,7 +65,7 @@
             </div>
             <div class="space-y-3" id="tax-list"></div>
             @if ($canManageTaxPromo)
-                <button class="mt-4 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white shadow-sm shadow-primary/20" type="button">
+                <button id="tax-add-button" class="mt-4 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white shadow-sm shadow-primary/20" type="button">
                     <span class="material-symbols-outlined text-sm">add_task</span>
                     Tambah Pajak Baru
                 </button>
@@ -269,6 +269,7 @@
                 el.taxSheetOverlay?.classList.add('hidden');
             };
 
+            el.taxAddButton?.addEventListener('click', openTaxSheet);
             el.roundingMode?.addEventListener('change', updateRoundingUi);
             el.taxSheetBackdrop?.addEventListener('click', closeTaxSheet);
             el.taxSheetClose?.addEventListener('click', closeTaxSheet);
@@ -379,6 +380,7 @@
         })();
     </script>
 @endsection
+
 
 
 

@@ -122,6 +122,50 @@ class SettingsController extends Controller
         ]);
     }
 
+    public function updateRoundingSettings(Request $request)
+    {
+        $validated = $request->validate([
+            'mode' => ['required', 'in:none,nearest,up,down,multiple'],
+            'increment' => ['nullable', 'integer', 'min:0', 'max:100000'],
+        ]);
+
+        $tenantId = TenantContext::id();
+        if (! $tenantId) {
+            return response()->json([
+                'message' => 'Tenant tidak ditemukan.',
+            ], 400);
+        }
+
+        $mode = $validated['mode'];
+        $increment = (int) ($validated['increment'] ?? 0);
+
+        if ($mode === 'multiple' && $increment <= 0) {
+            return response()->json([
+                'code' => 'ROUNDING_INCREMENT_REQUIRED',
+                'message' => 'Nilai pembulatan wajib diisi untuk mode kelipatan.',
+                'details' => [],
+            ], 422);
+        }
+
+        if ($mode !== 'multiple') {
+            $increment = 0;
+        }
+
+        Tenant::query()
+            ->where('id', $tenantId)
+            ->update([
+                'rounding_mode' => $mode,
+                'rounding_increment' => $increment,
+            ]);
+
+        return response()->json([
+            'status' => 'ok',
+            'rounding_settings' => [
+                'mode' => $mode,
+                'increment' => $increment,
+            ],
+        ]);
+    }
     public function updateInventoryValuationMethod(Request $request)
     {
         $validated = $request->validate([
@@ -509,6 +553,7 @@ class SettingsController extends Controller
         return $meta;
     }
 }
+
 
 
 
