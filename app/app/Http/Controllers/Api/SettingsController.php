@@ -62,10 +62,16 @@ class SettingsController extends Controller
                 ]);
         }
 
+        $tenant = TenantContext::get();
+
         return response()->json([
             'taxes' => $taxes,
             'promos' => $promos,
-            'inventory_valuation_method' => TenantContext::get()?->inventory_valuation_method ?? 'average',
+            'rounding_settings' => [
+                'mode' => $tenant?->rounding_mode ?? 'none',
+                'increment' => (int) ($tenant?->rounding_increment ?? 0),
+            ],
+            'inventory_valuation_method' => $tenant?->inventory_valuation_method ?? 'average',
             'valuation_method_last_change' => $lastMethodChange,
             'valuation_rebuild' => app(ValuationRebuildStateService::class)->meta((string) TenantContext::id()),
         ]);
@@ -106,6 +112,7 @@ class SettingsController extends Controller
             ],
         ], 201);
     }
+
     public function updateTax(Request $request, string $tax)
     {
         $validated = $request->validate([
@@ -166,6 +173,7 @@ class SettingsController extends Controller
             ],
         ]);
     }
+
     public function updateInventoryValuationMethod(Request $request)
     {
         $validated = $request->validate([

@@ -54,15 +54,6 @@
 @section('content')
     <div class="flex-1 overflow-y-auto pb-32 app-bottom-safe-space">
         <section class="p-4">
-            <div class="flex items-center justify-between mb-4">
-                <h2 class="text-sm font-bold text-slate-500 uppercase tracking-widest">Pengaturan Pajak</h2>
-                @if ($canManageTaxPromo)
-                    <button class="text-primary text-sm font-bold flex items-center gap-1" type="button">
-                        <span class="material-symbols-outlined text-sm">add_circle</span>
-                        Tambah
-                    </button>
-                @endif
-            </div>
             <div class="space-y-3" id="tax-list"></div>
             @if ($canManageTaxPromo)
                 <button id="tax-add-button" class="mt-4 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white shadow-sm shadow-primary/20" type="button">
@@ -83,6 +74,7 @@
                 @endif
             </div>
             <div class="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+                <div class="rounded-xl bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300" id="rounding-status">Memuat pengaturan pembulatan...</div>
                 <label class="grid gap-2">
                     <span class="text-xs font-bold uppercase tracking-widest text-slate-500">Mode</span>
                     <select id="rounding-mode" class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold dark:border-slate-700 dark:bg-slate-800">
@@ -94,32 +86,67 @@
                     </select>
                 </label>
                 <label class="grid gap-2" id="rounding-increment-wrap">
-                    <span class="text-xs font-bold uppercase tracking-widest text-slate-500">Nilai Pembulatan</span>
+                    <span class="text-xs font-bold uppercase tracking-widest text-slate-500">Nominal Pembulatan</span>
                     <input id="rounding-increment" type="number" min="1" step="1" inputmode="numeric" placeholder="100" class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold dark:border-slate-700 dark:bg-slate-800" />
                 </label>
-                <p class="text-[11px] leading-5 text-slate-500">Masukkan angka seperti 100, 500, atau 1000. Kolom ini tetap tampil dan dipakai saat mode kelipatan aktif.</p>
+                <p class="text-[11px] leading-5 text-slate-500">Gunakan nominal seperti 100, 500, atau 1000 saat mode kelipatan dipilih.</p>
+                <p id="rounding-save-feedback" class="min-h-4 text-[11px] font-semibold text-slate-500"></p>
             </div>
         </section>
         <div class="h-2 bg-slate-50 dark:bg-slate-900"></div>
         <section class="p-4">
             <div class="flex items-center justify-between mb-4">
                 <h2 class="text-sm font-bold text-slate-500 uppercase tracking-widest">Manajemen Promo</h2>
-                @if ($canManageTaxPromo)
-                    <button class="bg-primary/10 text-primary px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1" type="button">
-                        <span class="material-symbols-outlined text-sm">add</span>
-                        Buat Promo
-                    </button>
-                @endif
             </div>
             <div class="space-y-4" id="promo-list"></div>
         </section>
+
+        <div id="tax-sheet-overlay" class="hidden fixed inset-0 z-50 bg-slate-950/50">
+            <div id="tax-sheet-backdrop" class="absolute inset-0"></div>
+            <div class="absolute inset-x-0 bottom-0 mx-auto max-w-[430px] rounded-t-3xl bg-white p-4 shadow-2xl dark:bg-slate-900">
+                <div class="mb-4 flex items-center justify-between">
+                    <div>
+                        <h3 class="text-sm font-bold text-slate-900 dark:text-slate-100">Tambah Pajak Baru</h3>
+                        <p class="text-xs text-slate-500">Isi nama, deskripsi, dan tarif pajak.</p>
+                    </div>
+                    <button id="tax-sheet-close" type="button" class="size-9 rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                        <span class="material-symbols-outlined text-sm">close</span>
+                    </button>
+                </div>
+                <div id="tax-sheet-feedback" class="hidden mb-3 rounded-xl border px-3 py-2 text-xs font-medium"></div>
+                <div class="space-y-3">
+                    <label class="grid gap-2">
+                        <span class="text-xs font-bold uppercase tracking-widest text-slate-500">Nama Pajak</span>
+                        <input id="tax-name" type="text" class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold dark:border-slate-700 dark:bg-slate-800" placeholder="PPN" />
+                    </label>
+                    <label class="grid gap-2">
+                        <span class="text-xs font-bold uppercase tracking-widest text-slate-500">Deskripsi</span>
+                        <input id="tax-description" type="text" class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold dark:border-slate-700 dark:bg-slate-800" placeholder="Pajak penjualan" />
+                    </label>
+                    <label class="grid gap-2">
+                        <span class="text-xs font-bold uppercase tracking-widest text-slate-500">Tarif (%)</span>
+                        <input id="tax-rate" type="number" min="0" step="0.01" class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold dark:border-slate-700 dark:bg-slate-800" placeholder="11" />
+                    </label>
+                </div>
+                <div class="mt-4 flex gap-2">
+                    <button id="tax-sheet-cancel" type="button" class="flex-1 rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-600 dark:border-slate-700 dark:text-slate-300">Batal</button>
+                    <button id="tax-sheet-save" type="button" class="flex-1 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white">Simpan</button>
+                </div>
+            </div>
+        </div>
+
         <div class="h-8"></div>
     </div>
 
     <script>
         (() => {
             const tenantId = document.querySelector('meta[name="tenant-id"]')?.content || '';
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
             const headers = tenantId ? { 'X-Tenant-Id': tenantId } : {};
+
+            if (!window.fetch) {
+                return;
+            }
 
             const el = {
                 taxes: document.getElementById('tax-list'),
@@ -128,6 +155,18 @@
                 roundingIncrement: document.getElementById('rounding-increment'),
                 roundingIncrementWrap: document.getElementById('rounding-increment-wrap'),
                 roundingSave: document.getElementById('rounding-save'),
+                roundingStatus: document.getElementById('rounding-status'),
+                roundingSaveFeedback: document.getElementById('rounding-save-feedback'),
+                taxAddButton: document.getElementById('tax-add-button'),
+                taxSheetOverlay: document.getElementById('tax-sheet-overlay'),
+                taxSheetBackdrop: document.getElementById('tax-sheet-backdrop'),
+                taxSheetClose: document.getElementById('tax-sheet-close'),
+                taxSheetCancel: document.getElementById('tax-sheet-cancel'),
+                taxSheetSave: document.getElementById('tax-sheet-save'),
+                taxSheetFeedback: document.getElementById('tax-sheet-feedback'),
+                taxName: document.getElementById('tax-name'),
+                taxDescription: document.getElementById('tax-description'),
+                taxRate: document.getElementById('tax-rate'),
             };
 
             const formatCurrency = (value) => new Intl.NumberFormat('id-ID', {
@@ -136,6 +175,37 @@
                 maximumFractionDigits: 0,
             }).format(value || 0);
 
+            const fetchWithFallback = async (url, options = {}, timeout = 15000) => {
+                const makeOptions = () => ({
+                    ...options,
+                    credentials: 'same-origin',
+                    headers: {
+                        ...(options.headers || {}),
+                        ...headers,
+                        ...(csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}),
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                });
+
+                const controller = new AbortController();
+                const timer = window.setTimeout(() => controller.abort(), timeout);
+                try {
+                    return await fetch(url, {
+                        ...makeOptions(),
+                        signal: controller.signal,
+                    });
+                } finally {
+                    window.clearTimeout(timer);
+                }
+            };
+
+            const refreshCsrfCookie = async () => {
+                await fetch('/sanctum/csrf-cookie', {
+                    credentials: 'same-origin',
+                    headers,
+                }).catch(() => null);
+            };
+
             const fetchWriteWithFreshCsrf = async (url, options = {}, timeout = 15000) => {
                 const makeOptions = () => ({
                     ...options,
@@ -143,27 +213,43 @@
                     headers: {
                         ...(options.headers || {}),
                         ...headers,
+                        ...(csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}),
+                        'X-Requested-With': 'XMLHttpRequest',
                     },
                 });
 
-                let response = await window.PosUi.fetchWithTimeout(url, makeOptions(), timeout);
+                await refreshCsrfCookie();
+                let response = await fetchWithFallback(url, makeOptions(), timeout);
                 if (response.status === 419) {
-                    await fetch('/sanctum/csrf-cookie', {
-                        credentials: 'same-origin',
-                        headers,
-                    }).catch(() => null);
-                    response = await window.PosUi.fetchWithTimeout(url, makeOptions(), timeout);
+                    await refreshCsrfCookie();
+                    response = await fetchWithFallback(url, makeOptions(), timeout);
                 }
 
                 return response;
             };
 
             const updateRoundingUi = () => {
-                if (!el.roundingMode || !el.roundingIncrementWrap) {
+                if (!el.roundingMode || !el.roundingIncrementWrap || !el.roundingStatus) {
                     return;
                 }
-                el.roundingIncrementWrap.classList.toggle('opacity-60', el.roundingMode.value !== 'multiple');
-                el.roundingIncrement.readOnly = false;
+
+                const mode = el.roundingMode.value || 'none';
+                const increment = String(el.roundingIncrement?.value || '').trim();
+                const isMultiple = mode === 'multiple';
+                el.roundingIncrementWrap.classList.toggle('opacity-60', !isMultiple);
+                if (el.roundingIncrement) {
+                    el.roundingIncrement.disabled = !isMultiple;
+                }
+
+                const labels = {
+                    none: 'Pembulatan nonaktif.',
+                    nearest: 'Total akan dibulatkan ke rupiah terdekat.',
+                    up: 'Total akan dibulatkan naik.',
+                    down: 'Total akan dibulatkan turun.',
+                    multiple: `Total akan dibulatkan ke kelipatan ${increment || '-'} rupiah.`,
+                };
+
+                el.roundingStatus.textContent = labels[mode] || 'Pengaturan pembulatan.';
             };
 
             const applyRoundingSettings = (settings) => {
@@ -172,7 +258,6 @@
                 }
                 el.roundingMode.value = settings?.mode || 'none';
                 el.roundingIncrement.value = settings?.increment || '100';
-                el.roundingIncrement.readOnly = false;
                 updateRoundingUi();
             };
 
@@ -271,6 +356,7 @@
 
             el.taxAddButton?.addEventListener('click', openTaxSheet);
             el.roundingMode?.addEventListener('change', updateRoundingUi);
+            el.roundingIncrement?.addEventListener('input', updateRoundingUi);
             el.taxSheetBackdrop?.addEventListener('click', closeTaxSheet);
             el.taxSheetClose?.addEventListener('click', closeTaxSheet);
             el.taxSheetCancel?.addEventListener('click', closeTaxSheet);
@@ -311,6 +397,9 @@
                     el.taxSheetFeedback?.classList.remove('hidden');
                     el.taxSheetFeedback.textContent = payload.message || 'Gagal menyimpan pajak.';
                     el.taxSheetFeedback.className = 'mb-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700';
+                    if (el.taxSheetSave) {
+                        el.taxSheetSave.disabled = false;
+                    }
                     return;
                 }
 
@@ -325,6 +414,13 @@
             el.roundingSave?.addEventListener('click', async () => {
                 const mode = el.roundingMode?.value || 'none';
                 const increment = Number(el.roundingIncrement?.value || 0);
+                if (el.roundingSave) {
+                    el.roundingSave.disabled = true;
+                }
+                if (el.roundingSaveFeedback) {
+                    el.roundingSaveFeedback.textContent = 'Menyimpan...';
+                }
+
                 const response = await fetchWriteWithFreshCsrf('/api/v1/settings/rounding', {
                     method: 'PATCH',
                     headers: {
@@ -333,15 +429,27 @@
                     },
                     body: JSON.stringify({
                         mode,
-                        increment: mode === 'multiple' ? increment : 0,
+                        increment: Number.isFinite(increment) ? increment : 0,
                     }),
                 });
                 if (!response.ok) {
-                    alert('Gagal menyimpan pembulatan.');
+                    const payload = await response.json().catch(() => ({}));
+                    if (el.roundingSaveFeedback) {
+                        el.roundingSaveFeedback.textContent = payload.message || 'Gagal menyimpan pembulatan.';
+                    }
+                    if (el.roundingSave) {
+                        el.roundingSave.disabled = false;
+                    }
                     return;
                 }
                 const payload = await response.json().catch(() => ({}));
                 applyRoundingSettings(payload.rounding_settings || { mode, increment: mode === 'multiple' ? increment : 0 });
+                if (el.roundingSaveFeedback) {
+                    el.roundingSaveFeedback.textContent = 'Tersimpan.';
+                }
+                if (el.roundingSave) {
+                    el.roundingSave.disabled = false;
+                }
             });
 
             el.taxes?.addEventListener('change', async (event) => {
@@ -350,17 +458,19 @@
                     return;
                 }
                 const taxId = checkbox.dataset.id;
-                const response = await fetch(`/api/v1/taxes/${taxId}`, {
+                const response = await fetchWriteWithFreshCsrf(`/api/v1/taxes/${taxId}`, {
                     method: 'PATCH',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest',
                     },
                     body: JSON.stringify({ is_active: checkbox.checked }),
                 });
                 if (!response.ok) {
-                    alert('Gagal memperbarui pajak.');
+                    const payload = await response.json().catch(() => ({}));
                     checkbox.checked = !checkbox.checked;
+                    if (el.roundingSaveFeedback) {
+                        el.roundingSaveFeedback.textContent = payload.message || 'Gagal memperbarui pajak.';
+                    }
                 }
             });
             @endif

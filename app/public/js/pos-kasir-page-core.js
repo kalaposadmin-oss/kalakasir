@@ -162,6 +162,10 @@ if (!window.__posKasirPageInitialized) {
             },
             productsLoading: false,
             taxRate: 0,
+            roundingSettings: {
+                mode: 'none',
+                increment: 0,
+            },
             promos: [],
             selectedPromos: new Set(),
             transactionDiscounts: [],
@@ -923,6 +927,28 @@ if (!window.__posKasirPageInitialized) {
 
         const roundMoney = (value) => Math.round((Number(value) || 0) * 100) / 100;
 
+        const applySalesRounding = (amount) => {
+            const rawAmount = roundMoney(amount);
+            const settings = state.roundingSettings || {};
+            const mode = settings.mode || 'none';
+            const increment = Math.max(0, Math.floor(Number(settings.increment || 0)));
+
+            if (mode === 'nearest') {
+                return roundMoney(Math.round(rawAmount));
+            }
+            if (mode === 'up') {
+                return roundMoney(Math.ceil(rawAmount));
+            }
+            if (mode === 'down') {
+                return roundMoney(Math.floor(rawAmount));
+            }
+            if (mode === 'multiple' && increment > 0) {
+                return roundMoney(Math.ceil(rawAmount / increment) * increment);
+            }
+
+            return rawAmount;
+        };
+
         const computeCartPricing = () => {
             const cartItems = [...state.cart.values()];
             const lineItems = cartItems.map((item) => {
@@ -943,7 +969,9 @@ if (!window.__posKasirPageInitialized) {
             const subtotal = roundMoney(productSubtotal + feeTotal);
             const transactionDiscountTotal = roundMoney(transactionDiscounts.total);
             const tax = roundMoney((subtotal - transactionDiscountTotal) * state.taxRate);
-            const total = roundMoney(subtotal - transactionDiscountTotal + tax);
+            const totalBeforeRounding = roundMoney(subtotal - transactionDiscountTotal + tax);
+            const total = applySalesRounding(totalBeforeRounding);
+            const roundingAdjustment = roundMoney(total - totalBeforeRounding);
 
             return {
                 lineItems,
@@ -955,6 +983,8 @@ if (!window.__posKasirPageInitialized) {
                 totalDiscount: roundMoney(lineItems.reduce((sum, line) => sum + line.itemDiscountTotal, 0) + transactionDiscountTotal),
                 transactionDiscounts: transactionDiscounts.lines,
                 tax,
+                totalBeforeRounding,
+                roundingAdjustment,
                 total,
                 itemCount: cartItems.reduce((sum, item) => sum + item.qty, 0),
             };
@@ -1672,6 +1702,15 @@ if (!window.__posKasirPageInitialized) {
             updateTotals();
         };
 
+        const applyRoundingSettings = (settings) => {
+            const mode = ['none', 'nearest', 'up', 'down', 'multiple'].includes(settings?.mode)
+                ? settings.mode
+                : 'none';
+            const increment = Math.max(0, Math.floor(Number(settings?.increment || 0)));
+            state.roundingSettings = { mode, increment };
+            updateTotals();
+        };
+
         const applyPromoSettings = (promos) => {
             state.promos = Array.isArray(promos) ? promos : [];
             renderPromoList();
@@ -2051,6 +2090,9 @@ if (!window.__posKasirPageInitialized) {
                 item_discount_total: pricing.itemDiscountTotal,
                 transaction_discount_total: pricing.transactionDiscountTotal,
                 total_discount: pricing.totalDiscount,
+                total_before_rounding: pricing.totalBeforeRounding,
+                rounding_adjustment: pricing.roundingAdjustment,
+                rounding_settings: state.roundingSettings,
                 saved_order_id: state.activeSavedOrderId || null,
                 replace_sale_id: state.replacingSaleId || null,
                 transaction_date: getSelectedTransactionDate(),
@@ -2438,6 +2480,7 @@ if (!window.__posKasirPageInitialized) {
                 }
                 await restoreCartDraft();
                 applyTaxSettings(settings.taxes || []);
+                applyRoundingSettings(settings.rounding_settings || { mode: 'none', increment: 0 });
                 applyPromoSettings(settings.promos || []);
                 renderFeeList();
                 renderTransactionDiscountList();

@@ -23,6 +23,7 @@ use App\Services\InventoryValuationService;
 use App\Services\AutoConsumeOnSellService;
 use App\Services\PosSavedOrderInventoryService;
 use App\Support\Decimal;
+use App\Support\SalesRounding;
 use App\Support\TenantContext;
 use App\Events\SaleCompleted;
 use App\Services\AnomalyService;
@@ -545,11 +546,17 @@ class CheckoutService
             throw new InvalidArgumentException('Diskon transaksi tidak valid.');
         }
 
-        $computedTotal = Decimal::add(
+        $computedTotalBeforeRounding = Decimal::add(
             Decimal::subtract($computedSubtotal, $computedDiscount, Decimal::MONEY_SCALE),
             Decimal::money($payload['tax']),
             Decimal::MONEY_SCALE
         );
+        $tenant = TenantContext::get();
+        $computedTotal = Decimal::money(SalesRounding::apply(
+            (float) $computedTotalBeforeRounding,
+            $tenant?->rounding_mode ?? 'none',
+            (int) ($tenant?->rounding_increment ?? 0)
+        ));
         $payloadTotal = Decimal::money($payload['total']);
 
         if (Decimal::compare($computedTotal, $payloadTotal) !== 0) {
