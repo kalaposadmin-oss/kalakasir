@@ -1,8 +1,9 @@
 @extends('layouts.app')
 
 @php
-    $isPosPortal = session('auth_portal', 'pos') === 'pos';
-    $historyContext = $historyContext ?? ($isPosPortal ? 'pos' : 'backoffice');
+    $sessionIsPosPortal = session('auth_portal', 'pos') === 'pos';
+    $historyContext = $historyContext ?? ($sessionIsPosPortal ? 'pos' : 'backoffice');
+    $isPosPortal = $historyContext === 'pos';
     $pageTitle = $historyContext === 'backoffice' ? 'Laporan Penjualan' : 'Riwayat';
     $historyTenant = \App\Support\TenantContext::get();
     $historyUser = auth()->user();
@@ -30,7 +31,7 @@
 @section('ui_mode', $isPosPortal ? 'pos' : 'backoffice')
 @section('body_class', 'bg-background-light dark:bg-background-dark text-slate-800 dark:text-slate-100 font-display')
 @section('app_shell_class', $isPosPortal ? 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-background-light dark:bg-background-dark shadow-2xl' : '')
-@section('main_class', $isPosPortal ? 'flex-1 overflow-y-auto pb-24 app-bottom-safe-space' : 'flex-1 overflow-y-auto pb-8 lg:pl-72')
+@section('main_class', $isPosPortal ? 'flex-1 overflow-y-auto pb-24 app-bottom-safe-space' : 'flex-1 overflow-y-auto pb-8 xl:pl-72')
 
 @push('head')
         <style>
@@ -99,21 +100,13 @@
             </div>
         </header>
     @else
-        <header class="sticky top-0 z-30 border-b border-slate-200/60 bg-white/80 px-4 py-4 backdrop-blur-xl dark:border-slate-800/60 dark:bg-slate-900/80 lg:px-8 lg:pl-[336px]">
-            <div class="flex w-full items-center gap-3">
-                @if($submenuBackUrl)
-                    <a href="{{ $submenuBackUrl }}" class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                        <span class="material-symbols-outlined text-[20px]">arrow_back_ios_new</span>
-                    </a>
-                @endif
-                <div class="min-w-0 flex-1 pr-2">
-                    <h2 class="truncate text-lg font-bold leading-tight tracking-tight text-slate-900 dark:text-slate-100">{{ $pageTitle }}</h2>
-                    <p class="text-[11px] font-medium text-slate-500">
-                        Analitik dan export laporan penjualan
-                    </p>
-                </div>
-            </div>
-        </header>
+        <x-page-header
+            :title="$pageTitle"
+            subtitle="Analitik dan export laporan penjualan"
+            :showMenuButton="true"
+            backUrl="/backoffice/reports"
+            :breadcrumbs="['Laporan']"
+        />
     @endif
 @endsection
 

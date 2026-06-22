@@ -250,7 +250,7 @@
 @endphp
 
 @if ($activePortal === 'backoffice')
-    <aside class="fixed inset-y-0 left-0 z-40 hidden w-72 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950 lg:flex">
+    <aside class="fixed inset-y-0 left-0 z-40 hidden w-72 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950 xl:flex">
         <header class="border-b border-slate-200 px-5 py-5 dark:border-slate-800">
             <a class="flex items-center gap-3" href="/backoffice/dashboard" data-prefetch="priority">
                 <span class="flex size-10 items-center justify-center rounded-lg bg-primary text-base font-black text-white shadow-sm shadow-primary/25">K</span>
@@ -289,7 +289,7 @@
     </aside>
 @endif
 
-<div id="menu-overlay" class="{{ $activePortal === 'backoffice' ? 'fixed lg:hidden' : 'absolute' }} inset-0 z-50 hidden overflow-hidden">
+<div id="menu-overlay" class="{{ $activePortal === 'backoffice' ? 'fixed xl:hidden' : 'absolute' }} inset-0 z-50 hidden overflow-hidden">
     <div class="absolute inset-0 bg-slate-950/50 backdrop-blur-sm" data-menu-close></div>
     <aside id="menu-drawer" class="app-mobile-drawer absolute left-0 top-0 flex h-full min-h-0 w-[21rem] max-w-[88vw] -translate-x-full flex-col overflow-hidden bg-white shadow-2xl transition-transform duration-300 dark:bg-slate-950">
         <header class="shrink-0 border-b border-slate-200 px-4 pb-4 pt-5 dark:border-slate-800">

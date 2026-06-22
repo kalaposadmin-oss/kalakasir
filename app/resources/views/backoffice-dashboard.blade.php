@@ -64,13 +64,13 @@
 @section('page_title', 'Dashboard Backoffice')
 @section('ui_mode', 'backoffice')
 @section('body_class', 'bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100')
-@section('main_class', 'flex-1 overflow-y-auto pb-8 lg:pl-72')
+@section('main_class', 'flex-1 overflow-y-auto pb-8 xl:pl-72')
 
 @section('content')
     <header class="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/95">
         <div class="flex min-h-[64px] items-center justify-between gap-4 px-4 py-3 lg:px-8">
             <div class="flex min-w-0 items-center gap-3">
-                <button class="flex size-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 shadow-sm ring-1 ring-slate-200/70 lg:hidden dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700" type="button" aria-label="Buka menu" data-menu-trigger>
+                <button class="flex size-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 shadow-sm ring-1 ring-slate-200/70 xl:hidden dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700" type="button" aria-label="Buka menu" data-menu-trigger>
                     <span class="material-symbols-outlined text-[20px]">menu</span>
                 </button>
                 <div class="min-w-0">

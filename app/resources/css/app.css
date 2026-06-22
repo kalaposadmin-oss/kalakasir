@@ -529,3 +529,83 @@ html.menu-open body {
         border-right: 0;
     }
 }
+
+/* Backoffice tablet/mobile ergonomics */
+@media (max-width: 1279px) {
+    .app-shell-backoffice > main,
+    .app-shell-backoffice .app-page-header,
+    .app-shell-backoffice > div:has(.app-page-header) {
+        padding-left: 0 !important;
+    }
+
+    .app-shell-backoffice main {
+        overflow-x: hidden;
+    }
+
+    .backoffice-page {
+        max-width: 100%;
+        padding: 1rem;
+    }
+
+    .app-shell-backoffice .app-page-header > div,
+    .app-shell-backoffice header > div {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+
+    .app-shell-backoffice main table {
+        min-width: 44rem;
+    }
+
+    .app-shell-backoffice main .overflow-x-auto {
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+    }
+
+    .app-shell-backoffice main form,
+    .app-shell-backoffice main .backoffice-home-panel,
+    .app-shell-backoffice main .app-card,
+    .app-shell-backoffice main .app-surface,
+    .app-shell-backoffice main .app-soft-panel {
+        max-width: 100%;
+    }
+}
+
+@media (max-width: 767px) {
+    .backoffice-page {
+        padding: 0.875rem;
+    }
+
+    .backoffice-page > .grid,
+    .app-shell-backoffice main section.grid,
+    .app-shell-backoffice main form .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .backoffice-home-panel,
+    .backoffice-stat-card,
+    .backoffice-action-link,
+    .backoffice-app-tile,
+    .app-shell-backoffice main [class*="rounded-2xl"][class*="bg-white"],
+    .app-shell-backoffice main [class*="rounded-xl"][class*="bg-white"] {
+        border-radius: 0.75rem !important;
+    }
+
+    .backoffice-app-tile {
+        min-height: 5.25rem;
+        padding: 0.625rem 0.375rem;
+    }
+
+    .backoffice-top-action,
+    .backoffice-small-link {
+        width: 100%;
+    }
+
+    .app-shell-backoffice input,
+    .app-shell-backoffice select,
+    .app-shell-backoffice textarea,
+    .app-shell-backoffice button,
+    .app-shell-backoffice a[class*="px-"] {
+        min-height: 2.5rem;
+    }
+}

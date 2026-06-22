@@ -406,6 +406,7 @@
             <p class="mt-2 text-sm text-slate-500">Aksi ini mem-post penyesuaian stok keluar dan menghubungkannya ke batch produksi ini.</p>
             <label class="mt-4 block">
                 <span class="mb-1 block text-[11px] font-bold uppercase tracking-widest text-slate-400">Produk Jadi</span>
+                <input class="mb-2 w-full rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200" data-detail-select-search="batch-waste-product" placeholder="Ketik produk, contoh: brownies / coklat" type="text" />
                 <select id="batch-waste-product" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium dark:border-slate-700 dark:bg-slate-900"></select>
             </label>
             <div class="mt-3 grid grid-cols-2 gap-3">
@@ -573,6 +574,43 @@
                 },
                 selectedAnomalyId: null,
             };
+
+            const normalizeSelectSearch = (value) => String(value || '')
+                .toLowerCase()
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/[^a-z0-9]+/g, ' ')
+                .trim();
+
+            const applySelectSearch = (select, query) => {
+                if (!select) {
+                    return;
+                }
+
+                const tokens = normalizeSelectSearch(query).split(/\s+/).filter(Boolean);
+                Array.from(select.options).forEach((option) => {
+                    if (!tokens.length) {
+                        option.hidden = false;
+                        return;
+                    }
+
+                    const haystack = normalizeSelectSearch(option.textContent);
+                    option.hidden = !tokens.every((token) => haystack.includes(token));
+                });
+            };
+
+            const refreshSelectSearch = (select) => {
+                const input = document.querySelector(`[data-detail-select-search="${select?.id}"]`);
+                if (input) {
+                    applySelectSearch(select, input.value);
+                }
+            };
+
+            document.querySelectorAll('[data-detail-select-search]').forEach((input) => {
+                input.addEventListener('input', () => {
+                    applySelectSearch(document.getElementById(input.dataset.detailSelectSearch), input.value);
+                });
+            });
             const tabButtons = Array.from(document.querySelectorAll('[data-batch-tab]'));
             const tabPanels = Array.from(document.querySelectorAll('[data-batch-panel]'));
 
@@ -1039,6 +1077,7 @@
                         option.textContent = `${line.product_name || productName(line.product_id)} - hasil ${formatNumber(line.actual_qty || line.planned_qty || 0)}`;
                         el.wasteProduct.appendChild(option);
                     });
+                    refreshSelectSearch(el.wasteProduct);
                     el.wasteSubmit?.toggleAttribute('disabled', outputs.length === 0 || batch.status !== 'posted');
                 }
                 el.postOutputs.innerHTML = '';

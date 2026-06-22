@@ -25,7 +25,7 @@
 
 @section('page_title', 'Kas')
 @section('body_class', 'bg-background-light dark:bg-background-dark font-display text-slate-800 dark:text-slate-100 antialiased')
-@section('app_shell_class', $cashPortal === 'backoffice' ? 'relative flex h-screen w-full flex-col overflow-hidden bg-background-light dark:bg-background-dark lg:pl-72' : 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-background-light dark:bg-background-dark shadow-2xl')
+@section('app_shell_class', $cashPortal === 'backoffice' ? 'app-shell-backoffice relative flex h-screen w-full flex-col overflow-hidden bg-background-light dark:bg-background-dark xl:pl-72' : 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-background-light dark:bg-background-dark shadow-2xl')
 @section('main_class', $cashPortal === 'backoffice' ? 'flex-1 overflow-y-auto pb-8' : 'flex-1 overflow-y-auto pb-24 app-bottom-safe-space')
 @php($bottom_nav = 'dashboard')
 

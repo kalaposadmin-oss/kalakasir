@@ -119,8 +119,8 @@
             $effectiveShellClass = $usesWideBackofficeShell
                 ? $defaultShellClass
                 : ($requestedShellClass !== '' ? $requestedShellClass : $defaultShellClass);
-            $effectiveMainClass = $usesWideBackofficeShell && ! str_contains($layoutMainClass, 'lg:pl-72')
-                ? trim($layoutMainClass.' lg:pl-72')
+            $effectiveMainClass = $usesWideBackofficeShell && ! str_contains($layoutMainClass, 'xl:pl-72')
+                ? trim($layoutMainClass.' xl:pl-72')
                 : $layoutMainClass;
         @endphp
 
@@ -130,7 +130,7 @@
             @endif
 
             @hasSection('header')
-                <div class="{{ $usesWideBackofficeShell ? 'lg:pl-72' : '' }}">
+                <div class="{{ $usesWideBackofficeShell ? 'xl:pl-72' : '' }}">
                     @yield('header')
                 </div>
             @endif

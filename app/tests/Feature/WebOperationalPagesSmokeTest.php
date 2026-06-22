@@ -170,6 +170,11 @@ class WebOperationalPagesSmokeTest extends TestCase
         $detailContents = file_get_contents(resource_path('views/purchase-detail.blade.php'));
 
         $this->assertStringContainsString('item-line-total', $createContents);
+        $this->assertStringContainsString('item-conversion-hint', $createContents);
+        $this->assertStringContainsString('item-base-price-hint', $createContents);
+        $this->assertStringContainsString('item-price-mode', $createContents);
+        $this->assertStringContainsString('Total baris', $createContents);
+        $this->assertStringContainsString('convertQtyForPreview', $createContents);
         $this->assertStringContainsString('Total Item', $createContents);
         $this->assertStringContainsString('refresh-products', $createContents);
         $this->assertStringContainsString('product-refresh-status', $createContents);
@@ -311,6 +316,10 @@ class WebOperationalPagesSmokeTest extends TestCase
         $this->assertStringContainsString('const finishedOutputProductOptions = () => {', $contents);
         $this->assertStringContainsString('batchOutputSummaryHtml', $contents);
         $this->assertStringContainsString('batchOutputTitle', $contents);
+        $this->assertStringContainsString('production-select-search', $contents);
+        $this->assertStringContainsString('data-select-search="production-create-product"', $contents);
+        $this->assertStringContainsString('data-output-select-search', $contents);
+        $this->assertStringContainsString('normalizeSelectSearch', $contents);
         $this->assertStringNotContainsString("&& String(product.product_mode || '') === 'bom'", $contents);
         $this->assertStringNotContainsString("&& String(product.production_mode || '').trim() === 'batch_production'", $contents);
     }
@@ -342,6 +351,8 @@ class WebOperationalPagesSmokeTest extends TestCase
         $this->assertStringContainsString('data-anomaly-resolve-id', $contents);
         $this->assertStringContainsString('batch-detail-resolve-modal', $contents);
         $this->assertStringContainsString('context_label', $contents);
+        $this->assertStringContainsString('data-detail-select-search="batch-waste-product"', $contents);
+        $this->assertStringContainsString('refreshSelectSearch(el.wasteProduct)', $contents);
     }
 
     public function test_pos_cash_transaction_routes_and_view_expose_journal_inputs(): void

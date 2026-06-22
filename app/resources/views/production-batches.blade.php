@@ -272,6 +272,7 @@
                 <div class="grid gap-3">
                     <label class="block">
                         <span class="mb-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400 sm:text-[11px]">Produk</span>
+                        <input class="production-select-search mb-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-select-search="production-product-filter" placeholder="Ketik nama produk" type="text" />
                         <select id="production-product-filter" class="production-filter-block w-full rounded-2xl px-4 py-3 text-sm font-medium text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"></select>
                     </label>
                     <label class="block">
@@ -286,10 +287,12 @@
                     <div class="grid gap-3 sm:grid-cols-2">
                         <label class="block">
                             <span class="mb-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400 sm:text-[11px]">Cabang</span>
+                            <input class="production-select-search mb-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-select-search="production-branch-filter" placeholder="Ketik cabang" type="text" />
                             <select id="production-branch-filter" class="production-filter-block w-full rounded-2xl px-4 py-3 text-sm font-medium text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"></select>
                         </label>
                         <label class="block">
                             <span class="mb-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400 sm:text-[11px]">Lokasi</span>
+                            <input class="production-select-search mb-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-select-search="production-location-filter" placeholder="Ketik lokasi" type="text" />
                             <select id="production-location-filter" class="production-filter-block w-full rounded-2xl px-4 py-3 text-sm font-medium text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"></select>
                         </label>
                     </div>
@@ -347,12 +350,14 @@
                 <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <label class="block">
                         <span class="mb-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400 sm:text-[11px]">Cabang</span>
+                        <input class="production-select-search mb-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-select-search="production-create-branch" placeholder="Ketik cabang" type="text" />
                         <select id="production-create-branch" class="production-filter-block production-mobile-field w-full rounded-2xl px-4 py-3 text-sm font-medium text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
                             <option value="" selected>Memuat cabang...</option>
                         </select>
                     </label>
                     <label class="block">
                         <span class="mb-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400 sm:text-[11px]">Lokasi</span>
+                        <input class="production-select-search mb-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-select-search="production-create-location" placeholder="Ketik lokasi" type="text" />
                         <select id="production-create-location" class="production-filter-block production-mobile-field w-full rounded-2xl px-4 py-3 text-sm font-medium text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
                             <option value="" selected>Memuat lokasi...</option>
                         </select>
@@ -361,6 +366,7 @@
                 </div>
                 <label class="block">
                     <span class="mb-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400 sm:text-[11px]">Produk yang Diproduksi</span>
+                    <input class="production-select-search mb-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-select-search="production-create-product" placeholder="Ketik produk, contoh: brownies / coklat" type="text" />
                     <select id="production-create-product" class="production-filter-block production-mobile-field w-full rounded-2xl px-4 py-3 text-sm font-medium text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
                         <option value="" selected>Memuat produk...</option>
                     </select>
@@ -669,6 +675,64 @@
                     : '<div class="rounded-full border border-dashed border-slate-300 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:border-slate-700">Belum ada filter aktif</div>';
             };
 
+            const normalizeSelectSearch = (value) => String(value || '')
+                .toLowerCase()
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/[^a-z0-9]+/g, ' ')
+                .trim();
+
+            const applySelectSearch = (select, query) => {
+                if (!select) {
+                    return;
+                }
+
+                const tokens = normalizeSelectSearch(query).split(/\s+/).filter(Boolean);
+                Array.from(select.options).forEach((option) => {
+                    if (!option.value || !tokens.length) {
+                        option.hidden = false;
+                        return;
+                    }
+
+                    const haystack = normalizeSelectSearch(option.textContent);
+                    option.hidden = !tokens.every((token) => haystack.includes(token));
+                });
+            };
+
+            const refreshSelectSearch = (select) => {
+                const input = document.querySelector(`[data-select-search="${select?.id}"]`);
+                if (input) {
+                    applySelectSearch(select, input.value);
+                }
+            };
+
+            const bindSelectSearchInputs = () => {
+                document.querySelectorAll('[data-select-search]').forEach((input) => {
+                    if (input.dataset.boundSelectSearch === '1') {
+                        return;
+                    }
+
+                    input.dataset.boundSelectSearch = '1';
+                    input.addEventListener('input', () => {
+                        applySelectSearch(document.getElementById(input.dataset.selectSearch), input.value);
+                    });
+                });
+
+                if (document.body.dataset.boundOutputSelectSearch === '1') {
+                    return;
+                }
+
+                document.body.dataset.boundOutputSelectSearch = '1';
+                document.addEventListener('input', (event) => {
+                    const input = event.target.closest('[data-output-select-search]');
+                    if (!input) {
+                        return;
+                    }
+
+                    const row = input.closest('[data-output-row]');
+                    applySelectSearch(row?.querySelector('[data-output-field="product_id"]'), input.value);
+                });
+            };
             const setOptions = (select, items, labelKey, includeAllLabel) => {
                 select.innerHTML = '';
                 const allOption = document.createElement('option');
@@ -684,6 +748,7 @@
                 });
 
                 select.disabled = false;
+                refreshSelectSearch(select);
             };
 
             const setStatusOption = (select, message) => {
@@ -697,6 +762,7 @@
                 option.textContent = message;
                 select.appendChild(option);
                 select.disabled = true;
+                refreshSelectSearch(select);
             };
 
             const normalizeRows = (value) => (Array.isArray(value) ? value : []);
@@ -1139,6 +1205,7 @@
                         </div>
                         <label class="mt-2 block">
                             <span class="mb-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Produk Jadi</span>
+                            <input class="production-select-search mb-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-output-select-search placeholder="Ketik produk hasil, contoh: brownies / coklat" type="text" />
                             <select class="production-filter-block w-full rounded-2xl px-3 py-2.5 text-sm font-medium text-slate-800" data-output-field="product_id">
                                 <option value="">Pilih produk jadi</option>
                                 ${optionHtml(row.product_id)}
@@ -2247,6 +2314,8 @@
                 setStatusOption(el.createLocation, 'Gagal memuat lokasi');
                 setStatusOption(el.createProduct, 'Gagal memuat produk');
             });
+
+            bindSelectSearchInputs();
 
             loadBatches().catch((error) => {
                 el.meta.textContent = error.message;

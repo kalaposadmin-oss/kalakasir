@@ -41,7 +41,7 @@
         <div class="flex items-center gap-2">
             {{ $actions ?? '' }}
             @if($showMenuButton)
-                <button type="button" data-menu-trigger aria-label="Buka menu" class="{{ $isBackofficeHeader ? 'lg:hidden' : '' }} flex size-10 items-center justify-center rounded-full bg-slate-100 text-slate-600 shadow-sm ring-1 ring-slate-200/70 active:opacity-80 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">
+                <button type="button" data-menu-trigger aria-label="Buka menu" class="{{ $isBackofficeHeader ? 'xl:hidden' : '' }} flex size-10 items-center justify-center rounded-full bg-slate-100 text-slate-600 shadow-sm ring-1 ring-slate-200/70 active:opacity-80 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">
                     <span class="material-symbols-outlined text-[20px]">menu</span>
                 </button>
             @endif
