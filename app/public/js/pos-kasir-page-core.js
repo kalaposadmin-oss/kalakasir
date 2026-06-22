@@ -422,9 +422,10 @@ if (!window.__posKasirPageInitialized) {
             if (!el.productGrid) {
                 return;
             }
+            el.productGrid.dataset.view = state.productViewMode;
             el.productGrid.className = state.productViewMode === 'grid'
-                ? 'grid grid-cols-2 gap-3'
-                : 'grid grid-cols-1 gap-2';
+                ? 'grid gap-3'
+                : 'grid gap-2';
         };
 
         const setProductViewMode = (mode) => {
@@ -804,7 +805,6 @@ if (!window.__posKasirPageInitialized) {
                 return;
             }
 
-            const wasEmpty = state.cart.size === 0;
             const existing = state.cart.get(product.id);
             const qty = existing ? existing.qty + 1 : 1;
             if (product.track_stock) {
@@ -824,9 +824,6 @@ if (!window.__posKasirPageInitialized) {
             });
             renderCart();
             renderProducts();
-            if (wasEmpty) {
-                openCart();
-            }
         };
 
         const updateCartQty = (productId, delta) => {

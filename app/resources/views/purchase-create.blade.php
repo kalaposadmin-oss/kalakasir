@@ -557,11 +557,41 @@
                     ['cm', 'meter'],
                     ['pcs', 'unit', 'dozen', 'lusin'],
                 ];
+                const unitDefinitions = {
+                    mg: { dimension: 'mass', factor: 0.001, label: 'mg' },
+                    gram: { dimension: 'mass', factor: 1, label: 'gram' },
+                    g: { dimension: 'mass', factor: 1, label: 'gram' },
+                    kg: { dimension: 'mass', factor: 1000, label: 'kg' },
+                    kilogram: { dimension: 'mass', factor: 1000, label: 'kg' },
+                    ml: { dimension: 'volume', factor: 1, label: 'ml' },
+                    liter: { dimension: 'volume', factor: 1000, label: 'liter' },
+                    l: { dimension: 'volume', factor: 1000, label: 'liter' },
+                    cm: { dimension: 'length', factor: 1, label: 'cm' },
+                    meter: { dimension: 'length', factor: 100, label: 'meter' },
+                    m: { dimension: 'length', factor: 100, label: 'meter' },
+                    pcs: { dimension: 'count', factor: 1, label: 'pcs' },
+                    pc: { dimension: 'count', factor: 1, label: 'pcs' },
+                    unit: { dimension: 'count', factor: 1, label: 'unit' },
+                    dozen: { dimension: 'count', factor: 12, label: 'dozen' },
+                    lusin: { dimension: 'count', factor: 12, label: 'lusin' },
+                };
 
+                const normalizeUnit = (unit) => String(unit || '').trim().toLowerCase();
+                const displayUnit = (unit) => unitDefinitions[normalizeUnit(unit)]?.label || normalizeUnit(unit) || 'unit';
+                const formatQty = (value) => new Intl.NumberFormat('id-ID', { maximumFractionDigits: Number.isInteger(value) ? 0 : 4 }).format(value || 0);
                 const getCompatibleUnits = (unit) => {
-                    const normalized = String(unit || '').trim().toLowerCase();
+                    const normalized = normalizeUnit(unit);
                     const group = unitGroups.find((items) => items.includes(normalized));
                     return group || (normalized ? [normalized] : ['Pcs']);
+                };
+                const convertQtyForPreview = (qty, fromUnit, toUnit) => {
+                    const from = unitDefinitions[normalizeUnit(fromUnit)];
+                    const to = unitDefinitions[normalizeUnit(toUnit)];
+                    if (!from || !to || from.dimension !== to.dimension || !to.factor) {
+                        return Number(qty || 0);
+                    }
+
+                    return (Number(qty || 0) * from.factor) / to.factor;
                 };
 
                 const updateRowUnit = (wrapper, productId) => {
@@ -574,7 +604,7 @@
                     unitSelect.innerHTML = getCompatibleUnits(stockUnit)
                         .map((unit) => `<option value="${unit}">${unit}</option>`)
                         .join('');
-                    unitSelect.value = String(stockUnit).trim().toLowerCase();
+                    unitSelect.value = normalizeUnit(stockUnit);
                     if (!unitSelect.value && unitSelect.options.length) {
                         unitSelect.selectedIndex = 0;
                     }
@@ -605,27 +635,37 @@
                         </div>
                         <div class="grid grid-cols-2 gap-4">
                             <div class="space-y-1.5">
-                                <label class="block text-xs font-medium text-slate-400 ml-1">Jumlah</label>
+                                <label class="block text-xs font-medium text-slate-400 ml-1">Jumlah pembelian</label>
                                 <div class="flex items-center">
                                     <input class="item-qty w-full h-12 bg-slate-50 dark:bg-slate-800 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-primary/20" placeholder="0" type="number" value="1" min="0.0001" step="0.0001" />
                                     <select class="item-purchase-unit ml-2 h-12 rounded-xl border-0 bg-slate-50 px-2 text-xs font-bold text-slate-600 focus:ring-2 focus:ring-primary/20 dark:bg-slate-800 dark:text-slate-300">
                                         <option value="Pcs">Pcs</option>
                                     </select>
                                 </div>
+                                <p class="item-conversion-hint mt-1 text-[11px] font-semibold text-slate-400">Stok masuk: -</p>
                             </div>
                             <div class="space-y-1.5">
-                                <label class="block text-xs font-medium text-slate-400 ml-1">Harga Beli / Satuan</label>
+                                <div class="flex items-center justify-between gap-2">
+                                    <label class="block text-xs font-medium text-slate-400 ml-1">Harga beli</label>
+                                    <select class="item-price-mode h-8 rounded-lg border-0 bg-primary/10 px-2 text-[11px] font-bold text-primary focus:ring-2 focus:ring-primary/20">
+                                        <option value="total">Total baris</option>
+                                        <option value="unit">Per satuan</option>
+                                    </select>
+                                </div>
                                 <div class="relative">
                                     <span class="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">Rp</span>
                                     <input class="item-price w-full h-12 bg-slate-50 dark:bg-slate-800 border-none rounded-xl pl-10 pr-4 text-sm font-bold focus:ring-2 focus:ring-primary/20" placeholder="0" type="number" value="0" min="0" />
                                 </div>
+                                <p class="item-price-mode-hint mt-1 text-[11px] font-semibold text-slate-400">Harga yang diisi adalah total baris.</p>
+                                <p class="item-base-price-hint mt-1 text-[11px] font-semibold text-slate-400">Harga stok: -</p>
                             </div>
                         </div>
                         <div class="rounded-xl border border-primary/10 bg-primary/5 px-4 py-3">
                             <div class="flex items-center justify-between gap-3">
                                 <div>
                                     <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Item</p>
-                                    <p class="mt-1 text-xs text-slate-500"><span class="item-line-qty">1</span> x <span class="item-line-price">Rp 0</span></p>
+                                    <p class="mt-1 text-xs text-slate-500"><span class="item-line-qty">1</span> <span class="item-line-unit">unit</span> x <span class="item-line-price">Rp 0</span></p>
+                                    <p class="item-line-conversion mt-1 text-[11px] font-semibold text-slate-400"></p>
                                 </div>
                                 <p class="item-line-total text-base font-black text-primary">Rp 0</p>
                             </div>
@@ -637,6 +677,7 @@
                     const searchInput = wrapper.querySelector('.product-search');
                     const qtyInput = wrapper.querySelector('.item-qty');
                     const priceInput = wrapper.querySelector('.item-price');
+                    const priceModeSelect = wrapper.querySelector('.item-price-mode');
                     const unitSelect = wrapper.querySelector('.item-purchase-unit');
 
                     if (item.product_id) {
@@ -654,6 +695,9 @@
                     }
                     if (item.price !== undefined && item.price !== null && item.price !== '') {
                         priceInput.value = item.price;
+                    }
+                    if (item.price_mode && priceModeSelect) {
+                        priceModeSelect.value = item.price_mode === 'unit' ? 'unit' : 'total';
                     }
 
                     searchInput.addEventListener('focus', () => renderProductSearchMenu(wrapper));
@@ -746,6 +790,7 @@
                         qty: wrapper?.querySelector('.item-qty')?.value || '',
                         purchase_unit: wrapper?.querySelector('.item-purchase-unit')?.value || '',
                         price: wrapper?.querySelector('.item-price')?.value || '',
+                        price_mode: wrapper?.querySelector('.item-price-mode')?.value || 'total',
                     };
                 }).filter((item) => item.product_id || item.qty || item.price);
 
@@ -850,20 +895,58 @@
                         }
 
                         const qty = parseFloat(qtyInput.value || '0');
-                        const price = parseFloat(priceInput.value || '0');
-                        const lineTotal = qty * price;
+                        const enteredPrice = parseFloat(priceInput.value || '0');
+                        const priceMode = row.querySelector('.item-price-mode')?.value || 'total';
+                        const unitPrice = priceMode === 'total' && qty > 0 ? enteredPrice / qty : enteredPrice;
+                        const purchaseUnit = row.querySelector('.item-purchase-unit')?.value || getProductUnit(select.value);
+                        const stockUnit = getProductUnit(select.value);
+                        const baseQty = convertQtyForPreview(qty, purchaseUnit, stockUnit);
+                        const baseUnitCost = baseQty > 0 ? (unitPrice * qty) / baseQty : 0;
+                        const lineTotal = priceMode === 'total' ? enteredPrice : qty * unitPrice;
                         subtotal += lineTotal;
                         const lineQty = row.querySelector('.item-line-qty');
+                        const lineUnit = row.querySelector('.item-line-unit');
                         const linePrice = row.querySelector('.item-line-price');
                         const lineTotalEl = row.querySelector('.item-line-total');
+                        const lineConversion = row.querySelector('.item-line-conversion');
+                        const conversionHint = row.querySelector('.item-conversion-hint');
+                        const basePriceHint = row.querySelector('.item-base-price-hint');
+                        const priceModeHint = row.querySelector('.item-price-mode-hint');
+                        const purchaseUnitLabel = displayUnit(purchaseUnit);
+                        const stockUnitLabel = displayUnit(stockUnit);
                         if (lineQty) {
-                            lineQty.textContent = new Intl.NumberFormat('id-ID', { maximumFractionDigits: Number.isInteger(qty) ? 0 : 4 }).format(qty);
+                            lineQty.textContent = formatQty(qty);
+                        }
+                        if (lineUnit) {
+                            lineUnit.textContent = purchaseUnitLabel;
                         }
                         if (linePrice) {
-                            linePrice.textContent = formatCurrency(price);
+                            linePrice.textContent = priceMode === 'total'
+                                ? formatCurrency(unitPrice)
+                                : formatCurrency(enteredPrice);
                         }
                         if (lineTotalEl) {
                             lineTotalEl.textContent = formatCurrency(lineTotal);
+                        }
+                        if (conversionHint) {
+                            conversionHint.textContent = select.value
+                                ? `Stok masuk: ${formatQty(baseQty)} ${stockUnitLabel}`
+                                : 'Stok masuk: pilih produk dulu';
+                        }
+                        if (basePriceHint) {
+                            basePriceHint.textContent = select.value && baseQty > 0
+                                ? `Harga stok: ${formatCurrency(baseUnitCost)} / ${stockUnitLabel}`
+                                : 'Harga stok: -';
+                        }
+                        if (priceModeHint) {
+                            priceModeHint.textContent = priceMode === 'total'
+                                ? `Harga yang diisi adalah total baris. Setara ${formatCurrency(unitPrice)} / ${purchaseUnitLabel}.`
+                                : `Harga yang diisi adalah per ${purchaseUnitLabel}.`;
+                        }
+                        if (lineConversion) {
+                            lineConversion.textContent = select.value && normalizeUnit(purchaseUnit) !== normalizeUnit(stockUnit)
+                                ? `Dikonversi menjadi ${formatQty(baseQty)} ${stockUnitLabel} untuk stok.`
+                                : '';
                         }
                     });
                     const taxEnabled = el.taxEnabled?.checked ?? false;
@@ -983,11 +1066,16 @@
                         if (!select.value) {
                             return;
                         }
+                        const qty = parseFloat(qtyInput.value || '0');
+                        const enteredPrice = parseFloat(priceInput.value || '0');
+                        const priceMode = wrapper.querySelector('.item-price-mode')?.value || 'total';
                         items.push({
                             product_id: select.value,
-                            qty: parseFloat(qtyInput.value || '0'),
+                            qty,
                             purchase_unit: wrapper.querySelector('.item-purchase-unit')?.value || getProductUnit(select.value),
-                            price: parseFloat(priceInput.value || '0'),
+                            price: priceMode === 'total' && qty > 0 ? enteredPrice / qty : enteredPrice,
+                            line_total: priceMode === 'total' ? enteredPrice : qty * enteredPrice,
+                            price_mode: priceMode,
                         });
                     });
 
@@ -997,7 +1085,7 @@
                     }
 
                     const totalQty = items.reduce((sum, item) => sum + Number(item.qty || 0), 0);
-                    const subtotalValue = items.reduce((sum, item) => sum + (Number(item.qty || 0) * Number(item.price || 0)), 0);
+                    const subtotalValue = items.reduce((sum, item) => sum + Number(item.line_total ?? (Number(item.qty || 0) * Number(item.price || 0))), 0);
                     const additionalCosts = collectAdditionalCosts();
                     const additionalCostValue = additionalCosts.reduce((sum, cost) => sum + Number(cost.amount || 0), 0);
                     const taxEnabled = el.taxEnabled?.checked ?? false;

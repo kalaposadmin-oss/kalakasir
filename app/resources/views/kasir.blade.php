@@ -15,13 +15,22 @@
 
 @section('page_title', 'Kasir POS - Checkout Utama')
 @section('body_class', 'font-display text-slate-900')
-@section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-slate-50 shadow-2xl')
+@section('app_shell_class', 'kasir-device-shell relative mx-auto flex h-screen w-full flex-col overflow-hidden bg-slate-50 shadow-2xl')
 @section('main_class', 'flex-1 overflow-hidden p-0')
 
 @push('head')
     <style>
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .kasir-device-shell {
+            max-width: 1024px;
+        }
+        @media (min-width: 768px) {
+            .kasir-device-shell {
+                border-left: 1px solid #e2e8f0;
+                border-right: 1px solid #e2e8f0;
+            }
+        }
         #cart-list > .rounded-2xl > div:first-child {
             align-items: start;
             display: grid;
@@ -42,6 +51,64 @@
         }
         #cart-list .qty-input {
             width: 4rem;
+        }
+        #product-grid[data-view="grid"] {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        #product-grid[data-view="list"] {
+            grid-template-columns: minmax(0, 1fr);
+        }
+        @media (min-width: 768px) and (max-width: 1024px) {
+            #product-grid[data-view="grid"] {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+            #product-grid[data-view="list"] {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+            #bottom-nav {
+                padding-left: 1.5rem;
+                padding-right: 1.5rem;
+            }
+            #bottom-nav > div {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) 15rem;
+                align-items: center;
+                gap: 1rem;
+            }
+            #bottom-nav > div > button {
+                margin-top: 0;
+                width: 100%;
+            }
+            #cart-drawer {
+                left: auto;
+                right: 0;
+                width: min(28rem, 52vw);
+                border-top-left-radius: 28px;
+                border-top-right-radius: 0;
+            }
+            #customer-modal > div,
+            #customer-sheet > div:last-child,
+            #saved-order-sheet > div:last-child,
+            #receivable-sheet > div:last-child {
+                left: 50%;
+                right: auto;
+                width: min(32rem, calc(100vw - 3rem));
+                transform: translateX(-50%);
+                border-top-left-radius: 28px;
+                border-top-right-radius: 28px;
+            }
+        }
+        @media (max-width: 390px) {
+            #product-grid[data-view="grid"] {
+                grid-template-columns: minmax(0, 1fr);
+            }
+            #bottom-nav {
+                padding-left: .75rem;
+                padding-right: .75rem;
+            }
+            #bottom-nav > div {
+                padding: .75rem;
+            }
         }
     </style>
 @endpush
@@ -490,148 +557,6 @@
     @endif
 
     @push('scripts')
-    <script>
-    (() => {
-        const cartOverlay = document.getElementById('cart-overlay');
-        const cartDrawer = document.getElementById('cart-drawer');
-        const bottomNav = document.getElementById('bottom-nav');
-        const cartList = document.getElementById('cart-list');
-
-        if (!cartOverlay || !cartDrawer || !cartList) return;
-
-        let keepCartOpen = false;
-
-        const openCart = () => {
-            cartOverlay.classList.remove('hidden');
-            bottomNav?.classList.add('hidden');
-        };
-
-        const markKeepOpen = (event) => {
-            if (event.composedPath().includes(cartDrawer)) {
-                keepCartOpen = true;
-            }
-        };
-
-        const restoreCartIfNeeded = () => {
-            if (!keepCartOpen) return;
-            window.requestAnimationFrame(() => {
-                openCart();
-                enhanceQtyInputs();
-                keepCartOpen = false;
-            });
-        };
-
-        ['pointerdown', 'mousedown', 'touchstart'].forEach((eventName) => {
-            cartDrawer.addEventListener(eventName, markKeepOpen, true);
-        });
-
-        const findQtyText = (control) => {
-            return Array.from(control.children).find((child) => {
-                if (child.matches('button, input')) return false;
-                return /^\d+(\.\d+)?$/.test((child.textContent || '').trim());
-            });
-        };
-
-        const clickButton = async (button) => {
-            button.click();
-            await new Promise((resolve) => window.requestAnimationFrame(resolve));
-            openCart();
-        };
-
-        const applyTypedQty = async (input) => {
-            const productId = input.dataset.id;
-            const targetQty = Math.max(1, Math.floor(Number(String(input.value || '').replace(',', '.')) || 1));
-            const committedQty = Math.max(1, Math.floor(Number(input.dataset.committedQty || input.defaultValue || 1)) || 1);
-            let guard = 0;
-            let currentQty = committedQty;
-
-            while (guard < 200 && currentQty !== targetQty) {
-                guard += 1;
-                const plus = cartList.querySelector(`.qty-plus[data-id="${productId}"]`);
-                const minus = cartList.querySelector(`.qty-minus[data-id="${productId}"]`);
-
-                if (!plus || !minus) {
-                    enhanceQtyInputs();
-                    return;
-                }
-
-                await clickButton(targetQty > currentQty ? plus : minus);
-                currentQty += targetQty > currentQty ? 1 : -1;
-            }
-
-            input.dataset.committedQty = String(targetQty);
-            input.defaultValue = String(targetQty);
-            input.value = String(targetQty);
-            openCart();
-            enhanceQtyInputs();
-        };
-
-        const enhanceQtyInputs = () => {
-            cartList.querySelectorAll('.qty-plus, .qty-minus').forEach((button) => {
-                const control = button.parentElement;
-                if (!control || control.querySelector('.qty-input')) return;
-
-                const qtyText = findQtyText(control);
-                if (!qtyText) return;
-
-                const productId = button.dataset.id;
-                const input = document.createElement('input');
-                input.className = 'qty-input h-8 w-16 rounded-full border border-slate-200 bg-slate-50 px-2 text-center text-sm font-bold text-slate-900 focus:border-primary focus:bg-white focus:ring-primary';
-                input.type = 'number';
-                input.min = '1';
-                input.step = '1';
-                input.inputMode = 'numeric';
-                input.value = (qtyText.textContent || '1').trim();
-                input.defaultValue = input.value;
-                input.dataset.committedQty = input.value;
-                input.dataset.id = productId;
-                input.setAttribute('aria-label', 'Jumlah item');
-
-                qtyText.replaceWith(input);
-            });
-        };
-
-        cartList.addEventListener('focusin', (event) => {
-            const input = event.target.closest('.qty-input');
-            if (input instanceof HTMLInputElement) {
-                input.select();
-            }
-        }, true);
-
-        cartList.addEventListener('keydown', (event) => {
-            const input = event.target.closest('.qty-input');
-            if (!(input instanceof HTMLInputElement)) return;
-            if (event.key === 'Enter') {
-                event.preventDefault();
-                input.blur();
-            }
-        }, true);
-
-        cartList.addEventListener('change', (event) => {
-            const input = event.target.closest('.qty-input');
-            if (!(input instanceof HTMLInputElement)) return;
-            keepCartOpen = true;
-            applyTypedQty(input);
-        }, true);
-
-        cartList.addEventListener('click', (event) => {
-            if (event.target.closest('.qty-plus, .qty-minus')) {
-                keepCartOpen = true;
-                window.setTimeout(() => {
-                    openCart();
-                    enhanceQtyInputs();
-                }, 0);
-            }
-        }, true);
-
-        new MutationObserver(() => enhanceQtyInputs()).observe(cartList, {
-            childList: true,
-            subtree: true,
-        });
-
-        enhanceQtyInputs();
-    })();
-    </script>
     <script>
     (() => {
         const tenantId = document.querySelector('meta[name="tenant-id"]')?.content;
