@@ -25,15 +25,20 @@ jobs:
 
             cd /home/kalapay1/kalakasir/app
 
+            php artisan down --retry=60 || true
+            trap 'php artisan up || true' EXIT
+
             if [ -f composer.phar ]; then
-              php composer.phar install --no-dev --optimize-autoloader
+              php composer.phar install --no-dev --prefer-dist --optimize-autoloader --no-interaction
             else
               php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
               php composer-setup.php
-              php composer.phar install --no-dev --optimize-autoloader
+              php composer.phar install --no-dev --prefer-dist --optimize-autoloader --no-interaction
             fi
 
             php artisan migrate --force
+
+            test -f public/build/manifest.json
 
             rm -rf /home/kalapay1/public_html/build
             cp -r /home/kalapay1/kalakasir/app/public/build /home/kalapay1/public_html/
@@ -47,7 +52,9 @@ jobs:
             fi
 
             php artisan optimize:clear
-            php artisan config:clear
-            php artisan cache:clear
-            php artisan route:clear
-            php artisan view:clear
+            php artisan config:cache
+            php artisan route:cache
+            php artisan view:cache
+            php artisan queue:restart || true
+            php artisan up
+            trap - EXIT

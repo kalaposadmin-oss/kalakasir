@@ -32,8 +32,8 @@
 @endsection
 
 @section('content')
-    <div class="w-full px-4 py-5 lg:px-8 space-y-6">
-        <section class="grid gap-4 md:grid-cols-4">
+    <div class="w-full space-y-4 p-4">
+        <section class="grid grid-cols-2 gap-3 md:grid-cols-4">
             <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                 <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Total PO</p>
                 <p id="purchase-report-total-count" class="mt-3 text-3xl font-black text-slate-900 dark:text-white">0</p>

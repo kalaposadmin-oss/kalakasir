@@ -39,31 +39,31 @@
 @endsection
 
 @section('content')
-    <div class="w-full px-4 py-5 lg:px-8">
-        <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <div class="w-full space-y-4 p-4">
+        <section class="app-compact-card">
             <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Ringkasan</p>
-            <div class="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <a class="group rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-primary/40 hover:shadow-sm dark:border-slate-800 dark:bg-slate-900" href="/backoffice/reports/overview">
+            <div class="app-hub-grid mt-3">
+                <a class="app-hub-tile group" href="/backoffice/reports/overview">
                     <div class="flex items-center gap-3">
-                        <span class="material-symbols-outlined text-primary">dashboard</span>
+                        <span class="app-hub-icon"><span class="material-symbols-outlined">dashboard</span></span>
                         <div>
                             <p class="text-sm font-semibold">Ringkasan Laporan</p>
                             <p class="text-xs text-slate-500">KPI utama & tren</p>
                         </div>
                     </div>
                 </a>
-                <a class="group rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-primary/40 hover:shadow-sm dark:border-slate-800 dark:bg-slate-900" href="/backoffice/reports/sales">
+                <a class="app-hub-tile group" href="/backoffice/reports/sales">
                     <div class="flex items-center gap-3">
-                        <span class="material-symbols-outlined text-primary">list_alt</span>
+                        <span class="app-hub-icon"><span class="material-symbols-outlined">list_alt</span></span>
                         <div>
                             <p class="text-sm font-semibold">Laporan Penjualan</p>
                             <p class="text-xs text-slate-500">Analitik & export</p>
                         </div>
                     </div>
                 </a>
-                <a class="group rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-primary/40 hover:shadow-sm dark:border-slate-800 dark:bg-slate-900" href="/backoffice/reports/receivables">
+                <a class="app-hub-tile group" href="/backoffice/reports/receivables">
                     <div class="flex items-center gap-3">
-                        <span class="material-symbols-outlined text-primary">request_quote</span>
+                        <span class="app-hub-icon"><span class="material-symbols-outlined">request_quote</span></span>
                         <div>
                             <p class="text-sm font-semibold">Piutang</p>
                             <p class="text-xs text-slate-500">Tagihan customer & cicilan</p>
@@ -71,9 +71,9 @@
                     </div>
                 </a>
                 @if ($canViewPurchaseReports)
-                    <a class="group rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-primary/40 hover:shadow-sm dark:border-slate-800 dark:bg-slate-900" href="/backoffice/reports/purchases">
+                    <a class="app-hub-tile group" href="/backoffice/reports/purchases">
                         <div class="flex items-center gap-3">
-                            <span class="material-symbols-outlined text-primary">shopping_bag</span>
+                            <span class="app-hub-icon"><span class="material-symbols-outlined">shopping_bag</span></span>
                             <div>
                                 <p class="text-sm font-semibold">Laporan Pembelian</p>
                                 <p class="text-xs text-slate-500">Riwayat PO & status pembelian</p>
@@ -81,9 +81,9 @@
                         </div>
                     </a>
                 @endif
-                <a class="group rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-primary/40 hover:shadow-sm dark:border-slate-800 dark:bg-slate-900" href="/backoffice/reports/inventory">
+                <a class="app-hub-tile group" href="/backoffice/reports/inventory">
                     <div class="flex items-center gap-3">
-                        <span class="material-symbols-outlined text-primary">inventory_2</span>
+                        <span class="app-hub-icon"><span class="material-symbols-outlined">inventory_2</span></span>
                         <div>
                             <p class="text-sm font-semibold">Laporan Persediaan</p>
                             <p class="text-xs text-slate-500">Stok, reorder, valuasi</p>
@@ -91,9 +91,9 @@
                     </div>
                 </a>
                 @if ($canViewStockCardReports)
-                    <a class="group rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-primary/40 hover:shadow-sm dark:border-slate-800 dark:bg-slate-900" href="/backoffice/reports/inventory/stock-card">
+                    <a class="app-hub-tile group" href="/backoffice/reports/inventory/stock-card">
                         <div class="flex items-center gap-3">
-                            <span class="material-symbols-outlined text-primary">receipt_long</span>
+                            <span class="app-hub-icon"><span class="material-symbols-outlined">receipt_long</span></span>
                             <div>
                                 <p class="text-sm font-semibold">Kartu Stok</p>
                                 <p class="text-xs text-slate-500">Ledger per produk</p>
@@ -104,13 +104,13 @@
             </div>
         </section>
 
-        <section class="mt-6 grid gap-4 lg:grid-cols-2">
-            <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <section class="grid gap-4 md:grid-cols-2">
+            <div class="app-compact-card">
                 <div class="flex items-center justify-between">
                     <h2 class="text-sm font-bold uppercase tracking-widest text-slate-500">Aksi Cepat</h2>
                     <span class="text-[10px] font-semibold text-slate-400">Backoffice</span>
                 </div>
-                <div class="mt-4 grid gap-3 sm:grid-cols-2">
+                <div class="mt-3 grid grid-cols-2 gap-2">
                     <a class="rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-800" href="/backoffice/reports/sales">Export Penjualan</a>
                     <a class="rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-800" href="/backoffice/reports/receivables">Kelola Piutang</a>
                     @if ($canViewPurchaseReports)
@@ -124,7 +124,7 @@
                 </div>
             </div>
 
-            <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div class="app-compact-card">
                 <h2 class="text-sm font-bold uppercase tracking-widest text-slate-500">Catatan</h2>
                 <p class="mt-3 text-sm text-slate-600 dark:text-slate-300">
                     Gunakan laporan penjualan untuk kebutuhan analitik dan export. Laporan persediaan

@@ -109,16 +109,16 @@
             border-color: rgba(225, 229, 228, 0.95);
         }
         .production-alert-banner {
-            background: #eadfd8;
-            border: 1px solid rgba(221, 207, 198, 0.9);
+            background: #fff7ed;
+            border: 1px solid #fed7aa;
         }
         .production-action-fab {
             left: 50%;
             transform: translateX(-50%);
             bottom: 5.2rem;
             min-width: 17rem;
-            background: #7bae9e;
-            box-shadow: 0 16px 28px -18px rgba(123, 174, 158, 0.75);
+            background: #1e3a8a;
+            box-shadow: 0 16px 28px -18px rgba(30, 58, 138, 0.45);
         }
         .production-filter-sheet {
             background: #ffffff;
@@ -142,9 +142,9 @@
             background: #e2e8f0;
         }
         .production-btn-primary {
-            background: #7bae9e;
+            background: #1e3a8a;
             color: #ffffff;
-            box-shadow: 0 10px 22px -12px rgba(123, 174, 158, 0.75);
+            box-shadow: 0 10px 22px -12px rgba(30, 58, 138, 0.45);
         }
         .production-btn-primary:hover {
             filter: brightness(1.03);
@@ -173,36 +173,36 @@
 @endsection
 
 @section('content')
-    <div class="mx-auto w-full max-w-[560px] px-4 py-4 space-y-5 production-shell lg:max-w-7xl lg:px-8 lg:space-y-4">
+    <div class="w-full space-y-4 px-4 py-4 production-shell">
         <section class="production-hero overflow-hidden rounded-3xl text-sm text-white dark:production-hero-dark dark:text-indigo-50">
-            <div class="production-hero-media relative min-h-[220px] overflow-hidden sm:min-h-[250px]">
+            <div class="production-hero-media relative min-h-[170px] overflow-hidden sm:min-h-[190px]">
                 <div class="absolute inset-0 bg-gradient-to-t from-black/55 via-black/20 to-transparent"></div>
-                <div class="relative flex h-full min-h-[220px] items-end p-4 sm:min-h-[250px] sm:p-6">
+                <div class="relative flex h-full min-h-[170px] items-end p-4 sm:min-h-[190px] sm:p-6">
                     <div class="max-w-md">
                         <p class="text-[11px] font-bold uppercase tracking-[0.22em] text-white/70">Produksi</p>
-                        <h3 class="mt-1 text-[28px] font-bold leading-tight tracking-tight drop-shadow-sm sm:text-[32px]">Buat dan Pantau Produksi</h3>
+                        <h3 class="mt-1 text-[28px] font-bold leading-tight tracking-tight drop-shadow-sm sm:text-[28px]">Buat dan Pantau Produksi</h3>
                         <p class="mt-2 max-w-xl text-sm leading-relaxed text-white/85 sm:text-[15px]">Rencanakan produksi, cek kebutuhan bahan, lalu selesaikan saat hasil aktual sudah siap masuk stok.</p>
                     </div>
                 </div>
             </div>
         </section>
 
-        <section class="grid grid-cols-2 gap-4" id="production-batch-stats">
-            <div class="production-card kpi-accent-total w-full rounded-2xl p-4 transition dark:production-card-dark">
+        <section class="grid grid-cols-2 gap-3" id="production-batch-stats">
+            <div class="production-card kpi-accent-total w-full rounded-2xl p-3 transition dark:production-card-dark">
                 <p class="text-xs font-bold uppercase tracking-widest text-slate-400">Total</p>
-                <p class="mt-2 text-3xl font-bold leading-none text-slate-900 dark:text-slate-100" data-stat="total">0</p>
+                <p class="mt-1 text-2xl font-bold leading-none text-slate-900 dark:text-slate-100" data-stat="total">0</p>
             </div>
-            <div class="production-card kpi-accent-draft w-full rounded-2xl p-4 transition dark:production-card-dark">
+            <div class="production-card kpi-accent-draft w-full rounded-2xl p-3 transition dark:production-card-dark">
                 <p class="text-xs font-bold uppercase tracking-widest text-slate-400">Draf</p>
-                <p class="mt-2 text-3xl font-bold leading-none text-amber-600" data-stat="draft">0</p>
+                <p class="mt-1 text-2xl font-bold leading-none text-amber-600" data-stat="draft">0</p>
             </div>
-            <div class="production-card kpi-accent-posted w-full rounded-2xl p-4 transition dark:production-card-dark">
+            <div class="production-card kpi-accent-posted w-full rounded-2xl p-3 transition dark:production-card-dark">
                 <p class="text-xs font-bold uppercase tracking-widest text-slate-400">Diposting</p>
-                <p class="mt-2 text-3xl font-bold leading-none text-emerald-600" data-stat="posted">0</p>
+                <p class="mt-1 text-2xl font-bold leading-none text-emerald-600" data-stat="posted">0</p>
             </div>
-            <div class="production-card kpi-accent-variance w-full rounded-2xl p-4 transition dark:production-card-dark">
+            <div class="production-card kpi-accent-variance w-full rounded-2xl p-3 transition dark:production-card-dark">
                 <p class="text-xs font-bold uppercase tracking-widest text-slate-400">Selisih</p>
-                <p class="mt-2 text-3xl font-bold leading-none text-rose-600" data-stat="variance">0</p>
+                <p class="mt-1 text-2xl font-bold leading-none text-rose-600" data-stat="variance">0</p>
             </div>
             <div class="hidden production-card kpi-accent-cancelled rounded-3xl p-3 transition hover:-translate-y-0.5 hover:shadow-md dark:production-card-dark">
                 <p class="text-xs font-bold uppercase tracking-widest text-slate-400">Dibatalkan</p>
@@ -228,7 +228,7 @@
             </div>
         </section>
 
-        <section class="production-panel rounded-3xl p-0 dark:production-panel-dark lg:p-0">
+        <section class="production-panel rounded-2xl p-0 dark:production-panel-dark lg:p-0">
             <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                     <h3 class="text-xl font-bold uppercase tracking-tight text-slate-900">Bahan Baku Tersedia</h3>
@@ -242,7 +242,7 @@
             </div>
         </section>
 
-        <section class="production-panel rounded-3xl p-3 dark:production-panel-dark lg:p-4">
+        <section class="production-panel rounded-2xl p-3 dark:production-panel-dark lg:p-4">
             <div class="mb-3 mt-3 flex items-center justify-between gap-3">
                 <div>
                     <h3 class="text-xl font-bold uppercase tracking-tight text-[#121212]">Daftar Batch Produksi</h3>

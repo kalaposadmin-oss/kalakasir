@@ -121,7 +121,7 @@
                                 <span class="material-symbols-outlined">monitoring</span>
                                 <span class="text-[10px] font-medium">Laporan</span>
                             </a>
-                            <a class="flex flex-col items-center gap-1 text-slate-400" href="#" data-menu-trigger>
+                            <a class="flex flex-col items-center gap-1 text-slate-400" href="/menu">
                                 <span class="material-symbols-outlined">settings</span>
                                 <span class="text-[10px] font-medium">Pengaturan</span>
                             </a>

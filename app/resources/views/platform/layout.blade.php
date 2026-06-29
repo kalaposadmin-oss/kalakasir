@@ -5,19 +5,19 @@
 @endphp
 
 @section('page_title', $pageTitle ?? 'Platform Admin')
-@section('ui_mode', 'backoffice')
+@section('ui_mode', 'platform')
 @section('body_class', 'bg-slate-50 text-slate-900')
-@section('main_class', 'flex-1 overflow-y-auto bg-slate-50 lg:pl-72')
+@section('main_class', 'flex-1 overflow-y-auto bg-[#f8f9ff] app-bottom-safe-space')
 
 @section('content')
-    <div class="min-h-screen bg-slate-50">
+    <div class="min-h-full bg-[#f8f9ff]">
         @include('platform.partials.sidebar', ['active' => $active ?? 'dashboard'])
         <div data-platform-sidebar-overlay class="fixed inset-0 z-20 hidden bg-slate-950/45 lg:hidden"></div>
 
         <div class="min-h-screen">
             @include('platform.partials.topbar')
 
-            <div class="space-y-6 px-4 py-5 sm:px-6 sm:py-6">
+            <div class="space-y-4 px-4 py-4 sm:px-5">
                 @yield('platform_content')
             </div>
         </div>

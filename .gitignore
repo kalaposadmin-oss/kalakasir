@@ -21,7 +21,6 @@ _upload-ready/
 # Laravel app subtree
 /app/vendor/
 /app/node_modules/
-/app/public/build/
 /app/public/hot
 /app/public/storage
 /app/storage/*.key

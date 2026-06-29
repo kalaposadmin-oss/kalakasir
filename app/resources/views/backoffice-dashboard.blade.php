@@ -50,7 +50,7 @@
         ($canAccessDashboardCustomers && $dashboardCanFeature('customer.manage') ? ['href' => '/backoffice/customers', 'icon' => 'groups', 'label' => 'Pelanggan', 'meta' => 'Data', 'tone' => 'slate'] : null),
         ($dashboardCanFeature('inventory.stock') ? ['href' => '/backoffice/inventory', 'icon' => 'warehouse', 'label' => 'Stok', 'meta' => 'Aktif', 'tone' => 'amber'] : null),
         ($dashboardCanFeature('reports.inventory_view') ? ['href' => '/backoffice/reports/inventory', 'icon' => 'inventory', 'label' => 'Persediaan', 'meta' => 'Laporan', 'tone' => 'indigo'] : null),
-        ($canAccessDashboardPurchases && $dashboardCanFeature('purchase.order') ? ['href' => '/backoffice/purchases/new', 'icon' => 'add_shopping_cart', 'label' => 'PO', 'meta' => 'Beli', 'tone' => 'orange'] : null),
+        ($canManageDashboardPurchases && $dashboardCanFeature('purchase.order') ? ['href' => '/backoffice/purchases/new', 'icon' => 'add_shopping_cart', 'label' => 'PO', 'meta' => 'Beli', 'tone' => 'orange'] : null),
         ($canAccessDashboardPurchases && $dashboardCanFeature('purchase.receive') ? ['href' => '/backoffice/receiving', 'icon' => 'move_to_inbox', 'label' => 'Terima', 'meta' => 'Barang', 'tone' => 'green'] : null),
         ($dashboardCanFeature('reports.summary') ? ['href' => '/backoffice/reports/sales', 'icon' => 'bar_chart', 'label' => 'Penjualan', 'meta' => 'Report', 'tone' => 'blue'] : null),
         ($dashboardCanFeature('finance.summary_basic') ? ['href' => '/backoffice/finance/summary', 'icon' => 'account_balance_wallet', 'label' => 'Keuangan', 'meta' => 'Laba', 'tone' => 'green'] : null),
@@ -64,15 +64,15 @@
 @section('page_title', 'Dashboard Backoffice')
 @section('ui_mode', 'backoffice')
 @section('body_class', 'bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100')
-@section('main_class', 'flex-1 overflow-y-auto pb-8 xl:pl-72')
+@section('main_class', 'flex-1 overflow-y-auto app-bottom-safe-space')
 
 @section('content')
     <header class="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/95">
         <div class="flex min-h-[64px] items-center justify-between gap-4 px-4 py-3 lg:px-8">
             <div class="flex min-w-0 items-center gap-3">
-                <button class="flex size-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 shadow-sm ring-1 ring-slate-200/70 xl:hidden dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700" type="button" aria-label="Buka menu" data-menu-trigger>
-                    <span class="material-symbols-outlined text-[20px]">menu</span>
-                </button>
+                <a class="flex size-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 shadow-sm ring-1 ring-slate-200/70 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700" href="/menu" aria-label="Buka semua menu">
+                    <span class="material-symbols-outlined text-[20px]">apps</span>
+                </a>
                 <div class="min-w-0">
                     <p class="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400">Backoffice</p>
                     <h2 class="truncate text-base font-black text-slate-950 dark:text-slate-100 lg:text-lg">Beranda Operasional</h2>
@@ -138,7 +138,7 @@
                     <span class="hidden text-xs font-semibold text-slate-500 dark:text-slate-400 sm:inline">{{ count($dashboardLauncherItems) }} menu aktif</span>
                 </div>
 
-                <div class="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-6 2xl:grid-cols-8">
+                <div class="grid grid-cols-4 gap-3 sm:grid-cols-5">
                     @foreach ($dashboardLauncherItems as $item)
                         @php($toneClass = $dashboardToneClasses[$item['tone'] ?? 'slate'] ?? $dashboardToneClasses['slate'])
                         <a href="{{ $item['href'] }}" class="backoffice-app-tile group dark:border-slate-800 dark:bg-slate-950/40">
@@ -152,7 +152,7 @@
                 </div>
             </div>
 
-            <div class="grid border-t border-slate-100 dark:border-slate-800 sm:grid-cols-2 xl:grid-cols-4">
+            <div class="grid grid-cols-2 border-t border-slate-100 dark:border-slate-800">
                 <article class="backoffice-mini-kpi">
                     <span class="backoffice-kpi-icon border-emerald-100 bg-emerald-50 text-emerald-600 dark:border-emerald-900/40 dark:bg-emerald-950/25 dark:text-emerald-300">
                         <span class="material-symbols-outlined text-[20px]">payments</span>
@@ -192,7 +192,7 @@
             </div>
         </section>
 
-        <section class="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <section class="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div class="backoffice-home-panel overflow-hidden dark:border-slate-800 dark:bg-slate-900">
                 <div class="flex items-center justify-between border-b border-slate-100 px-4 py-3 dark:border-slate-800 lg:px-5">
                     <div>

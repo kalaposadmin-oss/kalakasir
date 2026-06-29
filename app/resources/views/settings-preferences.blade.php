@@ -41,8 +41,8 @@
 
 @section('content')
     <div class="w-full px-4 py-4 lg:px-8">
-        <div class="grid grid-cols-1 gap-6 xl:grid-cols-3">
-            <div class="space-y-6 xl:col-span-2">
+        <div class="grid grid-cols-1 gap-4 xl:grid-cols-3">
+            <div class="space-y-4 xl:col-span-2">
                 <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                     <h3 class="text-sm font-bold text-slate-900 dark:text-white">Format & Regional</h3>
                     <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">

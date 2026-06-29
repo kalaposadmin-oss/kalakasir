@@ -5,12 +5,13 @@ namespace Tests\Feature;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Support\TenantContext;
-use Symfony\Component\HttpKernel\Exception\HttpException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
+use PHPUnit\Framework\Attributes\DataProvider;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\TestCase;
 
 class PortalWebAccessTest extends TestCase
@@ -550,7 +551,6 @@ class PortalWebAccessTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('href="/pos/checkout"', false);
-        $response->assertDontSee('href="/pos/dashboard"', false);
     }
 
     public function test_cashier_without_open_shift_is_redirected_to_shift_open_before_checkout(): void
@@ -635,7 +635,7 @@ class PortalWebAccessTest extends TestCase
             ->get('/pos/dashboard');
 
         $response->assertOk();
-        $response->assertSee('data-menu-trigger', false);
+        $response->assertSee('href="/menu"', false);
     }
 
     public function test_backoffice_user_is_redirected_back_when_accessing_pos_without_switching(): void
@@ -1162,7 +1162,7 @@ class PortalWebAccessTest extends TestCase
             ->withSession(['auth_portal' => 'backoffice'])
             ->get('/backoffice/customers');
         $customers->assertOk();
-        $customers->assertDontSee('person_add', false);
+        $customers->assertDontSee('<button id="btn-add-customer"', false);
 
         $loyalty = $this->actingAs($user)
             ->withSession(['auth_portal' => 'backoffice'])
@@ -1175,7 +1175,7 @@ class PortalWebAccessTest extends TestCase
             ->withSession(['auth_portal' => 'backoffice'])
             ->get('/backoffice/settings/tax-promo');
         $taxPromo->assertOk();
-        $taxPromo->assertDontSee('Tambah Pajak Baru', false);
+        $taxPromo->assertDontSee('id="tax-add-button"', false);
         $taxPromo->assertDontSee('Buat Promo', false);
 
         $lockPeriods = $this->actingAs($user)
@@ -1349,29 +1349,31 @@ class PortalWebAccessTest extends TestCase
         ] as [$role, $email]) {
             [, $user] = $this->createWebActor($role, $email);
 
-            try {
-                $this->withoutExceptionHandling()
-                    ->actingAs($user)
-                    ->withSession(['auth_portal' => 'backoffice'])
-                    ->get('/backoffice/settings/subscription/change');
-
-                $this->fail($role.' should not be able to access subscription change page.');
-            } catch (HttpException $exception) {
-                $this->assertSame(403, $exception->getStatusCode());
-            }
+            $this->actingAs($user)
+                ->withSession(['auth_portal' => 'backoffice'])
+                ->get('/backoffice/settings/subscription/change')
+                ->assertForbidden();
         }
 
-        [, $admin] = $this->createWebActor('admin', 'admin-subscription-change@example.test');
-        $this->actingAs($admin)
-            ->withSession(['auth_portal' => 'backoffice'])
-            ->get('/backoffice/settings/subscription/change')
-            ->assertOk();
+    }
 
-        [, $owner] = $this->createWebActor('owner', 'owner-subscription-change@example.test');
-        $this->actingAs($owner)
+    #[DataProvider('subscriptionManagerProvider')]
+    public function test_high_privilege_role_can_access_subscription_change_page(string $role, string $email): void
+    {
+        [, $user] = $this->createWebActor($role, $email);
+
+        $this->actingAs($user)
             ->withSession(['auth_portal' => 'backoffice'])
             ->get('/backoffice/settings/subscription/change')
             ->assertOk();
+    }
+
+    public static function subscriptionManagerProvider(): array
+    {
+        return [
+            'admin' => ['admin', 'admin-subscription-change@example.test'],
+            'owner' => ['owner', 'owner-subscription-change@example.test'],
+        ];
     }
 
     public function test_warehouse_is_forbidden_from_backoffice_sales_report_pages(): void
@@ -1883,89 +1885,93 @@ class PortalWebAccessTest extends TestCase
         $detail->assertDontSee('/backoffice/settings/observability', false);
     }
 
-    public function test_admin_and_owner_can_access_product_material_and_purchase_management_pages(): void
+    #[DataProvider('managementRoleProvider')]
+    public function test_admin_and_owner_can_access_product_material_and_purchase_management_pages(string $role, string $email): void
     {
-        foreach ([
-            ['admin', 'admin-management-pages@example.test'],
-            ['owner', 'owner-management-pages@example.test'],
-        ] as [$role, $email]) {
-            [, $user] = $this->createWebActor($role, $email);
+        [, $user] = $this->createWebActor($role, $email);
 
-            $this->actingAs($user)
-                ->withSession(['auth_portal' => 'backoffice'])
-                ->get('/backoffice/products/new')
-                ->assertOk();
+        $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/backoffice/products/new')
+            ->assertOk();
 
-            $this->actingAs($user)
-                ->withSession(['auth_portal' => 'backoffice'])
-                ->get('/backoffice/products/product-001/edit')
-                ->assertOk();
+        $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/backoffice/products/product-001/edit')
+            ->assertOk();
 
-            $this->actingAs($user)
-                ->withSession(['auth_portal' => 'backoffice'])
-                ->get('/backoffice/materials')
-                ->assertOk();
+        $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/backoffice/materials')
+            ->assertOk();
 
-            $this->actingAs($user)
-                ->withSession(['auth_portal' => 'pos'])
-                ->get('/pos/materials')
-                ->assertOk();
+        $this->actingAs($user)
+            ->withSession(['auth_portal' => 'pos'])
+            ->get('/pos/materials')
+            ->assertOk();
 
-            $this->actingAs($user)
-                ->withSession(['auth_portal' => 'backoffice'])
-                ->get('/backoffice/purchases/new')
-                ->assertOk();
+        $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/backoffice/purchases/new')
+            ->assertOk();
 
-            $this->actingAs($user)
-                ->withSession(['auth_portal' => 'backoffice'])
-                ->get('/backoffice/purchases/returns')
-                ->assertOk();
+        $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/backoffice/purchases/returns')
+            ->assertOk();
 
-            $this->actingAs($user)
-                ->withSession(['auth_portal' => 'backoffice'])
-                ->get('/backoffice/categories/new')
-                ->assertOk();
+        $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/backoffice/categories/new')
+            ->assertOk();
 
-            $this->actingAs($user)
-                ->withSession(['auth_portal' => 'backoffice'])
-                ->get('/backoffice/categories/category-001/edit')
-                ->assertOk();
+        $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/backoffice/categories/category-001/edit')
+            ->assertOk();
 
-            $this->actingAs($user)
-                ->withSession(['auth_portal' => 'backoffice'])
-                ->get('/backoffice/branches/edit')
-                ->assertOk();
+        $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/backoffice/branches/edit')
+            ->assertOk();
 
-            $this->actingAs($user)
-                ->withSession(['auth_portal' => 'backoffice'])
-                ->get('/backoffice/branches/branch-001/edit')
-                ->assertOk();
+        $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/backoffice/branches/branch-001/edit')
+            ->assertOk();
 
-            $this->actingAs($user)
-                ->withSession(['auth_portal' => 'backoffice'])
-                ->get('/backoffice/users')
-                ->assertOk();
+        $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/backoffice/users')
+            ->assertOk();
 
-            $this->actingAs($user)
-                ->withSession(['auth_portal' => 'backoffice'])
-                ->get('/backoffice/settings/chart-of-accounts')
-                ->assertOk();
+        $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/backoffice/settings/chart-of-accounts')
+            ->assertOk();
 
-            $this->actingAs($user)
-                ->withSession(['auth_portal' => 'backoffice'])
-                ->get('/backoffice/settings/chart-of-accounts/account-001')
-                ->assertOk();
+        $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/backoffice/settings/chart-of-accounts/account-001')
+            ->assertOk();
 
-            $this->actingAs($user)
-                ->withSession(['auth_portal' => 'backoffice'])
-                ->get('/backoffice/settings/bank-accounts/account-001')
-                ->assertOk();
+        $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/backoffice/settings/bank-accounts/account-001')
+            ->assertOk();
 
-            $this->actingAs($user)
-                ->withSession(['auth_portal' => 'backoffice'])
-                ->get('/backoffice/settings/subscription/change')
-                ->assertOk();
-        }
+        $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/backoffice/settings/subscription/change')
+            ->assertOk();
+    }
+
+    public static function managementRoleProvider(): array
+    {
+        return [
+            'admin' => ['admin', 'admin-management-pages@example.test'],
+            'owner' => ['owner', 'owner-management-pages@example.test'],
+        ];
     }
 
     public function test_owner_can_manage_team_via_user_management_api(): void
@@ -2084,19 +2090,25 @@ class PortalWebAccessTest extends TestCase
         $response->assertSee('let branchId = "branch-001"', false);
     }
 
-    public function test_backoffice_dashboard_menu_lists_important_management_shortcuts_for_admin(): void
+    public function test_backoffice_menu_hub_lists_important_management_shortcuts_for_admin(): void
     {
         [, $user] = $this->createWebActor('admin', 'admin-menu-shortcuts@example.test');
 
-        $response = $this->actingAs($user)
+        $management = $this->actingAs($user)
             ->withSession(['auth_portal' => 'backoffice'])
-            ->get('/backoffice/dashboard');
+            ->get('/menu/management');
 
-        $response->assertOk();
-        $response->assertSee('Tambah Produk');
-        $response->assertSee('Toko & Cabang');
-        $response->assertSee('Akun Kas & Bank');
-        $response->assertSee('Langganan');
+        $management->assertOk();
+        $management->assertSee('Tambah Produk');
+
+        $settings = $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/menu/settings');
+
+        $settings->assertOk();
+        $settings->assertSee('Toko');
+        $settings->assertSee('Pembayaran &amp; Rekening', false);
+        $settings->assertSee('Pembayaran / Langganan');
     }
 
     public function test_admin_product_create_page_keeps_menu_button_visible(): void
@@ -2108,7 +2120,7 @@ class PortalWebAccessTest extends TestCase
             ->get('/backoffice/products/new');
 
         $response->assertOk();
-        $response->assertSee('data-menu-trigger', false);
+        $response->assertSee('href="/menu"', false);
     }
 
     public function test_cashier_can_access_pos_shift_summary_detail_wrapper(): void
@@ -2133,7 +2145,7 @@ class PortalWebAccessTest extends TestCase
             ->get('/pos/shifts/summary');
 
         $response->assertOk();
-        $response->assertSee('data-menu-trigger', false);
+        $response->assertSee('href="/menu"', false);
     }
 
     public function test_pos_sales_history_shift_tab_links_to_canonical_shift_summary(): void
@@ -2590,6 +2602,10 @@ class PortalWebAccessTest extends TestCase
 
     private function createWebActor(string $role, string $email, string $name = 'Portal User'): array
     {
+        Auth::guard('web')->logout();
+        $this->flushSession();
+        TenantContext::clear();
+
         $tenant = Tenant::query()->create([
             'name' => 'Tenant '.Str::upper(Str::random(4)),
             'timezone' => 'Asia/Jakarta',

@@ -40,12 +40,12 @@ class WebSettingsFinanceSmokeTest extends TestCase
         $this->assertStringContainsString('Tambah Pajak Baru', $contents);
     }
 
-    public function test_menu_drawer_uses_live_settings_keys_for_users_and_tax_entries(): void
+    public function test_menu_hub_uses_live_settings_keys_for_users_and_tax_entries(): void
     {
-        $contents = file_get_contents(resource_path('views/partials/menu-drawer.blade.php'));
+        $contents = file_get_contents(app_path('Http/Controllers/Web/MenuController.php'));
 
-        $this->assertStringContainsString("canFeature('settings.staff_basic')", $contents);
-        $this->assertStringContainsString("canFeature('settings.tax')", $contents);
+        $this->assertStringContainsString("'feature' => 'settings.staff_basic'", $contents);
+        $this->assertStringContainsString("'feature' => 'settings.tax'", $contents);
         $this->assertStringNotContainsString('settings.roles_permissions', $contents);
         $this->assertStringNotContainsString('settings.promo_default', $contents);
     }
@@ -118,7 +118,7 @@ class WebSettingsFinanceSmokeTest extends TestCase
         $middleware = $route->gatherMiddleware();
         $postMiddleware = $postRoute->gatherMiddleware();
         $contents = file_get_contents(resource_path('views/payment-settings.blade.php'));
-        $menuContents = file_get_contents(resource_path('views/partials/menu-drawer.blade.php'));
+        $menuContents = file_get_contents(app_path('Http/Controllers/Web/MenuController.php'));
 
         $this->assertContains('web_access:backoffice,admin|owner|superadmin,finance.bank_accounts', $middleware);
         $this->assertContains('web_access:backoffice,admin|owner|superadmin,finance.bank_accounts', $postMiddleware);
@@ -141,7 +141,7 @@ class WebSettingsFinanceSmokeTest extends TestCase
         $draftMiddleware = $draftRoute->gatherMiddleware();
         $historyMiddleware = $historyRoute->gatherMiddleware();
         $contents = file_get_contents(resource_path('views/opening-balance.blade.php'));
-        $menuContents = file_get_contents(resource_path('views/partials/menu-drawer.blade.php'));
+        $menuContents = file_get_contents(app_path('Http/Controllers/Web/MenuController.php'));
 
         $this->assertContains('canonical_portal_host:backoffice', $middleware);
         $this->assertContains('web_access:backoffice,admin|owner|superadmin,finance.bank_accounts', $middleware);

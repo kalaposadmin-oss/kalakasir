@@ -13,7 +13,6 @@ class WebDashboardSmokeTest extends TestCase
         $route = Route::getRoutes()->match(Request::create('/pos/dashboard', 'GET'));
         $middleware = $route->gatherMiddleware();
         $contents = file_get_contents(resource_path('views/pos-dashboard.blade.php'));
-        $menuDrawerContents = file_get_contents(resource_path('views/partials/menu-drawer.blade.php'));
 
         $this->assertContains('web_access:pos,cashier|staff|warehouse|supervisor|admin|owner|superadmin,dash.overview', $middleware);
         $this->assertTrue(view()->exists('pos-dashboard'));
@@ -24,9 +23,7 @@ class WebDashboardSmokeTest extends TestCase
         $this->assertStringContainsString('/pos/shifts/close', $contents);
         $this->assertStringContainsString('pos-period-closing-reminder', $contents);
         $this->assertStringContainsString('/api/v1/lock-periods/assistant', $contents);
-        $this->assertStringContainsString('$posPortalOriginPath = $menuCurrentPath !== \'/\' ? normalize_pos_home_url($menuCurrentPath) : $posHomeHref;', $menuDrawerContents);
-        $this->assertStringContainsString('\'href\' => $posBackofficeHref(\'/backoffice/products\')', $menuDrawerContents);
-        $this->assertStringContainsString('\'href\' => $posBackofficeHref(\'/backoffice/dashboard\')', $menuDrawerContents);
+        $this->assertStringContainsString('href="/menu"', $contents);
     }
 
     public function test_backoffice_dashboard_route_and_view_expose_primary_navigation(): void

@@ -32,13 +32,13 @@
 @section('page_title', ($loginTitle ?? 'Login') . ' - POS Inventory System')
 @section('ui_mode', 'auth')
 @section('body_class', 'bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100')
-@section('app_shell_class', $isBackofficeLogin ? 'relative flex min-h-screen w-full flex-col overflow-hidden bg-slate-50 dark:bg-background-dark' : 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-white dark:bg-background-dark shadow-2xl')
+@section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[768px] flex-col overflow-hidden bg-[#f8f9ff] dark:bg-background-dark shadow-2xl')
 @section('main_class', $isBackofficeLogin ? 'flex-1 overflow-y-auto p-0 bg-slate-50 dark:bg-background-dark' : 'flex-1 overflow-y-auto p-0')
 
 @section('content')
     @if ($isBackofficeLogin)
-        <div class="grid min-h-screen bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-slate-100 lg:grid-cols-[minmax(0,1.05fr)_minmax(480px,0.95fr)]">
-            <section class="hidden border-r border-slate-200 bg-white px-10 py-8 dark:border-slate-800 dark:bg-slate-950 lg:flex lg:flex-col">
+        <div class="min-h-screen bg-[#f8f9ff] text-slate-950 dark:bg-slate-950 dark:text-slate-100">
+            <section class="hidden">
                 <div class="flex items-center justify-between gap-4">
                     <a class="flex items-center gap-3" href="/backoffice">
                         <span class="flex size-11 items-center justify-center rounded-lg bg-primary text-base font-black text-white shadow-sm shadow-primary/25">K</span>
@@ -97,9 +97,9 @@
                 </div>
             </section>
 
-            <section class="flex min-h-screen items-center justify-center px-5 py-8 sm:px-8 lg:px-12">
+            <section class="flex min-h-screen items-center justify-center px-5 py-8 sm:px-8">
                 <div class="w-full max-w-[460px]">
-                    <div class="mb-8 lg:hidden">
+                    <div class="mb-6">
                         <div class="flex items-center justify-between gap-4">
                             <a class="flex items-center gap-3" href="/backoffice">
                                 <span class="flex size-10 items-center justify-center rounded-lg bg-primary text-sm font-black text-white">K</span>
@@ -114,7 +114,7 @@
                         </div>
                     </div>
 
-                    <div class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-8">
+                    <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-6">
                         <div class="mb-7">
                             @if ($portalLabel)
                                 <span class="{{ $portalBadgeClass }}">{{ $portalLabel }}</span>

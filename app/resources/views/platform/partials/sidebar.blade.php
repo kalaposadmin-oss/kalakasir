@@ -14,7 +14,7 @@
     ];
 @endphp
 
-<aside data-platform-sidebar class="fixed left-0 top-0 z-30 flex h-screen w-72 -translate-x-full flex-col border-r border-slate-200 bg-white px-5 py-6 shadow-2xl transition-transform duration-200 lg:translate-x-0 lg:shadow-none">
+<aside data-platform-sidebar class="fixed left-0 top-0 z-30 flex h-screen w-72 -translate-x-full flex-col border-r border-slate-200 bg-white px-5 py-6 shadow-2xl transition-transform duration-200 ">
     <div class="flex items-center justify-between gap-3">
         <div class="flex items-center gap-3">
             <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
@@ -26,7 +26,7 @@
             </div>
         </div>
 
-        <button type="button" data-platform-sidebar-close class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:bg-slate-50 lg:hidden" aria-label="Tutup menu platform">
+        <button type="button" data-platform-sidebar-close class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:bg-slate-50" aria-label="Tutup menu platform">
             <span class="material-symbols-outlined text-[20px]">close</span>
         </button>
     </div>

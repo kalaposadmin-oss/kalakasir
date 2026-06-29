@@ -53,7 +53,7 @@
 @endsection
 
 @section('content')
-    <div class="bg-white dark:bg-background-dark px-4 py-4 space-y-4">
+    <div class="space-y-3 bg-[#f8f9ff] px-4 py-4">
         <div class="flex gap-2">
             <label class="flex flex-1 min-w-40 h-12">
                 <div class="flex w-full flex-1 items-stretch rounded-xl h-full bg-slate-100 dark:bg-slate-800/50">
@@ -96,7 +96,7 @@
             </a>
         </div>
     </div>
-    <div id="inventory-list" class="flex-1 overflow-y-auto pb-24 app-bottom-safe-space"></div>
+    <div id="inventory-list" class="grid grid-cols-1 gap-3 px-4 pb-24 sm:grid-cols-2 app-bottom-safe-space"></div>
         <script>
             (() => {
                 const tenantId = document.querySelector('meta[name="tenant-id"]').content;
@@ -219,7 +219,7 @@
 
                         const card = document.createElement('a');
                         card.href = buildInventoryDetailUrl(product.id);
-                        card.className = 'flex items-center gap-4 bg-white dark:bg-background-dark px-4 py-4 border-b border-slate-50 dark:border-slate-800/50 active:bg-slate-50 dark:active:bg-slate-900/70 transition-colors';
+                        card.className = 'app-card flex items-center gap-3 p-3 transition-colors active:bg-slate-50';
                         card.innerHTML = `
                             <div class="bg-center bg-no-repeat aspect-square bg-cover rounded-lg size-14 bg-slate-100 dark:bg-slate-800" style="background-image: url('${image}')"></div>
                             <div class="flex flex-col flex-1">

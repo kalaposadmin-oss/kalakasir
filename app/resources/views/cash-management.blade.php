@@ -71,9 +71,9 @@
                 <h1 class="truncate text-lg font-bold leading-tight tracking-tight text-slate-900 dark:text-slate-100">Kas</h1>
                 <p class="text-[11px] font-medium text-slate-500 dark:text-slate-400">Kas masuk & kas keluar</p>
             </div>
-            <button class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300" type="button" aria-label="Menu" data-menu-trigger>
-                <span class="material-symbols-outlined">menu</span>
-            </button>
+            <a class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300" href="/menu" aria-label="Buka semua menu">
+                <span class="material-symbols-outlined">apps</span>
+            </a>
         </div>
     </header>
 @endsection

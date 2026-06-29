@@ -116,9 +116,9 @@
 @section('header')
     <header class="sticky top-0 z-30 border-b border-slate-200 bg-white px-4 pt-4 pb-3" data-auto-center-title="true">
         <div class="flex items-center gap-2.5">
-            <button class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600" type="button" data-menu-trigger>
-                <span class="material-symbols-outlined text-xl">menu</span>
-            </button>
+            <a class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600" href="/menu" aria-label="Buka semua menu">
+                <span class="material-symbols-outlined text-xl">apps</span>
+            </a>
             <div class="relative min-w-0 flex-1">
                 <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-lg text-slate-400">search</span>
                 <input id="search-input" class="w-full rounded-full border-none bg-slate-100 py-2.5 pl-10 pr-4 text-sm focus:ring-2 focus:ring-primary" placeholder="Cari produk atau scan..." type="text" />

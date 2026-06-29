@@ -85,6 +85,15 @@ Untuk verifikasi manual yang konsisten, util lokal `scripts/dev/ensure_portal_qa
 - php artisan serve
 - npm run dev
 
+## Git dan Deployment Hosting
+
+- Jalankan `npm ci && npm run build` sebelum commit perubahan UI.
+- Folder `public/build` sengaja ikut Git karena workflow hosting produksi menyalin artifact tersebut tanpa menjalankan Node.js di server.
+- Jangan commit `.env`, database lokal, log, cache, `vendor`, atau `node_modules`.
+- Gunakan `.env.hosting.example` sebagai template konfigurasi server dan isi rahasia hanya melalui `.env` hosting/GitHub Secrets.
+- Sebelum push, jalankan `php artisan route:cache`, `php artisan view:cache`, dan test terkait. Setelah validasi lokal, jalankan `php artisan optimize:clear` agar cache lokal tidak ikut memengaruhi pemeriksaan berikutnya.
+- Deploy branch `main` menggunakan `.github/workflows/deploy.yml`; workflow akan memasang dependency produksi, migrasi, menyalin asset build, membuat cache Laravel, dan me-restart queue.
+
 ## Validasi Web Frontend
 
 - Build production frontend:
