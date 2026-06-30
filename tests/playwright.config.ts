@@ -1,6 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:8000';
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8000';
 
 export default defineConfig({
   testDir: './e2e',
@@ -18,24 +18,22 @@ export default defineConfig({
 
   projects: [
     {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      name: 'mobile-chromium',
+      use: { ...devices['Pixel 7'] },
     },
     {
-      name: 'firefox',
-      use: { ...devices['Desktop Firefox'] },
-    },
-    {
-      name: 'webkit',
-      use: { ...devices['Desktop Safari'] },
+      name: 'tablet-chromium',
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 768, height: 1024 },
+      },
     },
   ],
 
-  webServer: process.env.CI
-    ? undefined
-    : {
-        command: 'cd app && php artisan serve',
-        url: BASE_URL,
-        reuseExistingServer: true,
-      },
+  webServer: {
+    command: 'cd ../app && php artisan serve --host=127.0.0.1 --port=8000',
+    url: `${BASE_URL}/up`,
+    reuseExistingServer: !process.env.CI,
+    timeout: 120_000,
+  },
 });

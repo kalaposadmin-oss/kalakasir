@@ -1,6 +1,6 @@
 # E2E Tests
 
-End-to-end tests for KASIRR using Playwright.
+Smoke end-to-end untuk shell mobile/tablet KalaKasir menggunakan Playwright.
 
 ## Structure
 
@@ -23,8 +23,11 @@ tests/e2e/
 
 ## Running Tests
 
+Jalankan dari folder `tests`.
+
 ### Run all tests
 ```bash
+npm ci
 npm run test:e2e
 ```
 
@@ -75,8 +78,7 @@ Tests use `data-testid` attributes for element selection. Ensure these are added
 
 The tests can be configured via environment variables:
 
-- `BASE_URL` - Base URL for the application (default: `http://localhost:3000`)
-- `TEST_TENANT` - Test tenant identifier (default: `test-tenant`)
+- `PLAYWRIGHT_BASE_URL` - Base URL aplikasi (default: `http://127.0.0.1:8000`)
 
 ## CI Integration
 
