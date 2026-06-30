@@ -54,7 +54,7 @@
 
 @section('content')
     <div class="w-full px-4 py-4 lg:px-8">
-        <div class="mx-auto max-w-7xl space-y-6">
+    <div class="mx-auto w-full space-y-4 p-4">
             <section class="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
                 <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                     <div class="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-primary">

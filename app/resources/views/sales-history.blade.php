@@ -94,9 +94,9 @@
                 <div class="min-w-0 flex-1">
                     <h2 class="truncate text-lg font-bold leading-tight tracking-tight text-slate-900 dark:text-slate-100">{{ $pageTitle }}</h2>
                 </div>
-                <button class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300" type="button" aria-label="Menu" data-menu-trigger>
-                    <span class="material-symbols-outlined">menu</span>
-                </button>
+                <a class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300" href="/menu" aria-label="Buka semua menu">
+                    <span class="material-symbols-outlined">apps</span>
+                </a>
             </div>
         </header>
     @else

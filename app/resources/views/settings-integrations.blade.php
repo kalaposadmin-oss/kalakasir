@@ -44,7 +44,7 @@
 @endsection
 
 @section('content')
-    <div class="w-full px-4 py-4 lg:px-8 space-y-6">
+    <div class="w-full space-y-4 p-4">
         <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div class="mb-4 flex items-center justify-between">
                 <h3 class="text-sm font-bold text-slate-900 dark:text-white">Metode Pembayaran (Payment Gateway)</h3>

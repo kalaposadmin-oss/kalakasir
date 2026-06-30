@@ -13,11 +13,11 @@
     --font-display: ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
         'Noto Color Emoji';
     --font-receipt: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
-    --color-primary: #F97316; --color-primary-dark: #EA580C;
-    --color-secondary: #FB923C; --color-secondary-light: #FED7AA; --color-secondary-lightest: #FFF7ED;
+    --color-primary: #1E3A8A; --color-primary-dark: #172E70;
+    --color-secondary: #006590; --color-secondary-light: #C8E6FF; --color-secondary-lightest: #EFF4FF;
     --color-accent: #22C55E; --color-accent-light: #DCFCE7;
     --color-warning: #F59E0B; --color-warning-light: #FEF3C7; --color-danger: #EF4444; --color-danger-light: #FEE2E2;
-    --color-background-light: #f6f6f8;
+    --color-background-light: #f8f9ff;
     --color-background-dark: #101622;
     --radius-lg: 0.5rem;
     --radius-xl: 0.75rem;
@@ -97,7 +97,7 @@
     }
 
     .app-search-control:focus {
-        box-shadow: inset 0 0 0 1px var(--color-primary), 0 0 0 3px rgb(249 115 22 / 0.12);
+        box-shadow: inset 0 0 0 1px var(--color-primary), 0 0 0 3px rgb(30 58 138 / 0.12);
         outline: 2px solid transparent;
         outline-offset: 2px;
     }
@@ -125,7 +125,7 @@
         color: #fff;
         font-size: 0.875rem;
         font-weight: 700;
-        box-shadow: 0 8px 18px rgb(249 115 22 / 0.18);
+        box-shadow: 0 8px 18px rgb(30 58 138 / 0.18);
     }
 
     .app-secondary-button {
@@ -171,7 +171,7 @@
     .form-textarea:focus,
     .form-multiselect:focus {
         border-color: var(--color-primary);
-        box-shadow: 0 0 0 3px rgb(249 115 22 / 0.14);
+        box-shadow: 0 0 0 3px rgb(30 58 138 / 0.14);
         outline: 2px solid transparent;
         outline-offset: 2px;
     }
@@ -223,14 +223,14 @@
         border-radius: 0.875rem;
         padding: 0.625rem 1rem;
         font-weight: 700;
-        box-shadow: 0 8px 18px rgb(249 115 22 / 0.18);
+        box-shadow: 0 8px 18px rgb(30 58 138 / 0.18);
         transition: all 0.2s ease;
     }
 
     .levia-btn-primary:hover {
         background-color: var(--color-primary-dark);
         transform: translateY(-1px);
-        box-shadow: 0 10px 20px rgb(249 115 22 / 0.25);
+        box-shadow: 0 10px 20px rgb(30 58 138 / 0.25);
     }
 
     .levia-btn-secondary {
@@ -257,7 +257,7 @@
     }
 
     .levia-card:hover {
-        box-shadow: 0 8px 16px rgb(249 115 22 / 0.1);
+        box-shadow: 0 8px 16px rgb(30 58 138 / 0.1);
         transform: translateY(-2px);
     }
 
@@ -348,11 +348,6 @@
     box-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
 }
 
-html.menu-open,
-html.menu-open body {
-    overflow: hidden;
-}
-
 .app-shell-backoffice {
     --app-page-bg: #f6f8fb;
     color: #0f172a;
@@ -416,14 +411,14 @@ html.menu-open body {
 }
 
 .backoffice-action-link:hover {
-    border-color: rgb(249 115 22 / 0.45);
+    border-color: rgb(30 58 138 / 0.35);
     box-shadow: 0 8px 20px rgb(15 23 42 / 0.08);
     transform: translateY(-1px);
 }
 
 .backoffice-home-panel {
-    border: 1px solid #e2e8f0;
-    border-radius: 0.5rem;
+    border: 1px solid #e2e6f2;
+    border-radius: 1rem;
     background: #fff;
     box-shadow: 0 1px 2px rgb(15 23 42 / 0.05);
 }
@@ -465,31 +460,31 @@ html.menu-open body {
 }
 
 .backoffice-kpi-icon {
-    width: 2.25rem;
-    height: 2.25rem;
+    width: 2.75rem;
+    height: 2.75rem;
 }
 
 .backoffice-app-tile {
     display: flex;
-    min-height: 5.75rem;
+    min-height: 6.5rem;
     min-width: 0;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     border: 1px solid #e2e8f0;
-    border-radius: 0.5rem;
+    border-radius: 1rem;
     background: #fff;
     padding: 0.75rem 0.5rem;
     transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
 }
 
 .backoffice-app-icon {
-    width: 2.5rem;
-    height: 2.5rem;
+    width: 2.75rem;
+    height: 2.75rem;
 }
 
 .backoffice-app-tile:hover {
-    border-color: rgb(249 115 22 / 0.35);
+    border-color: rgb(30 58 138 / 0.30);
     box-shadow: 0 8px 18px rgb(15 23 42 / 0.07);
     transform: translateY(-1px);
 }
@@ -576,9 +571,8 @@ html.menu-open body {
         padding: 0.875rem;
     }
 
-    .backoffice-page > .grid,
-    .app-shell-backoffice main section.grid,
-    .app-shell-backoffice main form .grid {
+    .backoffice-page > .grid:not(.grid-cols-2),
+    .app-shell-backoffice main form .grid:not(.grid-cols-2) {
         grid-template-columns: minmax(0, 1fr) !important;
     }
 
@@ -607,5 +601,62 @@ html.menu-open body {
     .app-shell-backoffice button,
     .app-shell-backoffice a[class*="px-"] {
         min-height: 2.5rem;
+    }
+}
+/* Mobile/tablet product design system */
+@layer components {
+    .app-mobile-page { min-height: 100%; background: #f8f9ff; color: #111c2d; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+    .app-compact-card { border: 1px solid #e2e6f2; border-radius: 1rem; background: #fff; padding: .875rem; box-shadow: 0 2px 5px rgb(17 28 45 / .05); }
+    .app-hub-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .75rem; }
+    .app-hub-tile { display:flex; min-width:0; min-height:6.75rem; flex-direction:column; justify-content:space-between; border:1px solid #e2e6f2; border-radius:1rem; background:#fff; padding:.875rem; color:#111c2d; box-shadow:0 2px 5px rgb(17 28 45 / .05); transition:transform 140ms ease,border-color 140ms ease; }
+    .app-hub-tile:active { transform:scale(.98); }
+    .app-hub-icon { display:inline-flex; width:2.75rem; height:2.75rem; align-items:center; justify-content:center; border-radius:.75rem; background:#eff4ff; color:#1e3a8a; }
+    .app-hub-icon .material-symbols-outlined { width:auto; height:auto; overflow:visible; font-size:1.55rem; font-variation-settings:'FILL' 1,'wght' 500,'GRAD' 0,'opsz' 28; }
+    .app-global-bottom-nav { position:absolute; right:0; bottom:0; left:0; z-index:45; display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); border-top:1px solid #e2e6f2; border-radius:1.5rem 1.5rem 0 0; background:rgb(255 255 255 / .97); padding:.5rem .75rem max(.65rem,env(safe-area-inset-bottom)); box-shadow:0 -10px 30px rgb(17 28 45 / .09); backdrop-filter:blur(18px); }
+    .app-global-bottom-item { display:flex; min-width:0; min-height:3.35rem; flex-direction:column; align-items:center; justify-content:center; gap:.15rem; border-radius:.9rem; color:#8b94ae; font-size:.625rem; font-weight:800; }
+    .app-global-bottom-item.is-active { color:#1e3a8a; }
+    .app-global-bottom-item .material-symbols-outlined { width:auto; height:auto; overflow:visible; font-size:1.5rem; }
+    @media (min-width:640px) { .app-hub-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+}
+/* Backoffice compact icon correction */
+.backoffice-app-icon .material-symbols-outlined,
+.backoffice-kpi-icon .material-symbols-outlined {
+    width: auto;
+    height: auto;
+    overflow: visible;
+    font-size: 1.55rem !important;
+    font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 28;
+}
+
+/* Consistent compact density across all managed mobile/tablet portals. */
+:is(.app-shell-backoffice, .app-shell-platform) main {
+    color: #111c2d;
+}
+
+:is(.app-shell-backoffice, .app-shell-platform) main :is(.p-5, .p-6) {
+    padding: 0.875rem;
+}
+
+:is(.app-shell-backoffice, .app-shell-platform) main :is(.gap-6, .gap-5) {
+    gap: 1rem;
+}
+
+:is(.app-shell-backoffice, .app-shell-platform) main .material-symbols-outlined {
+    overflow: visible;
+}
+
+@media (max-width: 767px) {
+    :is(.app-shell-backoffice, .app-shell-platform) main :is(.space-y-6, .space-y-5) > :not([hidden]) ~ :not([hidden]) {
+        margin-top: 1rem;
+    }
+
+    :is(.app-shell-backoffice, .app-shell-platform) main :is(h1, h2).text-3xl {
+        font-size: 1.5rem;
+        line-height: 2rem;
+    }
+
+    :is(.app-shell-backoffice, .app-shell-platform) main :is(h1, h2).text-2xl {
+        font-size: 1.25rem;
+        line-height: 1.75rem;
     }
 }

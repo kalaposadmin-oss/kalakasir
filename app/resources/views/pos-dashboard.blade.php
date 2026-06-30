@@ -26,9 +26,9 @@
 @endphp
 
 @section('page_title', 'Dashboard POS')
-@section('body_class', 'bg-background-light dark:bg-background-dark font-display text-slate-800 dark:text-slate-100 antialiased')
-@section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-background-light dark:bg-background-dark shadow-2xl')
-@section('main_class', 'flex-1 overflow-y-auto pb-24')
+@section('body_class', 'bg-[#f8f9ff] font-display text-slate-900 antialiased')
+@section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[768px] flex-col overflow-hidden bg-[#f8f9ff] shadow-2xl')
+@section('main_class', 'flex-1 overflow-y-auto pb-28')
 @php($bottom_nav = 'dashboard')
 
 @push('head')
@@ -136,19 +136,38 @@
                 grid-template-columns: repeat(3, minmax(0, 1fr));
             }
         }
+        .pos-home-screen{--pos-blue:#1e3a8a;--pos-ink:#111c2d;--pos-line:#e2e6f2;min-height:100%;color:var(--pos-ink);font-family:Inter,ui-sans-serif,system-ui,sans-serif;background:#f8f9ff}
+        .pos-home-screen .text-primary{color:var(--pos-blue)!important}.pos-home-screen .bg-primary{background-color:var(--pos-blue)!important}
+        .pos-home-header{background:rgb(248 249 255/.92);box-shadow:0 1px 0 rgb(199 196 216/.35);backdrop-filter:blur(18px)}
+        .pos-home-screen .pos-home-card,.pos-home-screen .pos-metric-card,.pos-home-screen .pos-app-tile{border-color:var(--pos-line);border-radius:1rem;box-shadow:0 2px 5px rgb(17 28 45/.05)}
+        .pos-home-screen .pos-main-action{background:linear-gradient(135deg,var(--pos-blue),#273cf3 65%,#5b5cf6)!important;box-shadow:0 12px 24px rgb(53 72 245/.24)}
+        .pos-home-content>.pos-summary-grid{order:1}.pos-home-content>.pos-quick-section{order:2}.pos-home-content>.pos-shift-section{order:3}.pos-home-content>.pos-dashboard-widgets{order:4}
+        .pos-home-screen .pos-metric-card{min-height:5.75rem;padding:.8rem}.pos-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+        .pos-summary-grid>.pos-metric-card:not(.pos-sales-hero){display:grid;grid-template-columns:2.75rem minmax(0,1fr);grid-template-rows:auto auto;column-gap:.7rem;align-items:center}
+        .pos-summary-grid>.pos-metric-card:not(.pos-sales-hero)>.material-symbols-outlined{grid-row:1/3;display:flex!important;width:2.75rem!important;height:2.75rem!important;align-items:center;justify-content:center;overflow:visible!important;padding:0!important;font-size:1.55rem!important;font-variation-settings:'FILL' 1,'wght' 500,'GRAD' 0,'opsz' 28}
+        .pos-summary-grid>.pos-metric-card:not(.pos-sales-hero)>p{margin-top:0!important;line-height:1.2}.pos-summary-grid>.pos-metric-card:not(.pos-sales-hero)>p:last-child{align-self:start}
+        .pos-summary-grid>.pos-sales-hero{grid-column:1/-1;min-height:14.5rem;border:0;border-radius:1.5rem;padding:1.75rem;color:#fff;background-color:#1e3a8a;background-image:radial-gradient(at 0% 0%,#1e00a9 0,transparent 50%),radial-gradient(at 100% 0%,#b1afff 0,transparent 50%),radial-gradient(at 100% 100%,#3525cd 0,transparent 50%),radial-gradient(at 0% 100%,#4d44e3 0,transparent 50%);box-shadow:0 16px 30px rgb(30 58 138/.22)}
+        .pos-sales-hero .material-symbols-outlined{background:rgb(255 255 255/.18)!important;color:#fff!important}.pos-sales-hero p{color:#fff!important}.pos-sales-hero #kpi-sales{max-width:15rem;white-space:normal;font-size:2.25rem;line-height:1.08;letter-spacing:-.04em}
+        .pos-sales-hero::after{content:'Ringkasan penjualan real-time';position:absolute;right:1.75rem;bottom:1.5rem;left:1.75rem;border-top:1px solid rgb(255 255 255/.18);padding-top:.75rem;color:rgb(255 255 255/.75);font-size:.7rem;font-weight:700}.pos-sales-hero{position:relative;overflow:hidden}.pos-summary-grid>:nth-child(4){grid-column:1/-1;min-height:5.25rem}
+        .pos-home-screen .pos-app-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:.75rem}.pos-home-screen .pos-app-tile{min-height:7.1rem;padding:.7rem .25rem;border-radius:1rem}.pos-home-screen .pos-app-icon{width:3rem;height:3rem;border:0;border-radius:.75rem}.pos-home-screen .pos-app-tile span:last-child{font-size:.68rem}.pos-home-screen .pos-app-icon .material-symbols-outlined{font-size:1.8rem!important;font-variation-settings:'FILL' 1,'wght' 500,'GRAD' 0,'opsz' 28}.pos-home-screen .pos-main-action .material-symbols-outlined{font-size:1.55rem!important}.pos-home-screen .pos-side-action .material-symbols-outlined{font-size:1.4rem!important}.pos-home-screen .pos-bottom-item>.material-symbols-outlined{font-size:1.55rem!important}
+        .pos-bottom-nav{position:absolute;right:0;bottom:0;left:0;z-index:35;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));border-top:1px solid var(--pos-line);border-radius:1.5rem 1.5rem 0 0;background:rgb(255 255 255/.97);padding:.5rem 1rem max(.65rem,env(safe-area-inset-bottom));box-shadow:0 -10px 30px rgb(17 28 45/.09);backdrop-filter:blur(18px)}
+        .pos-bottom-item{display:flex;min-width:0;min-height:3.4rem;flex-direction:column;align-items:center;justify-content:center;gap:.15rem;border-radius:.9rem;color:#8b94ae;font-size:.62rem;font-weight:800}.pos-bottom-item.is-active{color:var(--pos-blue)}.pos-bottom-item .material-symbols-outlined{font-size:1.3rem}
+        .pos-bottom-add{width:3.5rem;height:3rem;margin-top:-.2rem;border-radius:1rem;background:#1e3a8a;color:#fff;box-shadow:0 6px 14px rgb(30 58 138/.24)}
+        @media(min-width:640px){.pos-home-content{padding:1.5rem 2rem 8rem}.pos-summary-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.pos-summary-grid>.pos-sales-hero{grid-column:1/-1}.pos-summary-grid>:nth-child(4){grid-column:auto;min-height:5.75rem}.pos-home-screen .pos-app-grid{grid-template-columns:repeat(5,minmax(0,1fr))}.pos-dashboard-widgets{grid-template-columns:repeat(2,minmax(0,1fr))}
+        }
     </style>
 @endpush
 
 @section('content')
-    <header class="sticky top-0 z-30 flex items-center justify-between border-b border-slate-200/60 bg-white/85 px-4 py-3 backdrop-blur-xl dark:border-slate-800/60 dark:bg-background-dark/85">
-        <div class="min-w-0">
-            <p class="text-[10px] font-black uppercase tracking-[0.18em] text-primary">POS</p>
-            <h1 class="truncate text-lg font-black leading-tight tracking-tight text-slate-900 dark:text-slate-100">Dashboard Kasir</h1>
+    <div class="pos-home-screen"><header class="pos-home-header sticky top-0 z-30 flex items-center justify-between px-5 py-4">
+        <div class="flex min-w-0 items-center gap-3">
+            <a class="size-10 shrink-0 overflow-hidden rounded-full border-2 border-white bg-[#e7eeff] shadow-sm" href="/menu" aria-label="Buka semua menu"><img alt="Profil kasir" class="h-full w-full object-cover" src="/images/placeholders/user.svg"></a>
+            <div class="min-w-0"><p class="truncate text-[11px] font-semibold uppercase tracking-[.08em] text-[#777587]">Halo, {{ $posDashboardUser?->name ?: 'Kasir' }}</p><h1 class="truncate text-xl font-extrabold leading-tight tracking-tight text-[#1e3a8a]"><span class="sr-only">Dashboard Kasir - </span>{{ $posDashboardTenant?->name ?: 'QuickStore' }}</h1></div>
         </div>
         <div class="flex items-center gap-2">
-            <button class="flex size-10 items-center justify-center rounded-full bg-slate-100 text-slate-600 active:opacity-60 dark:bg-slate-800 dark:text-slate-300" type="button" aria-label="Menu" data-menu-trigger>
-                <span class="material-symbols-outlined text-[21px]">menu</span>
-            </button>
+            <a class="flex size-11 items-center justify-center rounded-full bg-[#eff4ff] text-[#1e3a8a] active:scale-95" href="/menu" aria-label="Buka semua menu">
+                <span class="material-symbols-outlined text-[22px]">notifications</span>
+            </a>
             <form method="POST" action="/logout">
                 @csrf
                 <button class="flex size-10 items-center justify-center rounded-full bg-slate-100 text-slate-600 active:opacity-60 dark:bg-slate-800 dark:text-slate-300" type="submit" aria-label="Logout">
@@ -158,7 +177,7 @@
         </div>
     </header>
 
-    <main class="flex flex-col gap-4 p-4">
+    <main class="pos-home-content flex flex-col gap-4 p-4">
         @if (session('shift_required'))
             <div id="shift-required-toast" class="flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-800/50 dark:bg-amber-950/30" role="alert">
                 <span class="material-symbols-outlined flex-shrink-0 text-xl text-amber-600">warning</span>
@@ -187,7 +206,7 @@
             </div>
         @endif
 
-        <section class="pos-home-card overflow-hidden">
+        <section class="pos-shift-section pos-home-card overflow-hidden">
             <div class="p-4">
                 <div class="mb-3 flex items-center justify-between gap-3">
                     <div class="flex min-w-0 items-center gap-2">
@@ -221,42 +240,42 @@
                 </div>
             </div>
 
-            <div class="grid grid-cols-2 border-t border-slate-100 dark:border-slate-800">
-                <div class="border-r border-b border-slate-100 p-3 dark:border-slate-800">
-                    <p class="text-[10px] font-black uppercase tracking-wide text-slate-400">Kas Awal</p>
-                    <p id="opening-cash" class="mt-1 truncate text-sm font-black text-slate-900 dark:text-slate-100">Rp 0</p>
+            <div class="grid grid-cols-2 gap-3 border-t border-slate-100 bg-[#f8f9ff] p-4">
+                <div class="rounded-2xl border border-blue-100 bg-white p-3 shadow-sm">
+                    <div class="flex items-center gap-2">
+                        <span class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700"><span class="material-symbols-outlined text-[24px]">account_balance_wallet</span></span>
+                        <div class="min-w-0"><p class="text-[10px] font-black uppercase tracking-wide text-slate-400">Kas Awal</p><p id="opening-cash" class="mt-1 truncate text-sm font-black text-slate-900">Rp 0</p></div>
+                    </div>
                 </div>
-                <div class="border-b border-slate-100 p-3 dark:border-slate-800">
-                    <p class="text-[10px] font-black uppercase tracking-wide text-slate-400">Cash</p>
-                    <p id="shift-cash-sales" class="mt-1 truncate text-sm font-black text-slate-900 dark:text-slate-100">Rp 0</p>
+                <div class="rounded-2xl border border-emerald-100 bg-white p-3 shadow-sm">
+                    <div class="flex items-center gap-2">
+                        <span class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700"><span class="material-symbols-outlined text-[24px]">payments</span></span>
+                        <div class="min-w-0"><p class="text-[10px] font-black uppercase tracking-wide text-slate-400">Cash</p><p id="shift-cash-sales" class="mt-1 truncate text-sm font-black text-slate-900">Rp 0</p></div>
+                    </div>
                 </div>
-                <div class="border-r border-slate-100 p-3 dark:border-slate-800">
-                    <p class="text-[10px] font-black uppercase tracking-wide text-slate-400">Piutang</p>
-                    <p id="shift-receivable-cash" class="mt-1 truncate text-sm font-black text-slate-900 dark:text-slate-100">Rp 0</p>
+                <div class="rounded-2xl border border-amber-100 bg-white p-3 shadow-sm">
+                    <div class="flex items-center gap-2">
+                        <span class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700"><span class="material-symbols-outlined text-[24px]">request_quote</span></span>
+                        <div class="min-w-0"><p class="text-[10px] font-black uppercase tracking-wide text-slate-400">Piutang</p><p id="shift-receivable-cash" class="mt-1 truncate text-sm font-black text-slate-900">Rp 0</p></div>
+                    </div>
                 </div>
-                <div class="p-3">
-                    <p class="text-[10px] font-black uppercase tracking-wide text-slate-400">Total Kas</p>
-                    <p id="shift-sales" class="mt-1 truncate text-sm font-black text-primary">Rp 0</p>
+                <div class="rounded-2xl border border-indigo-100 bg-indigo-50/70 p-3 shadow-sm">
+                    <div class="flex items-center gap-2">
+                        <span class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700"><span class="material-symbols-outlined text-[24px]">savings</span></span>
+                        <div class="min-w-0"><p class="text-[10px] font-black uppercase tracking-wide text-indigo-500">Total Kas</p><p id="shift-sales" class="mt-1 truncate text-sm font-black text-indigo-800">Rp 0</p></div>
+                    </div>
                 </div>
             </div>
         </section>
 
-        <section class="grid grid-cols-3 gap-2">
-            <div class="pos-metric-card">
-                <p class="text-[10px] font-black uppercase tracking-wide text-slate-400">Penjualan</p>
-                <p id="kpi-sales" class="mt-1 truncate text-sm font-black tracking-tight text-slate-900 dark:text-white">Rp 0</p>
-            </div>
-            <div class="pos-metric-card">
-                <p class="text-[10px] font-black uppercase tracking-wide text-slate-400">Transaksi</p>
-                <p id="kpi-orders" class="mt-1 truncate text-sm font-black tracking-tight text-slate-900 dark:text-white">0</p>
-            </div>
-            <div class="pos-metric-card">
-                <p class="text-[10px] font-black uppercase tracking-wide text-slate-400">Rata-rata</p>
-                <p id="kpi-average" class="mt-1 truncate text-sm font-black tracking-tight text-slate-900 dark:text-white">Rp 0</p>
-            </div>
+        <section class="pos-summary-grid grid gap-3">
+            <div class="pos-sales-hero pos-metric-card"><span class="material-symbols-outlined rounded-xl p-2 text-xl">trending_up</span><p class="mt-4 text-sm font-semibold">Total Penjualan Hari Ini</p><p id="kpi-sales" class="mt-2 font-black">Rp 0</p></div>
+            <div class="pos-metric-card bg-emerald-50/70"><span class="material-symbols-outlined rounded-xl bg-emerald-100 p-2 text-xl text-emerald-600">receipt_long</span><p class="mt-3 text-[10px] font-black uppercase tracking-wide text-emerald-600">Jumlah Transaksi</p><p id="kpi-orders" class="mt-1 truncate text-base font-black tracking-tight text-[#111a3b]">0</p></div>
+            <div class="pos-metric-card bg-violet-50/70"><span class="material-symbols-outlined rounded-xl bg-violet-100 p-2 text-xl text-violet-600">calculate</span><p class="mt-3 text-[10px] font-black uppercase tracking-wide text-violet-600">Rata-rata Belanja</p><p id="kpi-average" class="mt-1 truncate text-base font-black tracking-tight text-[#111a3b]">Rp 0</p></div>
+            <div class="pos-metric-card bg-amber-50/70"><span class="material-symbols-outlined rounded-xl bg-amber-100 p-2 text-xl text-amber-600">schedule</span><p class="mt-3 text-[10px] font-black uppercase tracking-wide text-amber-600">Status Shift</p><p id="shift-kpi-status" class="mt-1 truncate text-sm font-black tracking-tight text-[#111a3b]">Belum aktif</p></div>
         </section>
 
-        <section class="pos-home-card p-4">
+        <section class="pos-quick-section pos-home-card p-4">
             <div class="mb-3 flex items-end justify-between gap-3">
                 <div>
                     <p class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Aplikasi</p>
@@ -321,7 +340,7 @@
             </div>
         </section>
 
-        <section class="grid grid-cols-1 gap-3">
+        <section class="pos-dashboard-widgets grid grid-cols-1 gap-3">
             <div class="pos-home-card p-4">
                 <div class="mb-3 flex items-center justify-between gap-3">
                     <h2 class="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-400">
@@ -348,7 +367,14 @@
             </div>
         </section>
     </main>
-@endsection
+        <nav class="pos-bottom-nav" aria-label="Navigasi utama kasir">
+            <a class="pos-bottom-item is-active" href="/pos/dashboard" aria-current="page"><span class="material-symbols-outlined">home</span><span>Beranda</span></a>
+            <a class="pos-bottom-item" href="/pos/checkout"><span class="material-symbols-outlined">point_of_sale</span><span>Kasir</span></a>
+            <a class="pos-bottom-item" href="/pos/history"><span class="material-symbols-outlined">receipt_long</span><span>Transaksi</span></a>
+            <a class="pos-bottom-item" href="/pos/shifts/summary"><span class="material-symbols-outlined">schedule</span><span>Shift</span></a>
+            <a class="pos-bottom-item" href="/menu" aria-label="Buka semua menu"><span class="pos-bottom-add flex items-center justify-center"><span class="material-symbols-outlined">apps</span></span><span>Menu</span></a>
+        </nav>
+    </div>@endsection
 
 @push('scripts')
     <script>
@@ -393,9 +419,11 @@
                 const openBanner = document.getElementById('open-shift-banner');
                 const openQuick = document.getElementById('open-shift-quick');
                 const closeQuick = document.getElementById('close-shift-quick');
+                const shiftKpiStatus = document.getElementById('shift-kpi-status');
 
                 if (isActive && summary) {
                     status.textContent = 'Status: Shift Aktif';
+                    if (shiftKpiStatus) shiftKpiStatus.textContent = 'Sedang berjalan';
                     dot.classList.remove('bg-amber-400');
                     dot.classList.add('bg-primary', 'animate-pulse');
                     started.textContent = `Dimulai: ${summary.shift?.opened_at || '-'}`;
@@ -413,6 +441,7 @@
                 }
 
                 status.textContent = 'Status: Shift Tidak Aktif';
+                if (shiftKpiStatus) shiftKpiStatus.textContent = 'Belum aktif';
                 dot.classList.remove('bg-primary', 'animate-pulse');
                 dot.classList.add('bg-amber-400');
                 started.textContent = 'Dimulai: -';

@@ -140,6 +140,38 @@ class LegacyMenuFeatureGateTest extends TestCase
         $finance->assertSee('Riwayat Transaksi Kas/Bank');
     }
 
+    public function test_pro_backoffice_menu_exposes_production_and_complete_operational_entry_points(): void
+    {
+        [, $user] = $this->createWebActor('owner', 'pro-complete-menu@example.test', 'P');
+
+        $menu = $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/menu');
+
+        $menu->assertOk();
+        $menu->assertSee('Produksi');
+        $menu->assertSee('/menu/production', false);
+
+        $production = $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/menu/production');
+
+        $production->assertOk();
+        $production->assertSee('Bahan Baku &amp; Resep', false);
+        $production->assertSee('Batch Produksi');
+        $production->assertSee('/backoffice/inventory/production-batches', false);
+
+        $settings = $this->actingAs($user)
+            ->withSession(['auth_portal' => 'backoffice'])
+            ->get('/menu/settings');
+
+        $settings->assertOk();
+        $settings->assertSee('Preferensi Toko &amp; Cetak', false);
+        $settings->assertSee('Metode Persediaan');
+        $settings->assertSee('Integrasi');
+        $settings->assertSee('Audit Refund Lama');
+    }
+
     private function createWebActor(string $role, string $email, string $plan = 'P', string $name = 'Legacy Menu User'): array
     {
         $tenant = Tenant::query()->create([

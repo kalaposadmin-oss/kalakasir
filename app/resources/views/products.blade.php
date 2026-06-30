@@ -71,7 +71,7 @@
 @endsection
 
 @section('content')
-    <div class="px-4 py-4 space-y-4">
+    <div class="space-y-3 px-4 py-4">
         <div class="relative">
             <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">search</span>
             <input id="search-input" class="app-search-control pl-10 pr-4 py-3" placeholder="Cari nama produk atau SKU..." type="text" />
@@ -79,7 +79,7 @@
         <div id="category-filters" class="flex gap-2 overflow-x-auto pb-1 no-scrollbar"></div>
     </div>
 
-    <div class="px-4 space-y-3" id="product-list"></div>
+    <div class="grid grid-cols-1 gap-3 px-4 sm:grid-cols-2" id="product-list"></div>
 
     <div id="product-success-toast" class="fixed bottom-6 left-1/2 z-50 hidden w-[calc(100%-2rem)] max-w-[390px] -translate-x-1/2 rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-sm text-emerald-700 shadow-xl">
         <p class="font-semibold">Berhasil</p>
@@ -264,7 +264,7 @@
 
             products.forEach((product) => {
                 const card = document.createElement('div');
-                card.className = 'app-card flex items-center justify-between gap-3 p-4';
+                card.className = 'app-card flex items-center justify-between gap-3 p-3';
                     const image = product.image_url || '/images/placeholders/product.svg';
                 const hppLabel = Number(product.hpp_average || 0) > 0
                     ? formatCurrency(product.hpp_average)

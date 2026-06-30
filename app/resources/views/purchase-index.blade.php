@@ -44,7 +44,7 @@
 @endsection
 
 @section('content')
-    <div class="flex h-full min-h-0 flex-col px-4 py-4">
+    <div class="flex h-full min-h-0 flex-col gap-3 px-4 py-4">
         <label class="block">
             <span class="app-search-control relative flex items-center px-3 dark:bg-slate-900 dark:ring-slate-800">
                 <span class="material-symbols-outlined text-slate-400">search</span>
@@ -74,7 +74,7 @@
                 <p class="mt-1 text-sm font-black text-orange-700 dark:text-orange-300" data-summary="value">Rp0</p>
             </div>
         </section>
-        <div id="purchase-list" class="mt-4 min-h-0 flex-1 space-y-3 overflow-y-auto pb-28"></div>
+        <div id="purchase-list" class="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto pb-28 sm:grid-cols-2"></div>
     </div>
 
     <script>
@@ -164,7 +164,7 @@
                     const detailUrl = `${detailPath}?from=${encodeURIComponent(`${portalPrefix}/purchases`)}`;
                     const row = document.createElement('a');
                     row.href = detailUrl;
-                    row.className = 'app-card block p-4 transition hover:border-primary/30 dark:bg-slate-900 dark:ring-slate-800';
+                    row.className = 'app-card block p-3 transition hover:border-primary/30';
                     row.innerHTML = `
                         <div class="flex items-start justify-between gap-3">
                             <div>

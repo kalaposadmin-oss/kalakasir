@@ -5,10 +5,10 @@
     $userInitial = strtoupper(substr($userName, 0, 1));
 @endphp
 
-<header class="sticky top-0 z-20 h-16 border-b border-slate-200 bg-white/95 backdrop-blur">
+<header class="sticky top-0 z-20 h-16 border-b border-[#e2e6f2] bg-[#f8f9ff]/95 backdrop-blur">
     <div class="flex h-full items-center justify-between gap-3 px-4 sm:px-6">
         <div class="flex items-center gap-3">
-            <button type="button" data-platform-sidebar-toggle class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 lg:hidden" aria-label="Buka menu platform">
+            <button type="button" data-platform-sidebar-toggle class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50" aria-label="Buka menu platform">
                 <span class="material-symbols-outlined text-[22px]">menu</span>
             </button>
             <div class="hidden h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary sm:flex">

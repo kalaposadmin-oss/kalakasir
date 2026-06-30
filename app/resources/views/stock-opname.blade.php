@@ -43,9 +43,9 @@
     @if($stockOpnameIsPos)
         <header class="sticky top-0 z-30 border-b border-slate-200 bg-white px-4 pb-3 pt-4" data-auto-center-title="true">
             <div class="flex items-center gap-2.5">
-                <button class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600" type="button" data-menu-trigger aria-label="Buka menu">
-                    <span class="material-symbols-outlined text-xl">menu</span>
-                </button>
+                <a class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600" href="/menu" aria-label="Buka semua menu">
+                    <span class="material-symbols-outlined text-xl">apps</span>
+                </a>
                 <div class="min-w-0 flex-1">
                     <p class="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400">Inventory Count</p>
                     <h1 class="truncate text-base font-black text-slate-950">Stock Opname</h1>

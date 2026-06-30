@@ -37,7 +37,7 @@ class WebOperationalPagesSmokeTest extends TestCase
         $middleware = $route->gatherMiddleware();
         $contents = file_get_contents(resource_path('views/product-create.blade.php'));
 
-        $this->assertContains('web_access:backoffice,admin|owner|superadmin,dash.overview', $middleware);
+        $this->assertContains('web_access:backoffice,admin|owner|superadmin,product.list', $middleware);
         $this->assertTrue(view()->exists('product-create'));
         $this->assertStringContainsString('Tambah Produk Baru', $contents);
         $this->assertStringContainsString('category-quick-toggle', $contents);
@@ -86,13 +86,13 @@ class WebOperationalPagesSmokeTest extends TestCase
         $middleware = $route->gatherMiddleware();
         $contents = file_get_contents(resource_path('views/product-edit.blade.php'));
 
-        $this->assertContains('web_access:backoffice,admin|owner|superadmin,dash.overview', $middleware);
+        $this->assertContains('web_access:backoffice,admin|owner|superadmin,product.list', $middleware);
         $this->assertTrue(view()->exists('product-edit'));
         $this->assertStringContainsString('edit-variant-stock-section', $contents);
         $this->assertStringContainsString('edit-variant-stock-line-list', $contents);
         $this->assertStringContainsString('const collectVariantStockLines = (product) => {', $contents);
-        $this->assertStringContainsString('payload.initial_stock_lines = collectVariantStockLines(currentProduct);', $contents);
-        $this->assertStringContainsString('initial_stock: currentProduct?.has_variants ? 0 : Number(el.stock.value || 0)', $contents);
+        $this->assertStringContainsString('payload.initial_stock_lines = el.trackStock.checked ? collectVariantStockLines(currentProduct) : [];', $contents);
+        $this->assertStringContainsString("initial_stock: currentProduct?.has_variants || getSelectedProductType() === 'service' ? 0 : Number(el.stock.value || 0)", $contents);
         $this->assertStringContainsString('renderVariantStockLines(product);', $contents);
     }
 
@@ -140,13 +140,14 @@ class WebOperationalPagesSmokeTest extends TestCase
         $this->assertStringContainsString(':backUrl="$menuBackUrl"', $contents);
     }
 
-    public function test_layout_includes_menu_drawer_inside_app_shell(): void
+    public function test_layout_uses_single_mobile_menu_hub_navigation(): void
     {
         $contents = file_get_contents(resource_path('views/layouts/app.blade.php'));
-        $drawerContents = file_get_contents(resource_path('views/partials/menu-drawer.blade.php'));
+        $bottomNavigation = file_get_contents(resource_path('views/partials/bottom-navigation.blade.php'));
 
-        $this->assertStringContainsString("@include('partials.menu-drawer')", $contents);
-        $this->assertStringContainsString('absolute inset-0 z-50 hidden overflow-hidden', $drawerContents);
+        $this->assertStringNotContainsString("@include('partials.menu-drawer')", $contents);
+        $this->assertStringContainsString("@include('partials.bottom-navigation'", $contents);
+        $this->assertStringContainsString("'href' => '/menu'", $bottomNavigation);
     }
 
     public function test_suppliers_route_and_view_expose_purchase_entry_points(): void
@@ -235,7 +236,7 @@ class WebOperationalPagesSmokeTest extends TestCase
         $middleware = $route->gatherMiddleware();
         $contents = file_get_contents(resource_path('views/sales-history.blade.php'));
 
-        $this->assertContains('web_access:pos,cashier|staff|warehouse|supervisor|admin|owner|superadmin,dash.overview', $middleware);
+        $this->assertContains('web_access:pos,cashier|staff|warehouse|supervisor|admin|owner|superadmin,history.sales', $middleware);
         $this->assertTrue(view()->exists('sales-history'));
         $this->assertStringContainsString("'Riwayat'", $contents);
         $this->assertStringContainsString('data-tab="transaksi"', $contents);

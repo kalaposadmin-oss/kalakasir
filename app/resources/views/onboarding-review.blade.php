@@ -2,7 +2,7 @@
 
 @section('page_title', 'Review Onboarding')
 @section('body_class', 'bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display')
-@section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-white dark:bg-slate-900 shadow-2xl')
+@section('app_shell_class', 'relative mx-auto flex h-screen w-full max-w-[768px] flex-col overflow-hidden bg-white dark:bg-slate-900 shadow-2xl')
 @section('main_class', 'flex-1 overflow-y-auto p-0 app-bottom-safe-space')
 
 @section('content')

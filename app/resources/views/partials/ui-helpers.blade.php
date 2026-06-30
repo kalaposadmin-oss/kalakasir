@@ -835,6 +835,10 @@
             window.__kalakasirPrefetchBound = true;
 
             document.addEventListener('pointerenter', (event) => {
+                if (event.pointerType && event.pointerType !== 'mouse') {
+                    return;
+                }
+
                 const link = event.target instanceof Element
                     ? event.target.closest('a[href]')
                     : null;
@@ -845,24 +849,13 @@
 
                 const url = new URL(link.href, window.location.origin);
                 if (shouldPrefetchLink(link, url)) {
-                    prefetchDocument(url.toString());
+                    window.setTimeout(() => {
+                        if (link.isConnected && link.matches(':hover')) {
+                            prefetchDocument(url.toString());
+                        }
+                    }, 120);
                 }
             }, true);
-
-            document.addEventListener('touchstart', (event) => {
-                const link = event.target instanceof Element
-                    ? event.target.closest('a[href]')
-                    : null;
-
-                if (!link) {
-                    return;
-                }
-
-                const url = new URL(link.href, window.location.origin);
-                if (shouldPrefetchLink(link, url)) {
-                    prefetchDocument(url.toString());
-                }
-            }, { passive: true, capture: true });
         };
 
         bindNavigationPrefetch();

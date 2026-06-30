@@ -1,62 +1,38 @@
 @extends('layouts.app')
 
-@section('page_title', 'Menu ' . $title . ' - POS SaaS')
-@section('body_class', 'bg-background-light dark:bg-background-dark font-display')
-@section('main_class', 'flex-1 overflow-y-auto')
-
-@push('head')
-        <style type="text/tailwindcss">
-            @layer base {
-                body {
-                    font-family: 'Inter', sans-serif;
-                    -webkit-tap-highlight-color: transparent;
-                }
-            }
-            .scrollbar-hide::-webkit-scrollbar {
-                display: none;
-            }
-            .menu-border {
-                border-bottom: 1px solid #f1f5f9;
-            }
-        </style>
-        <style>
-            body {
-                min-height: max(884px, 100dvh);
-            }
-        </style>
-    
-@endpush
-
 @php
-    $menuBackUrl = session('auth_portal', 'pos') === 'backoffice'
-        ? '/backoffice/dashboard'
-        : pos_default_url();
+    $menuPortal = session('auth_portal', 'pos') === 'backoffice' ? 'backoffice' : 'pos';
 @endphp
 
-@section('header')
-    <x-page-header
-        :title="$title"
-        :breadcrumbs="['Menu']"
-        :backUrl="$menuBackUrl"
-        :showMenuButton="true"
-    />
-@endsection
+@section('page_title', $title)
+@section('ui_mode', $menuPortal)
+@section('body_class', 'bg-[#f8f9ff] text-[#111c2d] antialiased')
+@section('main_class', 'flex-1 overflow-y-auto app-bottom-safe-space')
 
 @section('content')
-    <div class="flex flex-col scrollbar-hide">
-        @foreach ($items as $item)
-            <a class="flex items-center gap-6 px-6 py-6 hover:bg-slate-50 transition-colors menu-border group" href="{{ $item['href'] }}">
-                <span class="material-symbols-outlined text-primary text-2xl">{{ $item['icon'] }}</span>
-                <span class="flex flex-1 items-center justify-between gap-3">
-                    <span class="text-slate-900 dark:text-slate-100 font-semibold text-base">{{ $item['label'] }}</span>
-
-                    @if (!empty($item['badge']))
-                        <span class="shrink-0 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700">
-                            {{ $item['badge'] }}
-                        </span>
-                    @endif
-                </span>
+    <div class="app-mobile-page px-5 pb-8 pt-5">
+        <header class="mb-5 flex items-center gap-3">
+            <a class="flex size-11 shrink-0 items-center justify-center rounded-full bg-white text-[#1e3a8a] shadow-sm ring-1 ring-[#e2e6f2]" href="/menu" aria-label="Kembali ke semua menu">
+                <span class="material-symbols-outlined text-[24px]">arrow_back</span>
             </a>
-        @endforeach
+            <div class="min-w-0">
+                <p class="text-[11px] font-bold uppercase tracking-[.12em] text-[#777587]">Menu Toko · Kategori</p>
+                <h1 class="truncate text-xl font-extrabold tracking-tight text-[#1e3a8a]">{{ $title }}</h1>
+            </div>
+        </header>
+
+        <div class="app-hub-grid">
+            @foreach($items as $item)
+                <a class="app-hub-tile" href="{{ $item['href'] }}">
+                    <span class="flex items-start justify-between gap-2">
+                        <span class="app-hub-icon"><span class="material-symbols-outlined">{{ $item['icon'] }}</span></span>
+                        @if (!empty($item['badge']))
+                            <span class="rounded-full bg-amber-50 px-2 py-1 text-[9px] font-extrabold uppercase tracking-wide text-amber-700">{{ $item['badge'] }}</span>
+                        @endif
+                    </span>
+                    <span class="mt-3 block truncate text-sm font-extrabold text-[#111c2d]">{{ $item['label'] }}</span>
+                </a>
+            @endforeach
+        </div>
     </div>
 @endsection

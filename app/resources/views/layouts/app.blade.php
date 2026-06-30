@@ -4,7 +4,7 @@
         <meta charset="utf-8" />
         <meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport" />
         <meta name="color-scheme" content="light" />
-        <meta name="theme-color" content="#f8fafc" />
+        <meta name="theme-color" content="#1e3a8a" />
         <meta name="csrf-token" content="{{ csrf_token() }}" />
         <meta name="tenant-id" content="{{ $tenantId ?? '' }}" />
         <title>@yield('page_title', 'POS SaaS')</title>
@@ -12,19 +12,19 @@
         @vite(['resources/css/app.css', 'resources/js/app.js'])
         <style>
             body {
-                font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+                font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
                 letter-spacing: 0;
                 min-height: 100vh;
                 min-height: 100svh;
                 height: 100dvh;
                 overflow: hidden;
-                background: #f8fafc;
+                background: #f8f9ff;
             }
             :root {
                 --app-device-bottom-inset: env(safe-area-inset-bottom, 0px);
                 --app-bottom-safe-space: calc(8rem + var(--app-device-bottom-inset));
                 --app-footer-safe-space: max(1.5rem, calc(1rem + var(--app-device-bottom-inset)));
-                --app-page-bg: #f8fafc;
+                --app-page-bg: #f8f9ff;
                 --app-panel-bg: #ffffff;
                 --app-border: #e2e8f0;
                 --app-muted: #64748b;
@@ -35,19 +35,6 @@
                 height: 100svh;
                 height: 100dvh;
                 max-height: 100dvh;
-            }
-            .app-mobile-drawer {
-                min-height: 0;
-                max-height: 100dvh;
-                overflow: hidden;
-            }
-            .app-menu-scroll {
-                min-height: 0;
-                overscroll-behavior: contain;
-                -webkit-overflow-scrolling: touch;
-            }
-            [data-menu-section-toggle][aria-expanded="true"] .menu-section-chevron {
-                transform: rotate(180deg);
             }
             .app-bottom-safe-space {
                 padding-bottom: var(--app-bottom-safe-space);
@@ -111,26 +98,37 @@
             };
             $layoutMainClass = trim($__env->yieldContent('main_class', 'flex-1 overflow-y-auto pb-24'));
             $layoutUiMode = trim($__env->yieldContent('ui_mode', $areaUiMode));
-            $usesWideBackofficeShell = $layoutUiMode === 'backoffice';
-            $defaultShellClass = $usesWideBackofficeShell
-                ? 'app-shell-backoffice relative flex h-screen w-full flex-col overflow-hidden bg-background-light dark:bg-background-dark'
-                : 'relative mx-auto flex h-screen w-full max-w-[430px] flex-col overflow-hidden bg-background-light dark:bg-background-dark shadow-2xl';
+            $usesManagedPortalShell = in_array($layoutUiMode, ['pos', 'backoffice', 'platform'], true);
+            $shellModeClass = match ($layoutUiMode) {
+                'backoffice' => 'app-shell-backoffice',
+                'platform' => 'app-shell-platform',
+                default => 'app-shell-pos',
+            };
+            $defaultShellClass = $shellModeClass.' relative mx-auto flex h-screen w-full max-w-[768px] flex-col overflow-hidden bg-[#f8f9ff] shadow-2xl';
             $requestedShellClass = trim($__env->yieldContent('app_shell_class', ''));
-            $effectiveShellClass = $usesWideBackofficeShell
+            $effectiveShellClass = $usesManagedPortalShell
                 ? $defaultShellClass
                 : ($requestedShellClass !== '' ? $requestedShellClass : $defaultShellClass);
-            $effectiveMainClass = $usesWideBackofficeShell && ! str_contains($layoutMainClass, 'xl:pl-72')
-                ? trim($layoutMainClass.' xl:pl-72')
-                : $layoutMainClass;
+            $effectiveMainClass = trim(str_replace(['xl:pl-72', 'lg:pl-72'], '', $layoutMainClass));
+            $globalBottomNavHiddenPaths = [
+                'pos/dashboard',
+                'pos/checkout',
+                'pos/payment-method',
+                'pos/receipt-preview',
+                'pos/shifts/open',
+                'pos/shifts/close',
+            ];
+            $showGlobalBottomNav = $usesManagedPortalShell
+                && ! in_array(request()->path(), $globalBottomNavHiddenPaths, true)
+                && ! request()->is('pos/sales/*/receipt');
+            if ($showGlobalBottomNav && ! str_contains($effectiveMainClass, 'app-bottom-safe-space')) {
+                $effectiveMainClass = trim($effectiveMainClass.' app-bottom-safe-space');
+            }
         @endphp
 
         <div class="{{ $effectiveShellClass }} app-shell-page">
-            @if(($showMenu ?? true) === true)
-                @include('partials.menu-drawer')
-            @endif
-
             @hasSection('header')
-                <div class="{{ $usesWideBackofficeShell ? 'xl:pl-72' : '' }}">
+                <div>
                     @yield('header')
                 </div>
             @endif
@@ -138,6 +136,10 @@
             <main class="{{ $effectiveMainClass }}">
                 @yield('content')
             </main>
+
+            @if($showGlobalBottomNav)
+                @include('partials.bottom-navigation', ['portal' => $layoutUiMode])
+            @endif
         </div>
         @stack('scripts')
     </body>
